@@ -136,7 +136,7 @@ const dashboardCards = ref<StatCard[]>([
   { key: 'commission', label: '今日佣金（元）', value: '-', yestValue: '-', trend: null },
   { key: 'rebate', label: '今日返利（元）', value: '-', yestValue: '-', trend: null },
   { key: 'profit', label: '今日利润（元）', value: '-', yestValue: '-', trend: null },
-  { key: 'member', label: '今日活跃会员', value: '-', yestValue: '-', trend: null }
+  { key: 'member', label: '累计活跃会员', value: '-', yestValue: '-', trend: null }
 ])
 
 function updateDashboard(data: CpsDashboardVO) {
@@ -169,8 +169,8 @@ function updateDashboard(data: CpsDashboardVO) {
     trend: trend(Number(data.todayProfit), Number(data.yesterdayProfit))
   }
   dashboardCards.value[4] = {
-    key: 'member', label: '今日活跃会员',
-    value: String(fmt(data.todayActiveMembers)),
+    key: 'member', label: '累计活跃会员',
+    value: String(fmt(data.activeMemberCount)),
     yestValue: '-',
     trend: null
   }

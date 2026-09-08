@@ -1,0 +1,161 @@
+name: 功能悬赏
+description: 发布可认领的开发需求，适用于 AI 购物 Agent、新平台接入和 App 行业版本等定制开发
+title: "[功能悬赏]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢你为 AgenticCPS 发布功能悬赏。请尽量给出清晰的业务目标、范围和验收标准，方便维护者评估并由贡献者认领。
+        请勿在 Issue 中填写密钥、Token、账号密码、客户隐私或未脱敏的生产数据。
+
+  - type: dropdown
+    id: bounty_type
+    attributes:
+      label: 悬赏类型
+      description: 请选择最接近的开发方向。
+      options:
+        - AI 购物 Agent 定制
+        - 新电商或本地生活平台接入
+        - App 物业版模板
+        - App 商家版模板
+        - 其他 App 或小程序行业模板
+        - 现有功能增强
+        - 其他定制开发
+    validations:
+      required: true
+
+  - type: textarea
+    id: background
+    attributes:
+      label: 业务背景与目标
+      description: 说明使用方、真实业务场景、当前问题和期望产生的价值。
+      placeholder: |
+        使用方：
+        业务场景：
+        当前问题：
+        目标结果：
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: 需求范围
+      description: 列出必须交付的能力，以及明确不包含的内容。
+      placeholder: |
+        必须包含：
+        1. ...
+        2. ...
+
+        本次不包含：
+        1. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: integration
+    attributes:
+      label: 接入对象与技术资料
+      description: 新平台接入请提供官方开放平台、API/SDK 文档、回调方式和测试环境；AI Agent 定制请说明模型、工具和知识库边界；App 模板请说明端类型和角色。
+      placeholder: |
+        平台、模型或终端：
+        官方文档链接：
+        测试环境或沙箱：
+        角色与权限：
+        其他约束：
+    validations:
+      required: false
+
+  - type: dropdown
+    id: target_clients
+    attributes:
+      label: 交付端
+      description: 可多选。
+      multiple: true
+      options:
+        - 管理后台
+        - H5
+        - 微信小程序
+        - Android App
+        - iOS App
+        - 后端 API 或平台适配器
+        - MCP 工具或 AI Agent
+        - 其他或待评估
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 验收标准
+      description: 使用可以客观验证的结果描述完成条件，包括异常流程、权限、数据隔离或兼容性要求。
+      placeholder: |
+        - [ ] 场景一：当 ... 时，应 ...
+        - [ ] 场景二：当 ... 时，应 ...
+        - [ ] 自动化测试或演示材料要求：...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: deliverable
+    attributes:
+      label: 期望交付形式
+      options:
+        - 可合并的代码与测试
+        - 完整方案、代码、测试与文档
+        - 原型或 UI 设计与前端实现
+        - 技术方案或可行性验证
+        - 待维护者评估
+    validations:
+      required: true
+
+  - type: input
+    id: schedule
+    attributes:
+      label: 期望时间
+      description: 可填写期望完成日期或时间窗口；最终排期以认领沟通为准。
+      placeholder: "例如：2026-10-31 前，或认领后 4 周内"
+    validations:
+      required: false
+
+  - type: input
+    id: reward
+    attributes:
+      label: 悬赏方式与预算
+      description: 可填写预算区间、合作方式或“待协商”，请勿公开个人付款信息。
+      placeholder: "例如：预算待协商 / 社区共建 / 商业合作"
+    validations:
+      required: false
+
+  - type: textarea
+    id: references
+    attributes:
+      label: 参考资料
+      description: 可附原型、脱敏截图、竞品参考或相关 Issue 链接。
+    validations:
+      required: false
+
+  - type: textarea
+    id: ai_assistance
+    attributes:
+      label: AI 辅助开发说明
+      description: 可说明对 AI 编程或 Vibe Coding 协作的期望、可使用的工具与模型、已有原型，以及人工审查和测试要求；验收仍以交付结果为准。
+      placeholder: |
+        已有原型或 AI 生成内容：
+        工具、模型或数据使用约束：
+        人工审查与测试要求：
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: 提交确认
+      options:
+        - label: 我已搜索现有 Issue，确认没有内容相同的需求或悬赏。
+          required: true
+        - label: 我已移除密钥、账号、客户隐私和未脱敏的生产数据。
+          required: true
+        - label: 我理解提交悬赏不代表维护者或贡献者已经接受需求、报价或排期。
+          required: true

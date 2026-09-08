@@ -11,6 +11,14 @@ import java.util.List;
 @Data
 public class AppAiChatMessageSendRespVO {
     private String eventType;
+    private String requestId;
+    private String stage;
+    private Integer completedItems;
+    private Integer totalItems;
+    private Long elapsedMs;
+    private Boolean degraded;
+    private String message;
+    private String taskId;
     private ToolExecution toolExecution;
     private Message send;
     private Message receive;

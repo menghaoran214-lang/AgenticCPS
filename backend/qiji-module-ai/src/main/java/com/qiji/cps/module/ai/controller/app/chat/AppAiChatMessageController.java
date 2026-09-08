@@ -83,6 +83,14 @@ public class AppAiChatMessageController {
         }
         return new AppAiChatMessageSendRespVO()
                 .setEventType(response.getEventType())
+                .setRequestId(response.getRequestId())
+                .setStage(response.getStage())
+                .setCompletedItems(response.getCompletedItems())
+                .setTotalItems(response.getTotalItems())
+                .setElapsedMs(response.getElapsedMs())
+                .setDegraded(response.getDegraded())
+                .setMessage(response.getMessage())
+                .setTaskId(response.getTaskId())
                 .setToolExecution(response.getToolExecution() == null ? null
                         : new AppAiChatMessageSendRespVO.ToolExecution()
                         .setExecutionId(response.getToolExecution().getExecutionId())

@@ -10,6 +10,7 @@ import com.qiji.cps.framework.common.pojo.CommonResult;
 import com.qiji.cps.framework.common.pojo.PageResult;
 import com.qiji.cps.framework.common.util.object.BeanUtils;
 import com.qiji.cps.framework.tenant.core.util.TenantUtils;
+import com.qiji.cps.framework.tenant.core.context.TenantContextHolder;
 import com.qiji.cps.module.ai.controller.admin.chat.vo.message.AiChatMessagePageReqVO;
 import com.qiji.cps.module.ai.controller.admin.chat.vo.message.AiChatMessageRespVO;
 import com.qiji.cps.module.ai.controller.admin.chat.vo.message.AiChatMessageSendReqVO;
@@ -58,7 +59,10 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Sinks;
 
 import java.time.LocalDateTime;
+import java.time.Duration;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
@@ -84,6 +88,8 @@ public class AiChatMessageServiceImpl implements AiChatMessageService {
      * 联网搜索的结束数
      */
     private static final Integer WEB_SEARCH_COUNT = 10;
+    /** Keep non-essential enrichment within the interactive-response budget. */
+    private static final long PREPROCESS_TIMEOUT_SECONDS = 8;
 
     // TODO @芋艿：后续优化下对话的 Prompt 整体结构
 
@@ -138,7 +144,7 @@ public class AiChatMessageServiceImpl implements AiChatMessageService {
         normalizeAttachmentOnlyMessage(sendReqVO);
         AiChatToolAction requestedAction = toolActionService.requireAllowedAction(conversation, sendReqVO.getToolIntent());
         validateIntentRequestId(requestedAction, sendReqVO);
-        List<AiChatMessageDO> historyMessages = chatMessageMapper.selectListByConversationId(conversation.getId());
+        List<AiChatMessageDO> historyMessages = getRecentContextMessages(conversation);
         // 1.2 校验模型
         AiModelDO model = modalService.validateModel(conversation.getModelId());
         ChatModel chatModel = modalService.getChatModel(model.getId());
@@ -195,25 +201,47 @@ public class AiChatMessageServiceImpl implements AiChatMessageService {
     @Override
     public Flux<CommonResult<AiChatMessageSendRespVO>> sendChatMessageStream(AiChatMessageSendReqVO sendReqVO,
             String ownerUserType, Long userId) {
+        // Emit an acknowledgement before any database, retrieval, or provider work starts. This
+        // prevents a slow dependency from leaving SSE clients with a blank screen.
+        String requestId = UUID.randomUUID().toString();
+        AiChatMessageSendRespVO accepted = new AiChatMessageSendRespVO()
+                .setEventType("TASK_ACCEPTED").setRequestId(requestId).setStage("ACCEPTED")
+                .setElapsedMs(0L).setMessage("已接收请求，正在分析需求");
+        return Flux.concat(Flux.just(success(accepted)),
+                Flux.just(success(progressEvent(requestId, "PREPARING", 0, 2, 0L,
+                        "正在准备对话上下文"))),
+                Flux.defer(() -> doSendChatMessageStream(sendReqVO, ownerUserType, userId, requestId)));
+    }
+
+    private Flux<CommonResult<AiChatMessageSendRespVO>> doSendChatMessageStream(AiChatMessageSendReqVO sendReqVO,
+            String ownerUserType, Long userId, String requestId) {
+        long startedAt = System.nanoTime();
         // 1.1 校验对话存在
         AiChatConversationDO conversation = chatConversationService
                 .getOwnedConversation(sendReqVO.getConversationId(), ownerUserType, userId);
         normalizeAttachmentOnlyMessage(sendReqVO);
         AiChatToolAction requestedAction = toolActionService.requireAllowedAction(conversation, sendReqVO.getToolIntent());
         validateIntentRequestId(requestedAction, sendReqVO);
-        List<AiChatMessageDO> historyMessages = chatMessageMapper.selectListByConversationId(conversation.getId());
+        List<AiChatMessageDO> historyMessages = getRecentContextMessages(conversation);
         // 1.2 校验模型
         AiModelDO model = modalService.validateModel(conversation.getModelId());
         StreamingChatModel chatModel = modalService.getChatModel(model.getId());
+        Long tenantId = TenantContextHolder.getRequiredTenantId();
 
-        // 2.1 知识库找回
-        List<AiKnowledgeSegmentSearchRespBO> knowledgeSegments = recallKnowledgeSegment(
-                sendReqVO.getContent(), conversation);
-
-        // 2.2 联网搜索
-        AiWebSearchResponse webSearchResponse = Boolean.TRUE.equals(sendReqVO.getUseSearch()) && webSearchClient != null ?
-                webSearchClient.search(new AiWebSearchRequest().setQuery(sendReqVO.getContent())
-                        .setSummary(true).setCount(WEB_SEARCH_COUNT)) : null;
+        // Retrieval and web search are independent. Run them concurrently and degrade only the
+        // timed-out enrichment path instead of delaying the model indefinitely.
+        CompletableFuture<List<AiKnowledgeSegmentSearchRespBO>> knowledgeFuture = CompletableFuture.supplyAsync(
+                () -> TenantUtils.execute(tenantId,
+                        () -> recallKnowledgeSegment(sendReqVO.getContent(), conversation)));
+        CompletableFuture<AiWebSearchResponse> webSearchFuture = Boolean.TRUE.equals(sendReqVO.getUseSearch())
+                && webSearchClient != null ? CompletableFuture.supplyAsync(() -> TenantUtils.execute(tenantId,
+                () -> webSearchClient.search(new AiWebSearchRequest().setQuery(sendReqVO.getContent())
+                        .setSummary(true).setCount(WEB_SEARCH_COUNT))))
+                : CompletableFuture.completedFuture(null);
+        AtomicBoolean degraded = new AtomicBoolean(false);
+        List<AiKnowledgeSegmentSearchRespBO> knowledgeSegments = awaitEnrichment(knowledgeFuture, Collections.emptyList(),
+                "knowledge", requestId, degraded);
+        AiWebSearchResponse webSearchResponse = awaitEnrichment(webSearchFuture, null, "web-search", requestId, degraded);
 
         // 3. 插入 user 发送消息
         AiChatMessageDO userMessage = createChatMessage(conversation.getId(), null, model,
@@ -243,6 +271,7 @@ public class AiChatMessageServiceImpl implements AiChatMessageService {
         // 4.3 流式返回
         StringBuffer contentBuffer = new StringBuffer();
         StringBuffer reasoningContentBuffer = new StringBuffer();
+        AtomicBoolean bodyStarted = new AtomicBoolean(false);
 
         // 防止执行多次知识库和联网搜索
         AtomicBoolean firstExecuteFlag = new AtomicBoolean(true);
@@ -268,12 +297,15 @@ public class AiChatMessageServiceImpl implements AiChatMessageService {
             String newReasoningContent = AiUtils.getChatResponseReasoningContent(chunk);
             if (StrUtil.isNotEmpty(newContent)) {
                 contentBuffer.append(newContent);
+                bodyStarted.set(true);
             }
             if (StrUtil.isNotEmpty(newReasoningContent)) {
                 reasoningContentBuffer.append(newReasoningContent);
             }
             return success(new AiChatMessageSendRespVO()
                     .setEventType("MESSAGE_DELTA")
+                    .setRequestId(requestId).setStage("GENERATING")
+                    .setElapsedMs(elapsedMs(startedAt))
                     .setSend(BeanUtils.toBean(userMessage, AiChatMessageSendRespVO.Message.class))
             .setReceive(BeanUtils.toBean(assistantMessage, AiChatMessageSendRespVO.Message.class)
                             .setContent(StrUtil.nullToDefault(newContent, "")) // 避免 null 的 情况
@@ -286,6 +318,7 @@ public class AiChatMessageServiceImpl implements AiChatMessageService {
                     new AiChatMessageDO().setId(assistantMessage.getId()).setContent(contentBuffer.toString())
                             .setReasoningContent(reasoningContentBuffer.toString()).setBlocks(blocks.get())));
             completeSink.tryEmitValue(success(new AiChatMessageSendRespVO().setEventType("MESSAGE_COMPLETE")
+                    .setRequestId(requestId).setStage("COMPLETE").setElapsedMs(elapsedMs(startedAt))
                     .setSend(BeanUtils.toBean(userMessage, AiChatMessageSendRespVO.Message.class))
                     .setReceive(BeanUtils.toBean(assistantMessage, AiChatMessageSendRespVO.Message.class)
                             .setContent(contentBuffer.toString())
@@ -327,10 +360,23 @@ public class AiChatMessageServiceImpl implements AiChatMessageService {
                     }
                 });
         Flux<CommonResult<AiChatMessageSendRespVO>> toolEventFlux = toolEventSink.asFlux()
-                .map(event -> success(toToolExecutionResponse(event)));
-        Flux<CommonResult<AiChatMessageSendRespVO>> completeEventFlux = completeSink.asMono().flux();
+                .map(event -> success(toToolExecutionResponse(event).setRequestId(requestId)
+                        .setStage("TOOL_EXECUTION").setElapsedMs(elapsedMs(startedAt))));
+        Flux<CommonResult<AiChatMessageSendRespVO>> completeEventFlux = completeSink.asMono().flux()
+                .flatMap(result -> Flux.just(result, success(progressEvent(requestId, "COMPLETE", 2, 2,
+                        elapsedMs(startedAt), "回答已完成").setEventType("TASK_COMPLETE"))));
+        Flux<CommonResult<AiChatMessageSendRespVO>> heartbeatFlux = Flux.interval(Duration.ofSeconds(4))
+                .takeWhile(ignored -> !bodyStarted.get())
+                .map(ignored -> success(progressEvent(requestId, "WAITING_FOR_RESPONSE", 2, 2,
+                        elapsedMs(startedAt), "正在整理检索结果，请稍候")))
+                .takeUntilOther(completeSink.asMono());
         // Subscribe to the event sink before the single model stream subscription starts emitting tool callbacks.
-        return Flux.merge(toolEventFlux, messageFlux, completeEventFlux);
+        return Flux.concat(Flux.just(success(progressEvent(requestId, "GENERATING", 2, 2,
+                        elapsedMs(startedAt), "资料已准备，正在生成回答"))),
+                degraded.get() ? Flux.just(success(progressEvent(requestId, "DEGRADED", 2, 2,
+                        elapsedMs(startedAt), "部分资料暂不可用，已使用可用信息继续回答")
+                        .setEventType("TASK_DEGRADED").setDegraded(true))) : Flux.empty(),
+                Flux.merge(toolEventFlux, messageFlux, completeEventFlux, heartbeatFlux));
     }
 
     private List<AiKnowledgeSegmentSearchRespBO> recallKnowledgeSegment(String content,
@@ -344,13 +390,56 @@ public class AiChatMessageServiceImpl implements AiChatMessageService {
             return Collections.emptyList();
         }
 
-        // 2. 遍历召回
-        List<AiKnowledgeSegmentSearchRespBO> knowledgeSegments = new ArrayList<>();
-        for (Long knowledgeId : role.getKnowledgeIds()) {
-            knowledgeSegments.addAll(knowledgeSegmentService.searchKnowledgeSegment(new AiKnowledgeSegmentSearchReqBO()
-                    .setKnowledgeId(knowledgeId).setContent(content)));
+        // Independent vector stores can be queried concurrently. Keep a bounded merged result so
+        // attaching an additional knowledge base does not linearly inflate prompt size.
+        Long tenantId = TenantContextHolder.getRequiredTenantId();
+        List<CompletableFuture<List<AiKnowledgeSegmentSearchRespBO>>> futures = role.getKnowledgeIds().stream()
+                .map(knowledgeId -> CompletableFuture.supplyAsync(() -> TenantUtils.execute(tenantId,
+                        () -> knowledgeSegmentService.searchKnowledgeSegment(new AiKnowledgeSegmentSearchReqBO()
+                                .setKnowledgeId(knowledgeId).setContent(content)))
+                ).exceptionally(ex -> {
+                    log.warn("[recallKnowledgeSegment] knowledge [{}] retrieval failed", knowledgeId, ex);
+                    return Collections.emptyList();
+                })).toList();
+        CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+        return futures.stream().flatMap(future -> future.join().stream())
+                .sorted(Comparator.comparing(AiKnowledgeSegmentSearchRespBO::getScore,
+                        Comparator.nullsLast(Comparator.reverseOrder())))
+                .limit(10).toList();
+    }
+
+    private List<AiChatMessageDO> getRecentContextMessages(AiChatConversationDO conversation) {
+        int maxContexts = conversation.getMaxContexts() == null ? 0 : conversation.getMaxContexts();
+        // Two rows form one user/assistant exchange. Keep one extra exchange so the existing
+        // replyId-based filtering can discard incomplete rows safely.
+        return maxContexts <= 0 ? Collections.emptyList()
+                : chatMessageMapper.selectRecentListByConversationId(conversation.getId(), maxContexts * 2 + 2);
+    }
+
+    private <T> T awaitEnrichment(CompletableFuture<T> future, T fallback, String dependency, String requestId,
+                                  AtomicBoolean degraded) {
+        try {
+            // orTimeout starts when each future is created, so two concurrent dependencies share
+            // one wall-clock budget instead of consuming the timeout sequentially.
+            return future.orTimeout(PREPROCESS_TIMEOUT_SECONDS, TimeUnit.SECONDS).get();
+        } catch (Exception ex) {
+            log.warn("[ai-chat][requestId={}] {} enrichment timed out or failed; continuing with fallback",
+                    requestId, dependency, ex);
+            degraded.set(true);
+            future.cancel(true);
+            return fallback;
         }
-        return knowledgeSegments;
+    }
+
+    private static long elapsedMs(long startedAt) {
+        return TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt);
+    }
+
+    private static AiChatMessageSendRespVO progressEvent(String requestId, String stage, int completed,
+            int total, long elapsedMs, String message) {
+        return new AiChatMessageSendRespVO().setEventType("TASK_PROGRESS").setRequestId(requestId)
+                .setStage(stage).setCompletedItems(completed).setTotalItems(total)
+                .setElapsedMs(elapsedMs).setMessage(message);
     }
 
     private Prompt buildPrompt(AiChatConversationDO conversation, List<AiChatMessageDO> messages,

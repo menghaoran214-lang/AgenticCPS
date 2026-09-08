@@ -14,6 +14,19 @@ public class AiChatMessageSendRespVO {
     @Schema(description = "流式事件类型", example = "MESSAGE_DELTA")
     private String eventType;
 
+    /** 客户端可见的请求追踪标识，不包含内部工具或身份信息。 */
+    private String requestId;
+    /** 当前业务阶段，例如 RETRIEVING、GENERATING。 */
+    private String stage;
+    private Integer completedItems;
+    private Integer totalItems;
+    private Long elapsedMs;
+    private Boolean degraded;
+    /** 用户友好的阶段提示。 */
+    private String message;
+    /** 超过长任务阈值时由后台任务实现填充。 */
+    private String taskId;
+
     @Schema(description = "工具执行状态，仅工具事件返回")
     private ToolExecution toolExecution;
 

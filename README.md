@@ -31,6 +31,23 @@ AgenticCPS 是 Agentic 生态中的 CPS 返利与商品推荐服务，覆盖“�
 
 当前已落地的生态闭环是：可用 CPS 返利经过冻结、扣减、幂等和审计后兑换为 AgenticTokenHub 的 AI Token；失败解冻，超时进入可补偿的处理中状态。详见 [返利兑换 Token 说明](./docs/agentic-ecosystem-p0-rebate-token-exchange.md)。
 
+## AI 编程与 Vibe Coding
+
+AgenticCPS 适合用 AI 编程（AI-assisted coding）和 Vibe Coding 的方式快速迭代：先用自然语言描述业务目标，再让 Agent 检索项目地图、接口契约和现有实现，生成小步可审查的改动，最后用自动化测试和人工验收闭环。
+
+推荐协作节奏：
+
+1. **先说清结果**：描述用户场景、输入输出、边界条件和验收标准。
+2. **让 AI 先读后改**：优先复用现有模块、Service、MCP Tool 和前端组件，避免重复造轮子。
+3. **小步提交**：每次只处理一个功能点，保留可回滚的 diff，并补充必要的单元测试、接口测试或 Playwright 用例。
+4. **人机共同验收**：AI 负责检索、实现和初步验证，维护者负责业务、资金安全、隐私和上线风险判断。
+
+项目已提供 [Codex / TDD / E2E 开发流程](./docs/codex-agentic-development-workflow.md)。欢迎提交你的 Prompt、工作流和 Vibe Coding 案例，让更多人用一人团队完成可维护的 CPS 产品。
+
+例如，可以从这样的需求开始：
+
+> 为 AI 购物助手增加“按预算推荐”能力。先阅读项目地图与现有搜索、比价、转链工具，复用已有接口；列出需要修改的文件与验收标准，补充最小测试后实现，并报告验证结果。
+
 ## 核心功能
 
 ### 多平台商品与推广
@@ -166,6 +183,8 @@ MySQL + Redis + 定时任务 + 外部联盟/供应商 API
 
 ## 截图
 
+### 管理后台
+
 管理后台示例（数据为演示数据）：
 
 <p align="center">
@@ -177,6 +196,16 @@ MySQL + Redis + 定时任务 + 外部联盟/供应商 API
   <img src="./.image/cps/selection-square.png" alt="返利商品广场" width="31%">
   <img src="./.image/cps/selection-library.png" alt="选品库" width="31%">
   <img src="./.image/cps/ai-selection-workbench.png" alt="AI 选品工作台" width="31%">
+</p>
+
+### App 移动端
+
+UniApp 页面示例：查券转链首页、返利工作台、个人中心（未登录）。页面中的价格、返利和商品仅作演示。
+
+<p align="center">
+  <img src="./.image/cps/mobile-home.png" alt="App 查券转链首页" width="30%">
+  <img src="./.image/cps/mobile-rebate-flow1.png" alt="App 返利工作台" width="30%">
+  <img src="./.image/cps/mobile-rebate-flow2.png" alt="App 个人中心（未登录）" width="30%">
 </p>
 
 ## 交流社区
@@ -256,24 +285,30 @@ MySQL + Redis + 定时任务 + 外部联盟/供应商 API
 
 ### 当前悬赏列表
 
-| 功能 | 悬赏金额 | 状态 | 说明 |
+以下为悬赏征集与定制方向，支持按需求评估、拆分里程碑和报价；金额以 Issue 中双方确认的预算为准。物业版、商家版等模板为待定制方向，表中内容是建议交付范围，不代表已提供完整成品。
+
+| 悬赏方向 | 预算/方式 | 状态 | 交付范围示例 |
 |------|--------|------|------|
-| 智能推送 | ¥1,000 | 🔴 待开发 | 基于用户行为的智能商品推送 |
+| AI 购物 Agent 定制 | 面议 / 按里程碑 | 🟡 可评估 | 购物问答、需求澄清、搜索比价、推荐、转链和订单/返利查询，支持 MCP 或 App API 接入 |
+| 新电商平台接入开发 | 面议 / 按平台报价 | 🟡 可评估 | 平台授权、商品搜索、优惠券、推广链接、订单同步、归因与失败重试，遵循 `CpsPlatformClient` 适配器规范 |
+| App 物业版模板 | 面议 / 模板定制 | 🟡 可评估 | 物业首页、报修/缴费/公告、住户身份与消息通知，可复用 UniApp 与租户能力 |
+| App 商家版模板 | 面议 / 模板定制 | 🟡 可评估 | 商家入驻、商品/订单、营销活动、结算和经营看板，可复用商城与 CPS 模块 |
+| 其他行业 App / 小程序模板 | 面议 / 需求评估 | 🟡 可评估 | 根据行业流程复用登录、租户、工作流、商城和 AI 能力，形成可交付模板 |
 
 ### 悬赏规则
 
-1. **认领任务**：在 Issue 中评论认领，确认后开始开发
-2. **开发周期**：根据功能复杂度协商，一般 2-4 周
-3. **代码审核**：提交 PR 后进行代码审核，通过后合并
-4. **发放赏金**：合并后 3 个工作日内发放至指定账户
+1. **明确需求**：使用功能悬赏表单，写明场景、交付范围、预算、期望时间和可验证的验收标准。
+2. **认领与约定**：开发者在 Issue 中评论认领；由发起方、开发者和维护者确认范围、里程碑、验收责任及付款条件。
+3. **开发与验收**：通过关联 PR 提交代码、测试、部署说明和必要截图，按约定验收并完成代码审核。
+4. **结算赏金**：按双方确认的验收结果及付款条件结算；发起或认领 Issue 本身不代表预算已落实。
 
 ### 如何发起悬赏？
 
 如果您需要特定功能但不在列表中，可以：
 
-1. 在 [Issues](../../issues) 中创建功能请求，标注 `💰 悬赏` 标签
-2. 说明功能需求和悬赏金额
-3. 等待开发者认领或我们评估后添加到悬赏列表
+1. 通过 [功能悬赏 / 定制开发表单](https://github.com/zhuangpengLI/AgenticCPS/issues/new?template=feature_bounty.yml) 发起需求，选择 AI 购物 Agent、新平台接入或 App 模板等方向。
+2. 填写使用场景、目标端、交付范围、验收标准、预算与期望时间。平台接入请附官方接口文档，模板定制请附页面与角色清单。
+3. 在 Issue 中讨论与认领，确认具体里程碑后推进；普通建议可使用 [功能建议表单](https://github.com/zhuangpengLI/AgenticCPS/issues/new?template=feature_request.yml)，无需提供悬赏预算。
 
 ---
 
@@ -289,9 +324,8 @@ MySQL + Redis + 定时任务 + 外部联盟/供应商 API
 
 本项目采用 [GNU Affero General Public License v3.0](./LICENSE)。欢迎提交 Issue、改进文档和 Pull Request。
 
-<p align="center"><b>AgenticCPS —— 让商品、返利与 AI Agent 在一条可审计链路上协同工作。</b></p>
 
 <p align="center">
-  <b>AgenticCPS —— 让每一个有想法的人，都能拥有自己的返利帝国。</b><br/>
+  <b>AgenticCPS —— 让商品、返利与 AI Agent 在一条可审计链路上协同工作。</b><br/>
   <sub>一人公司 &bull; Vibe Coding &bull; AI 自主编程 &bull; 低代码 &bull; 开箱即用</sub>
 </p>

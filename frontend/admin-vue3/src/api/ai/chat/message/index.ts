@@ -84,7 +84,14 @@ export interface ChatMessageBlock {
   [key: string]: unknown
 }
 
-export type ChatTaskStatus = 'QUEUED' | 'RUNNING' | 'SUCCEEDED' | 'FAILED' | 'CANCELLED'
+export type ChatTaskStatus =
+  | 'QUEUED'
+  | 'PENDING'
+  | 'RUNNING'
+  | 'PARTIAL_SUCCESS'
+  | 'SUCCEEDED'
+  | 'FAILED'
+  | 'CANCELLED'
 export type ChatTaskStepStatus = 'PENDING' | 'RUNNING' | 'SUCCEEDED' | 'FAILED' | 'SKIPPED'
 
 export interface ChatTaskStep {
@@ -102,6 +109,13 @@ export interface ChatTaskProgress {
   status: ChatTaskStatus
   percent: number
   currentStep?: string
+  /** Server task metadata supplied by task lifecycle SSE events. */
+  taskId?: string
+  stage?: string
+  completedItems?: number
+  totalItems?: number
+  elapsedMs?: number
+  degraded?: boolean
   summary?: string
   error?: string
   retryable?: boolean
@@ -147,6 +161,11 @@ export interface ChatMessageVO {
 }
 
 export type ChatStreamEventType =
+  | 'TASK_ACCEPTED'
+  | 'TASK_PROGRESS'
+  | 'TASK_DEGRADED'
+  | 'TASK_COMPLETE'
+  | 'TASK_FAILED'
   | 'MESSAGE_DELTA'
   | 'TOOL_STARTED'
   | 'TOOL_SUCCEEDED'
@@ -162,9 +181,20 @@ export interface ToolExecutionVO {
 
 export interface ChatMessageStreamData {
   eventType?: ChatStreamEventType
+  taskId?: string
+  stage?: string
+  message?: string
+  completedItems?: number
+  totalItems?: number
+  elapsedMs?: number
+  percent?: number
+  degraded?: boolean
+  taskStatus?: ChatTaskStatus | string
+  taskProgress?: Partial<ChatTaskProgress>
   send?: ChatMessageVO
   receive?: ChatMessageVO
   toolExecution?: ToolExecutionVO
+  requestId?: string
 }
 
 // AI chat 聊天

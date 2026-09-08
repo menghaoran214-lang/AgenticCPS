@@ -37,6 +37,15 @@
           AND tenant_id = #{tenantId}
     </select>
 
+    <!-- 只要有一笔已归因订单即视为活跃会员，按会员去重并隔离租户 -->
+    <select id="selectActiveMemberCount" resultType="int">
+        SELECT COUNT(DISTINCT member_id)
+        FROM cps_order
+        WHERE member_id IS NOT NULL
+          AND deleted = 0
+          AND tenant_id = #{tenantId}
+    </select>
+
     <!-- 趋势统计直接读取订单表，确保历史订单未生成日汇总时仍可展示 -->
     <select id="selectTrendStatsByDateRange" resultType="map">
         SELECT

@@ -98,10 +98,11 @@ public class CpsStatisticsServiceImpl implements CpsStatisticsService {
         Map<String, Object> todayData = orderMapper.selectRealtimeDashboard(today, tenantId);
         // 昨日实时聚合（昨日数据也用实时 SQL，保持一致性）
         Map<String, Object> yestData  = orderMapper.selectRealtimeDashboard(yesterday, tenantId);
+        Integer activeMemberCount = orderMapper.selectActiveMemberCount(tenantId);
         // 历史汇总：昨日 total 行（用于待/已结算佣金，定时任务写入）
         CpsStatisticsDO histTotal = statisticsMapper.selectByDateAndPlatform(yesterday, "total");
 
-        return buildDashboardVO(todayData, yestData, histTotal);
+        return buildDashboardVO(todayData, yestData, histTotal, activeMemberCount);
     }
 
     @Override
@@ -181,7 +182,8 @@ public class CpsStatisticsServiceImpl implements CpsStatisticsService {
      */
     private CpsDashboardRespVO buildDashboardVO(Map<String, Object> today,
                                                  Map<String, Object> yest,
-                                                 CpsStatisticsDO hist) {
+                                                 CpsStatisticsDO hist,
+                                                 Integer activeMemberCount) {
         CpsDashboardRespVO vo = new CpsDashboardRespVO();
         // 今日
         vo.setTodayOrderCount(toInt(today != null ? today.get("order_count") : null));
@@ -189,6 +191,7 @@ public class CpsStatisticsServiceImpl implements CpsStatisticsService {
         vo.setTodayRebate(toBigDecimal(today != null ? today.get("rebate_amount") : null));
         vo.setTodayProfit(toBigDecimal(today != null ? today.get("profit_amount") : null));
         vo.setTodayActiveMembers(toInt(today != null ? today.get("active_member_count") : null));
+        vo.setActiveMemberCount(safe(activeMemberCount));
         // 昨日
         vo.setYesterdayOrderCount(toInt(yest != null ? yest.get("order_count") : null));
         vo.setYesterdayCommission(toBigDecimal(yest != null ? yest.get("commission_amount") : null));

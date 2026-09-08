@@ -77,6 +77,15 @@
           <p class="mb-0 mt-4px text-12px text-[var(--el-text-color-secondary)]">
             {{ taskProgress.currentStep || taskProgress.summary || '正在准备分析结果' }}
           </p>
+          <p
+            v-if="taskProgress.elapsedMs || taskProgress.totalItems"
+            class="mb-0 mt-3px text-12px text-[var(--el-text-color-secondary)]"
+            data-testid="cps-workbench-task-meta"
+          >
+            <span v-if="taskProgress.totalItems">已完成 {{ taskProgress.completedItems || 0 }}/{{ taskProgress.totalItems }}</span>
+            <span v-if="taskProgress.totalItems && taskProgress.elapsedMs"> · </span>
+            <span v-if="taskProgress.elapsedMs">已用时 {{ formatElapsed(taskProgress.elapsedMs) }}</span>
+          </p>
         </div>
         <el-button
           v-if="taskProgress.retryable"
@@ -90,6 +99,7 @@
           <Icon icon="ep:refresh-right" class="mr-4px" />重试
         </el-button>
         <el-tag v-else :type="taskTagType" effect="plain" size="small">{{ taskStatusText }}</el-tag>
+        <el-tag v-if="taskProgress.degraded" type="warning" effect="plain" size="small">已使用备用数据</el-tag>
       </div>
       <el-progress
         class="mt-12px"
@@ -523,6 +533,10 @@ const removeSavedFilter = async (filter: CpsAiSavedSelectionFilterVO) => {
   } catch {}
 }
 const visibleSteps = computed(() => props.taskProgress?.steps.slice(0, 5) || [])
+const formatElapsed = (elapsedMs?: number) => {
+  const seconds = Math.max(0, Math.floor((elapsedMs || 0) / 1000))
+  return seconds >= 60 ? `${Math.floor(seconds / 60)} 分 ${seconds % 60} 秒` : `${seconds} 秒`
+}
 const taskStatusText = computed(() => {
   const status = props.taskProgress?.status
   if (status === 'SUCCEEDED') return '分析完成'

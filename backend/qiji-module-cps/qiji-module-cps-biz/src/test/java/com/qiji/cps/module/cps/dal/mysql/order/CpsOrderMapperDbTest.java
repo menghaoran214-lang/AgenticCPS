@@ -92,10 +92,33 @@ class CpsOrderMapperDbTest extends BaseDbUnitTest {
         assertEquals(2L, accountMapper.selectCount(null));
     }
 
+    @Test
+    void activeMemberCountCountsDistinctMembersWithAnyAttributedOrder() {
+        TenantContextHolder.setTenantId(1L);
+        orderMapper.insert(newOrder("taobao", "ACTIVE-1", 1001L));
+        orderMapper.insert(newOrder("jd", "ACTIVE-2", 1001L));
+        orderMapper.insert(newOrder("taobao", "ACTIVE-3", 1002L));
+        orderMapper.insert(newOrder("taobao", "UNATTRIBUTED", null));
+        CpsOrderDO deletedOrder = newOrder("taobao", "DELETED", 1003L);
+        orderMapper.insert(deletedOrder);
+        orderMapper.deleteById(deletedOrder.getId());
+
+        TenantContextHolder.setTenantId(2L);
+        orderMapper.insert(newOrder("taobao", "OTHER-TENANT", 2001L));
+
+        TenantContextHolder.setTenantId(1L);
+        assertEquals(2, orderMapper.selectActiveMemberCount(1L));
+    }
+
     private CpsOrderDO newOrder(String platformCode, String platformOrderId) {
+        return newOrder(platformCode, platformOrderId, null);
+    }
+
+    private CpsOrderDO newOrder(String platformCode, String platformOrderId, Long memberId) {
         CpsOrderDO order = CpsOrderDO.builder()
                 .platformCode(platformCode)
                 .platformOrderId(platformOrderId)
+                .memberId(memberId)
                 .orderStatus("paid")
                 .statusVersion(0)
                 .build();

@@ -1,0 +1,64 @@
+@baseUrl = http://127.0.0.1:48080/admin-api
+@token = replace-with-admin-token
+@adminTenantId = 1
+@memberId = replace-with-test-member-id
+
+### 1. 创建 CPS MCP 自测会话
+### 返回 data 即 conversationId。该会话会绑定 @memberId，消息正文中的 memberId 不会被采信。
+POST {{baseUrl}}/ai/chat/conversation/create-mcp-test
+Content-Type: application/json
+Authorization: Bearer {{token}}
+tenant-id: {{adminTenantId}}
+
+{
+  "memberId": {{memberId}}
+}
+
+### 2. 验证当前会话可用的快捷操作
+GET {{baseUrl}}/ai/chat/conversation/tool-actions?conversationId={{conversationId}}
+Authorization: Bearer {{token}}
+tenant-id: {{adminTenantId}}
+
+### 3. AI 自然语言调用商品搜索工具（SSE）
+### CPS 联盟助手会从已授权工具中自行选择搜索能力；不要在回复中依赖或展示内部工具名。
+POST {{baseUrl}}/ai/chat/message/send-stream
+Content-Type: application/json
+Accept: text/event-stream
+Authorization: Bearer {{token}}
+tenant-id: {{adminTenantId}}
+
+{
+  "conversationId": {{conversationId}},
+  "content": "帮我搜索 300 元以内的无线鼠标，优先比较京东和淘宝的到手价、优惠券和预估返利。",
+  "useContext": true,
+  "useSearch": false
+}
+
+### 4. 以服务端白名单快捷意图建议搜索（SSE）
+### toolIntent 只是建议，模型仍可根据用户目标选择其他已授权能力。
+POST {{baseUrl}}/ai/chat/message/send-stream
+Content-Type: application/json
+Accept: text/event-stream
+Authorization: Bearer {{token}}
+tenant-id: {{adminTenantId}}
+
+{
+  "conversationId": {{conversationId}},
+  "content": "搜索适合办公室使用的静音无线鼠标，并给我前三个推荐。",
+  "toolIntent": "SEARCH_GOODS"
+}
+
+### 5. 测试知识库召回
+### 先用 AI 知识库页面或知识库接口创建文档并等待切片完成；角色必须绑定该知识库。
+POST {{baseUrl}}/ai/chat/message/send-stream
+Content-Type: application/json
+Accept: text/event-stream
+Authorization: Bearer {{token}}
+tenant-id: {{adminTenantId}}
+
+{
+  "conversationId": {{conversationId}},
+  "content": "CPS 订单退款后，返利是否还能使用？请只根据知识库说明回答。",
+  "useContext": true
+}
+

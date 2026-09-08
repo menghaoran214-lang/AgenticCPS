@@ -264,6 +264,9 @@ public interface CpsOrderMapper extends BaseMapperX<CpsOrderDO> {
     Map<String, Object> selectRealtimeDashboard(@Param("statDate") LocalDate statDate,
                                                 @Param("tenantId") Long tenantId);
 
+    /** 有过已归因订单的去重会员数（累计口径）。 */
+    Integer selectActiveMemberCount(@Param("tenantId") Long tenantId);
+
     /**
      * 按创建日期聚合订单趋势，直接读取订单表，避免统计汇总任务尚未覆盖历史订单时返回空数据。
      */

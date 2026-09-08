@@ -6,6 +6,8 @@ export interface CpsDashboardVO {
   todayRebate: number
   todayProfit: number
   todayActiveMembers: number
+  /** 至少有一笔已归因订单的去重会员数 */
+  activeMemberCount: number
   yesterdayOrderCount: number
   yesterdayCommission: number
   yesterdayRebate: number

@@ -631,6 +631,42 @@ const updateToolExecution = (
   )
 }
 
+/** Apply server task lifecycle events while keeping tool events backwards compatible. */
+const updateTaskLifecycle = (data: ChatMessageStreamData) => {
+  const assistant = getCurrentAssistantMessage()
+  if (!assistant) return
+  const eventType = data.eventType
+  if (!eventType || eventType === 'MESSAGE_DELTA' || eventType.startsWith('TOOL_')) return
+  const previous = assistant.taskProgress || createTaskProgress()
+  const payload = data.taskProgress || {}
+  const status = (payload.status || data.taskStatus ||
+    (eventType === 'TASK_ACCEPTED' ? 'QUEUED' : eventType === 'TASK_FAILED' ? 'FAILED' : eventType === 'TASK_COMPLETE' ? 'SUCCEEDED' : 'RUNNING')) as ChatTaskProgress['status']
+  const percent = typeof payload.percent === 'number' ? payload.percent : typeof data.percent === 'number' ? data.percent : status === 'SUCCEEDED' || status === 'FAILED' ? 100 : previous.percent
+  const completedItems = payload.completedItems ?? data.completedItems
+  const totalItems = payload.totalItems ?? data.totalItems
+  const stage = payload.stage || data.stage
+  const eventMessage = payload.currentStep || data.message
+  const friendlyMessage = toFriendlyToolText(eventMessage, status === 'FAILED' ? '任务未完成，可重试' : status === 'SUCCEEDED' ? '任务已完成' : '正在处理您的请求')
+  assistant.taskProgress = {
+    ...previous,
+    ...payload,
+    status,
+    percent: Math.max(0, Math.min(100, percent)),
+    taskId: payload.taskId || data.taskId || previous.taskId,
+    stage,
+    completedItems,
+    totalItems,
+    elapsedMs: payload.elapsedMs ?? data.elapsedMs ?? previous.elapsedMs,
+    degraded: Boolean(payload.degraded ?? data.degraded ?? previous.degraded),
+    currentStep: friendlyMessage,
+    error: status === 'FAILED' ? friendlyMessage : undefined,
+    retryable: status === 'FAILED' ? Boolean(lastWorkbenchRequest.value?.toolIntent) : false,
+    summary: status === 'SUCCEEDED' ? friendlyMessage : previous.summary,
+    steps: previous.steps
+  }
+  if (assistant.content === '正在理解需求…') assistant.content = ''
+}
+
 const createTaskProgress = (): ChatTaskProgress => ({
   status: 'QUEUED',
   percent: 5,
@@ -792,6 +828,11 @@ const doSendMessageStream = async (userMessage: ChatMessageVO) => {
         }
 
         const eventType = data.eventType || 'MESSAGE_DELTA'
+        if (eventType.startsWith('TASK_')) {
+          updateTaskLifecycle(data)
+          await scrollToBottom()
+          return
+        }
         if (eventType !== 'MESSAGE_DELTA' && data.toolExecution) {
           updateToolExecution(data.toolExecution, eventType)
           await scrollToBottom()

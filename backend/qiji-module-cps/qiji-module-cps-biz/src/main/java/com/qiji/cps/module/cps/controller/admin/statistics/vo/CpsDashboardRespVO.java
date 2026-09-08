@@ -29,6 +29,9 @@ public class CpsDashboardRespVO {
     @Schema(description = "今日活跃会员数")
     private Integer todayActiveMembers;
 
+    @Schema(description = "累计活跃会员数（至少有一笔已归因订单的去重会员）")
+    private Integer activeMemberCount;
+
     @Schema(description = "昨日订单数")
     private Integer yesterdayOrderCount;
 

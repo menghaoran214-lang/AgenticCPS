@@ -5,6 +5,16 @@
       <view v-if="message.reasoningContent" class="reasoning" @tap="message.reasoningOpen = !message.reasoningOpen">{{ message.reasoningOpen ? '收起思考' : '查看思考过程' }}</view>
       <view v-if="message.reasoningOpen" class="reasoning-content">{{ message.reasoningContent }}</view>
       <view class="content">{{ formatContent(message.content) }}</view>
+      <view v-if="message.taskProgress" class="task-progress">
+        <view class="task-progress-head">
+          <text>{{ message.taskProgress.currentStep || '正在处理您的请求' }}</text>
+          <text v-if="message.taskProgress.elapsedMs">{{ formatElapsed(message.taskProgress.elapsedMs) }}</text>
+        </view>
+        <view v-if="message.taskProgress.totalItems" class="task-progress-count">已完成 {{ message.taskProgress.completedItems || 0 }}/{{ message.taskProgress.totalItems }}</view>
+        <view class="task-progress-track"><view class="task-progress-bar" :style="{ width: `${message.taskProgress.percent || 0}%` }" /></view>
+        <view v-if="message.taskProgress.degraded" class="task-progress-degraded">已使用备用数据，结果可能存在延迟</view>
+        <view v-if="message.taskProgress.error" class="task-progress-error">{{ message.taskProgress.error }}</view>
+      </view>
       <view v-if="message.toolExecutions && message.toolExecutions.length" class="tool-list"><view v-for="execution in message.toolExecutions" :key="execution.executionId" class="tool" :class="execution.status"><text />{{ execution.message || execution.label }}</view></view>
       <AiChatBlockRenderer :blocks="message.blocks" @action="$emit('action', $event)" />
       <view v-if="message.webSearchPages && message.webSearchPages.length" class="sources">已参考 {{ message.webSearchPages.length }} 条公开信息</view>
@@ -18,6 +28,10 @@
   defineEmits(['action']);
   const isUser = computed(() => String(props.message.type || '').toUpperCase() === 'USER');
   const formatContent = (content = '') => String(content || '').replace(/\r\n/g, '\n').replace(/\*\*(.*?)\*\*/g, '$1').replace(/^#{1,4}\s*/gm, '').replace(/^[-*]\s+/gm, '• ');
+  const formatElapsed = (elapsedMs = 0) => {
+    const seconds = Math.max(0, Math.floor(Number(elapsedMs) / 1000));
+    return seconds >= 60 ? `${Math.floor(seconds / 60)}分${seconds % 60}秒` : `${seconds}秒`;
+  };
 </script>
 <style scoped lang="scss">
   .message-row { display: flex; margin-bottom: 22rpx; }
@@ -33,6 +47,13 @@
   .tool.SUCCEEDED text { background: #11845b; }
   .tool.FAILED text { background: #c6413a; }
   .sources { margin-top: 16rpx; color: #6f7c8f; font-size: 21rpx; }
+  .task-progress { margin-top: 16rpx; padding-top: 14rpx; border-top: 1rpx solid #eef1f6; color: #60718c; font-size: 22rpx; }
+  .task-progress-head { display: flex; justify-content: space-between; gap: 16rpx; }
+  .task-progress-count { margin-top: 6rpx; color: #8b98ab; font-size: 20rpx; }
+  .task-progress-track { height: 8rpx; margin-top: 10rpx; overflow: hidden; border-radius: 8rpx; background: #edf1f7; }
+  .task-progress-bar { height: 100%; border-radius: 8rpx; background: linear-gradient(90deg, #2f6ceb, #54a7ff); transition: width .3s ease; }
+  .task-progress-degraded { margin-top: 8rpx; color: #b7791f; font-size: 20rpx; }
+  .task-progress-error { margin-top: 8rpx; color: #c6413a; font-size: 21rpx; }
   .attachments { display: flex; margin-bottom: 12rpx; gap: 10rpx; }
   .attachments image { width: 120rpx; height: 120rpx; border-radius: 12rpx; }
 </style>

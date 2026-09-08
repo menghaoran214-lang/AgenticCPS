@@ -9,14 +9,6 @@
       </div>
     </el-card>
 
-    <el-row :gutter="12" class="metric-row">
-      <el-col v-for="item in metrics" :key="item.key" :xl="5" :lg="8" :md="12" :sm="12" :xs="24">
-        <el-card shadow="never" class="metric-card" :class="`metric-${item.tone}`">
-          <div class="metric-icon"><Icon :icon="item.icon" :size="21" /></div><div><div class="metric-label">{{ displayMetricLabel(item.label) }}</div><CountTo class="metric-value" :start-val="0" :end-val="item.value" :duration="900" :decimals="item.decimals" /><div class="metric-foot">{{ selectedRange === 'day' ? '较昨日' : '区间累计' }} <span :class="item.change >= 0 ? 'up' : 'down'">{{ item.changeText }}</span></div></div>
-        </el-card>
-      </el-col>
-    </el-row>
-
     <el-card shadow="never" class="range-card">
       <div class="range-toolbar">
         <span class="range-title">数据统计</span>
@@ -27,6 +19,14 @@
         </el-button-group>
       </div>
     </el-card>
+
+    <el-row :gutter="12" class="metric-row">
+      <el-col v-for="item in metrics" :key="item.key" :xl="5" :lg="8" :md="12" :sm="12" :xs="24">
+        <el-card shadow="never" class="metric-card" :class="`metric-${item.tone}`">
+          <div class="metric-icon"><Icon :icon="item.icon" :size="21" /></div><div><div class="metric-label">{{ displayMetricLabel(item.label) }}</div><CountTo class="metric-value" :start-val="0" :end-val="item.value" :duration="900" :decimals="item.decimals" /><div class="metric-foot">{{ selectedRange === 'day' ? '较昨日' : '区间累计' }} <span :class="item.change >= 0 ? 'up' : 'down'">{{ item.changeText }}</span></div></div>
+        </el-card>
+      </el-col>
+    </el-row>
 
     <el-row :gutter="12" class="main-row">
       <el-col :xl="16" :lg="16" :md="24" :sm="24" :xs="24">
@@ -97,7 +97,7 @@ const displayMetricLabel = (label: string) => selectedRange.value === 'day' ? la
 const mobilePreviewReady = ref(false); const mobilePreviewError = ref(false)
 type Metric = { key: string; label: string; value: number; decimals: number; change: number; changeText: string; icon: string; tone: string }
 const metrics = ref<Metric[]>([
-  { key: 'orders', label: '今日订单数', value: 0, decimals: 0, change: 0, changeText: '—', icon: 'ep:shopping-cart', tone: 'blue' }, { key: 'commission', label: '今日佣金（元）', value: 0, decimals: 2, change: 0, changeText: '—', icon: 'ep:money', tone: 'orange' }, { key: 'rebate', label: '今日返利（元）', value: 0, decimals: 2, change: 0, changeText: '—', icon: 'ep:wallet', tone: 'green' }, { key: 'profit', label: '今日利润（元）', value: 0, decimals: 2, change: 0, changeText: '—', icon: 'ep:trend-charts', tone: 'purple' }, { key: 'members', label: '活跃会员数', value: 0, decimals: 0, change: 0, changeText: '实时', icon: 'ep:user', tone: 'cyan' }
+  { key: 'orders', label: '今日订单数', value: 0, decimals: 0, change: 0, changeText: '—', icon: 'ep:shopping-cart', tone: 'blue' }, { key: 'commission', label: '今日佣金（元）', value: 0, decimals: 2, change: 0, changeText: '—', icon: 'ep:money', tone: 'orange' }, { key: 'rebate', label: '今日返利（元）', value: 0, decimals: 2, change: 0, changeText: '—', icon: 'ep:wallet', tone: 'green' }, { key: 'profit', label: '今日利润（元）', value: 0, decimals: 2, change: 0, changeText: '—', icon: 'ep:trend-charts', tone: 'purple' }, { key: 'members', label: '累计活跃会员数', value: 0, decimals: 0, change: 0, changeText: '有下单记录', icon: 'ep:user', tone: 'cyan' }
 ])
 const trendOptions = ref<EChartsOption>({ tooltip: { trigger: 'axis' }, legend: { data: ['订单数', '佣金（元）'], right: 0 }, grid: { left: 8, right: 12, top: 35, bottom: 8, containLabel: true }, xAxis: { type: 'category', boundaryGap: false, data: [] }, yAxis: [{ type: 'value', name: '金额（元）' }, { type: 'value', name: '订单', splitLine: { show: false } }], series: [] })
 const trendChartOptions = computed(() => trendOptions.value as EChartsOption)
@@ -121,16 +121,16 @@ function getRangeDates(): [string, string] {
   const monday = dayjs().subtract(day === 0 ? 6 : day - 1, 'day')
   return [monday.format('YYYY-MM-DD'), end]
 }
-function applyMetrics(values: number[], previous: number[], memberRealtime = false) {
-  metrics.value = metrics.value.map((item, index) => ({ ...item, value: values[index] || 0, change: (values[index] || 0) - (previous[index] || 0), changeText: memberRealtime && index === 4 ? '实时' : changeText(values[index] || 0, previous[index] || 0) }))
+function applyMetrics(values: number[], previous: number[]) {
+  metrics.value = metrics.value.map((item, index) => ({ ...item, value: values[index] || 0, change: (values[index] || 0) - (previous[index] || 0), changeText: index === 4 ? '有下单记录' : changeText(values[index] || 0, previous[index] || 0) }))
 }
 async function loadDashboard() {
   try {
     const data = (await CpsStatisticsApi.getDashboard()) as unknown as CpsDashboardVO
     if (selectedRange.value === 'day') {
-      const values = [data.todayOrderCount, money(data.todayCommission), money(data.todayRebate), money(data.todayProfit), data.todayActiveMembers]
+      const values = [data.todayOrderCount, money(data.todayCommission), money(data.todayRebate), money(data.todayProfit), data.activeMemberCount]
       const previous = [data.yesterdayOrderCount, money(data.yesterdayCommission), money(data.yesterdayRebate), money(data.yesterdayProfit), 0]
-      applyMetrics(values, previous, true)
+      applyMetrics(values, previous)
       return
     }
     const [startDate, endDate] = getRangeDates()
@@ -142,9 +142,9 @@ async function loadDashboard() {
       (trend.commissions || []).reduce((sum, value) => sum + money(value), todayValues[1]),
       (trend.rebates || []).reduce((sum, value) => sum + money(value), todayValues[2]),
       (trend.profits || []).reduce((sum, value) => sum + money(value), todayValues[3]),
-      data.todayActiveMembers || 0
+      data.activeMemberCount || 0
     ]
-    applyMetrics(values, [0, 0, 0, 0, 0], true)
+    applyMetrics(values, [0, 0, 0, 0, 0])
   } catch { /* 空态 */ }
 }
 async function loadTrend() { try { const [startDate, endDate] = getRangeDates(); let data: CpsTrendVO; if (selectedRange.value === 'day') { const dashboard = (await CpsStatisticsApi.getDashboard()) as unknown as CpsDashboardVO; data = { dates: [endDate], orderCounts: [dashboard.todayOrderCount], commissions: [money(dashboard.todayCommission)], rebates: [money(dashboard.todayRebate)], profits: [money(dashboard.todayProfit)] } } else { data = (await CpsStatisticsApi.getTrend({ startDate, endDate, platformCode: 'total' })) as unknown as CpsTrendVO } trendOptions.value = { ...trendOptions.value, xAxis: { type: 'category', boundaryGap: false, data: data.dates || [] }, series: [{ name: '订单数', type: 'line', smooth: true, yAxisIndex: 1, data: data.orderCounts || [], areaStyle: { opacity: 0.08 }, itemStyle: { color: '#2563eb' } }, { name: '佣金（元）', type: 'line', smooth: true, data: data.commissions || [], itemStyle: { color: '#f97316' } }] } as EChartsOption } catch { /* 空图表 */ } }

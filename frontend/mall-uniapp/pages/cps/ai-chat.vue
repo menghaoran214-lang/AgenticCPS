@@ -140,6 +140,34 @@
     historyConversations: [],
   });
   let conversationPromise = null;
+  let taskElapsedTimer = null;
+  const INTERNAL_TOOL_NAME_RE = /\b(?:cps|cpx)_[a-z0-9_]+\b/gi;
+  const friendlyTaskText = (value, fallback) => {
+    const text = String(value || '').replace(INTERNAL_TOOL_NAME_RE, '业务服务').trim();
+    return text || fallback;
+  };
+
+  function createTaskProgress() {
+    return {
+      status: 'QUEUED', percent: 5, currentStep: '正在理解您的需求', elapsedMs: 0,
+      startedAt: Date.now(), steps: [],
+    };
+  }
+
+  function startTaskElapsedTimer() {
+    clearInterval(taskElapsedTimer);
+    taskElapsedTimer = setInterval(() => {
+      const assistant = state.messages[state.messages.length - 1];
+      const progress = assistant?.taskProgress;
+      if (!progress || !['QUEUED', 'PENDING', 'RUNNING'].includes(progress.status)) return;
+      progress.elapsedMs = Math.max(progress.elapsedMs || 0, Date.now() - (progress.startedAt || Date.now()));
+    }, 1000);
+  }
+
+  function stopTaskElapsedTimer() {
+    clearInterval(taskElapsedTimer);
+    taskElapsedTimer = null;
+  }
 
   async function ensureConversation() {
     if (state.conversationId) return true;
@@ -212,9 +240,11 @@
         content: '',
         blocks: [],
         toolExecutions: [],
+        taskProgress: createTaskProgress(),
       }),
     );
     state.loading = true;
+    startTaskElapsedTimer();
     state.abortController = typeof AbortController !== 'undefined' ? new AbortController() : null;
     scrollToEnd();
     await sendAiChatStream(
@@ -235,7 +265,15 @@
         signal: state.abortController?.signal,
       },
     );
+    const assistant = state.messages[state.messages.length - 1];
+    if (assistant?.taskProgress && ['QUEUED', 'PENDING', 'RUNNING'].includes(assistant.taskProgress.status)) {
+      assistant.taskProgress.status = 'SUCCEEDED';
+      assistant.taskProgress.percent = 100;
+      assistant.taskProgress.currentStep = '回复已生成';
+      assistant.taskProgress.elapsedMs = Math.max(assistant.taskProgress.elapsedMs || 0, Date.now() - (assistant.taskProgress.startedAt || Date.now()));
+    }
     state.loading = false;
+    stopTaskElapsedTimer();
     state.abortController = null;
     state.lastAction = null;
     scrollToEnd();
@@ -246,6 +284,11 @@
     const type = event.eventType || 'MESSAGE_COMPLETE';
     const assistant = state.messages[state.messages.length - 1];
     if (!assistant || String(assistant.type || '').toUpperCase() !== 'ASSISTANT') return;
+    if (type.startsWith('TASK_')) {
+      updateTaskProgress(assistant, event, type);
+      scrollToEnd();
+      return;
+    }
     if (type === 'TOOL_STARTED' || type === 'TOOL_SUCCEEDED' || type === 'TOOL_FAILED') {
       const execution = event.toolExecution || {};
       const list = assistant.toolExecutions || [];
@@ -253,6 +296,10 @@
       if (index >= 0) list[index] = { ...list[index], ...execution };
       else list.push(execution);
       assistant.toolExecutions = list;
+      if (assistant.taskProgress && type === 'TOOL_STARTED') {
+        assistant.taskProgress.status = 'RUNNING';
+        assistant.taskProgress.currentStep = friendlyTaskText(execution.message || execution.label, '正在获取所需信息');
+      }
       return;
     }
     const receive = event.receive || event.data?.receive;
@@ -267,6 +314,25 @@
       assistant.webSearchPages = receive.webSearchPages || assistant.webSearchPages;
       scrollToEnd();
     }
+  }
+
+  function updateTaskProgress(assistant, event, type) {
+    const old = assistant.taskProgress || createTaskProgress();
+    const payload = event.taskProgress || {};
+    const status = payload.status || event.taskStatus || (type === 'TASK_ACCEPTED' ? 'QUEUED' : type === 'TASK_FAILED' ? 'FAILED' : type === 'TASK_COMPLETE' ? 'SUCCEEDED' : 'RUNNING');
+    const percent = Number.isFinite(payload.percent) ? payload.percent : Number.isFinite(event.percent) ? event.percent : ['SUCCEEDED', 'FAILED'].includes(status) ? 100 : old.percent;
+    const currentStep = friendlyTaskText(payload.currentStep || event.message, status === 'FAILED' ? '任务未完成，请稍后重试' : status === 'SUCCEEDED' ? '任务已完成' : '正在处理您的请求');
+    assistant.taskProgress = {
+      ...old, ...payload, status, percent: Math.max(0, Math.min(100, percent)),
+      taskId: payload.taskId || event.taskId || old.taskId,
+      stage: payload.stage || event.stage || old.stage,
+      completedItems: payload.completedItems ?? event.completedItems ?? old.completedItems,
+      totalItems: payload.totalItems ?? event.totalItems ?? old.totalItems,
+      elapsedMs: payload.elapsedMs ?? event.elapsedMs ?? old.elapsedMs,
+      degraded: Boolean(payload.degraded ?? event.degraded ?? old.degraded),
+      currentStep,
+      error: status === 'FAILED' ? currentStep : undefined,
+    };
   }
 
   async function chooseImages() {
@@ -530,7 +596,7 @@
     }
     await ensureConversation();
   });
-  onBeforeUnmount(() => state.abortController?.abort?.());
+  onBeforeUnmount(() => { state.abortController?.abort?.(); stopTaskElapsedTimer(); });
 </script>
 
 <style scoped lang="scss">

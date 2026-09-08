@@ -110,6 +110,7 @@ CREATE TABLE IF NOT EXISTS "cps_order" (
     "platform_code" varchar(32) NOT NULL,
     "platform_order_id" varchar(128) NOT NULL,
     "parent_order_id" varchar(128) NULL,
+    "member_id" bigint NULL,
     "order_status" varchar(32) NOT NULL,
     "last_sync_result" varchar(32) NULL,
     "raw_platform_status_summary" varchar(512) NULL,

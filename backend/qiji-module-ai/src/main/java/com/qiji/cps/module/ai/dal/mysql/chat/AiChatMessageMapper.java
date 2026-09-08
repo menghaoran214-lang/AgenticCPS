@@ -32,6 +32,22 @@ public interface AiChatMessageMapper extends BaseMapperX<AiChatMessageDO> {
                 .orderByAsc(AiChatMessageDO::getId));
     }
 
+    /**
+     * Loads only the newest rows required to build a model context. The result is restored to
+     * chronological order so existing prompt construction remains unchanged.
+     */
+    default List<AiChatMessageDO> selectRecentListByConversationId(Long conversationId, int limit) {
+        if (limit <= 0) {
+            return Collections.emptyList();
+        }
+        List<AiChatMessageDO> result = selectList(new LambdaQueryWrapperX<AiChatMessageDO>()
+                .eq(AiChatMessageDO::getConversationId, conversationId)
+                .orderByDesc(AiChatMessageDO::getId)
+                .last("LIMIT " + limit));
+        Collections.reverse(result);
+        return result;
+    }
+
     default Map<Long, Integer> selectCountMapByConversationId(Collection<Long> conversationIds) {
         // SQL count 查询
         List<Map<String, Object>> result = selectMaps(new QueryWrapper<AiChatMessageDO>()
