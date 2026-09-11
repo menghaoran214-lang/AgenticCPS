@@ -26,7 +26,7 @@ public class OpenAiImageModelTests {
     public void testCall() {
         // 准备参数
         ImageOptions options = OpenAiImageOptions.builder()
-                .model(OpenAiImageApi.ImageModel.DALL_E_2.getValue()) // 这个模型比较便宜
+                .model("dall-e-2") // 这个模型比较便宜
                 .height(256).width(256)
                 .build();
         ImagePrompt prompt = new ImagePrompt("中国长城!", options);
