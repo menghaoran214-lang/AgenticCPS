@@ -9,6 +9,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -33,5 +34,20 @@ class McpSseMessageEndpointConfigurationTest {
                 .andExpect(jsonPath("$.error", containsString("POST")))
                 .andExpect(jsonPath("$.sseEndpoint").value("/sse"))
                 .andExpect(jsonPath("$.messageEndpoint").value("/mcp/message"));
+    }
+
+    @Test
+    void shouldLeavePostMessageRequestsToTheMcpHandler() throws Exception {
+        McpServerSseProperties properties = new McpServerSseProperties();
+        properties.setSseEndpoint("/sse");
+        properties.setSseMessageEndpoint("/mcp/message");
+
+        MockMvc mockMvc = MockMvcBuilders.routerFunctions(
+                new McpSseMessageEndpointConfiguration().mcpSseMessageEndpointGetGuard(properties))
+                .build();
+
+        // The guard is deliberately GET-only; the actual MCP POST handler must own this route.
+        mockMvc.perform(post("/mcp/message"))
+                .andExpect(status().isNotFound());
     }
 }

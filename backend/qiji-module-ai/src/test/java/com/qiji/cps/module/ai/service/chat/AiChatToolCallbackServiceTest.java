@@ -179,4 +179,32 @@ class AiChatToolCallbackServiceTest extends BaseMockitoUnitTest {
         assertEquals(events.get(0).getExecutionId(), events.get(1).getExecutionId());
     }
 
+    @Test
+    void getToolCallbacks_emitsFailedLifecycleEventAndRethrowsToolException() {
+        AiChatRoleDO role = new AiChatRoleDO().setToolIds(List.of(1L));
+        when(chatRoleService.getChatRole(10L)).thenReturn(role);
+        when(toolService.getToolList(List.of(1L))).thenReturn(List.of(new AiToolDO().setName("cps_search_goods")));
+        when(toolCallbackResolver.resolve("cps_search_goods")).thenReturn(localCallback);
+        when(localCallback.getToolDefinition()).thenReturn(org.springframework.ai.tool.definition.ToolDefinition.builder()
+                .name("cps_search_goods").description("search").inputSchema("{}").build());
+        IllegalStateException failure = new IllegalStateException("provider unavailable");
+        ToolContext context = new ToolContext(Map.of());
+        when(localCallback.call("{}", context)).thenThrow(failure);
+        AiChatToolAction action = new AiChatToolAction().setIntent("SEARCH_GOODS")
+                .setToolName("cps_search_goods").setLabel("商品搜索")
+                .setRunningMessage("正在搜索商品").setSuccessMessage("商品搜索完成");
+        List<AiChatToolExecutionEvent> events = new ArrayList<>();
+        ToolCallback callback = toolCallbackService.getToolCallbacks(
+                new AiChatConversationDO().setRoleId(10L), Map.of("cps_search_goods", action), events::add).get(0);
+
+        IllegalStateException thrown = org.junit.jupiter.api.Assertions.assertThrows(IllegalStateException.class,
+                () -> callback.call("{}", context));
+
+        assertSame(failure, thrown);
+        assertEquals(List.of("TOOL_STARTED", "TOOL_FAILED"),
+                events.stream().map(AiChatToolExecutionEvent::getEventType).toList());
+        assertEquals(events.get(0).getExecutionId(), events.get(1).getExecutionId());
+        assertEquals("FAILED", events.get(1).getStatus());
+    }
+
 }

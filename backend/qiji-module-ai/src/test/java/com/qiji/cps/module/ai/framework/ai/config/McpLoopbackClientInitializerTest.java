@@ -65,6 +65,34 @@ class McpLoopbackClientInitializerTest extends BaseMockitoUnitTest {
         verify(filesystemClient, never()).initialize();
     }
 
+    @Test
+    void onApplicationReady_skipsInitializationWhenLoopbackIsDisabled() {
+        QijiAiProperties properties = new QijiAiProperties();
+        properties.getMcp().getLoopbackClient().setEnabled(false);
+        properties.getMcp().getLoopbackClient().setConnectionName("cps");
+        McpLoopbackClientInitializer disabledInitializer = new McpLoopbackClientInitializer(
+                properties, List.of(cpsClient));
+
+        disabledInitializer.onApplicationReady(null);
+
+        verify(cpsClient, never()).getClientInfo();
+        verify(cpsClient, never()).initialize();
+    }
+
+    @Test
+    void onApplicationReady_skipsInitializationWhenConnectionNameIsBlank() {
+        QijiAiProperties properties = new QijiAiProperties();
+        properties.getMcp().getLoopbackClient().setEnabled(true);
+        properties.getMcp().getLoopbackClient().setConnectionName(" ");
+        McpLoopbackClientInitializer blankNameInitializer = new McpLoopbackClientInitializer(
+                properties, List.of(cpsClient));
+
+        blankNameInitializer.onApplicationReady(null);
+
+        verify(cpsClient, never()).getClientInfo();
+        verify(cpsClient, never()).initialize();
+    }
+
     private static QijiAiProperties createEnabledProperties() {
         QijiAiProperties properties = new QijiAiProperties();
         properties.getMcp().getLoopbackClient().setEnabled(true);
