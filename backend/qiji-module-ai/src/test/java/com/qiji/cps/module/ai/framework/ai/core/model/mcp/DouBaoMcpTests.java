@@ -18,7 +18,7 @@ public class DouBaoMcpTests {
                     .baseUrl(DouBaoChatModel.BASE_URL)
                     .apiKey("5c1b5747-26d2-4ebd-a4e0-dd0e8d8b4272") // apiKey
                     .build())
-            .defaultOptions(OpenAiChatOptions.builder()
+            .options(OpenAiChatOptions.builder()
                     .model("doubao-1-5-lite-32k-250115") // 模型（doubao）
                     .temperature(0.7)
                     .build())

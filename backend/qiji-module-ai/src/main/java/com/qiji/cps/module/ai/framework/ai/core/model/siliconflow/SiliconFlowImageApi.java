@@ -21,7 +21,6 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import org.springframework.ai.model.ApiKey;
 import org.springframework.ai.model.NoopApiKey;
 import org.springframework.ai.model.SimpleApiKey;
-import org.springframework.ai.openai.api.OpenAiImageApi;
 import org.springframework.ai.retry.RetryUtils;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -76,14 +75,14 @@ public class SiliconFlowImageApi {
 					h.setBearerAuth(apiKey.getValue());
 				}
 				h.setContentType(MediaType.APPLICATION_JSON);
-				h.addAll(headers);
+				h.putAll(headers);
 			})
 			.defaultStatusHandler(responseErrorHandler)
 			.build();
 		// @formatter:on
 	}
 
-	public ResponseEntity<OpenAiImageApi.OpenAiImageResponse> createImage(SiliconflowImageRequest siliconflowImageRequest) {
+	public ResponseEntity<SiliconflowImageResponse> createImage(SiliconflowImageRequest siliconflowImageRequest) {
 		Assert.notNull(siliconflowImageRequest, "Image request cannot be null.");
 		Assert.hasLength(siliconflowImageRequest.prompt(), "Prompt cannot be empty.");
 
@@ -91,7 +90,21 @@ public class SiliconFlowImageApi {
 			.uri("v1/images/generations")
 			.body(siliconflowImageRequest)
 			.retrieve()
-			.toEntity(OpenAiImageApi.OpenAiImageResponse.class);
+			.toEntity(SiliconflowImageResponse.class);
+	}
+
+	/** Minimal response DTO matching the OpenAI-compatible image response returned by SiliconFlow. */
+	@JsonInclude(JsonInclude.Include.NON_NULL)
+	public record SiliconflowImageResponse(
+			@JsonProperty("created") Long created,
+			@JsonProperty("data") java.util.List<SiliconflowImageData> data) {
+	}
+
+	@JsonInclude(JsonInclude.Include.NON_NULL)
+	public record SiliconflowImageData(
+			@JsonProperty("url") String url,
+			@JsonProperty("b64_json") String b64Json,
+			@JsonProperty("revised_prompt") String revisedPrompt) {
 	}
 
 
@@ -100,6 +113,7 @@ public class SiliconFlowImageApi {
 	public record SiliconflowImageRequest (
 			@JsonProperty("prompt") String prompt,
 			@JsonProperty("model") String model,
+			@JsonProperty("image_size") String imageSize,
 			@JsonProperty("batch_size") Integer batchSize,
 			@JsonProperty("negative_prompt") String negativePrompt,
 			@JsonProperty("seed") Integer seed,
@@ -108,7 +122,7 @@ public class SiliconFlowImageApi {
 			@JsonProperty("image") String image) {
 
 		public SiliconflowImageRequest(String prompt, String model) {
-			this(prompt, model, null, null, null, null, null, null);
+			this(prompt, model, null, null, null, null, null, null, null);
 		}
 	}
 

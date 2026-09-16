@@ -23,9 +23,6 @@ import com.qiji.cps.module.ai.framework.ai.core.model.siliconflow.SiliconFlowIma
 import com.qiji.cps.module.ai.framework.ai.core.model.siliconflow.SiliconFlowImageModel;
 import com.qiji.cps.module.ai.framework.ai.core.model.suno.api.SunoApi;
 import com.qiji.cps.module.ai.framework.ai.core.model.xinghuo.XingHuoChatModel;
-import com.alibaba.cloud.ai.autoconfigure.dashscope.DashScopeChatAutoConfiguration;
-import com.alibaba.cloud.ai.autoconfigure.dashscope.DashScopeEmbeddingAutoConfiguration;
-import com.alibaba.cloud.ai.autoconfigure.dashscope.DashScopeImageAutoConfiguration;
 import com.alibaba.cloud.ai.dashscope.api.DashScopeApi;
 import com.alibaba.cloud.ai.dashscope.api.DashScopeImageApi;
 import com.alibaba.cloud.ai.dashscope.chat.DashScopeChatModel;
@@ -33,8 +30,8 @@ import com.alibaba.cloud.ai.dashscope.chat.DashScopeChatOptions;
 import com.alibaba.cloud.ai.dashscope.embedding.text.DashScopeEmbeddingModel;
 import com.alibaba.cloud.ai.dashscope.embedding.text.DashScopeEmbeddingOptions;
 import com.alibaba.cloud.ai.dashscope.image.DashScopeImageModel;
-import com.azure.ai.openai.OpenAIClientBuilder;
-import com.azure.core.credential.KeyCredential;
+import com.openai.client.OpenAIClient;
+import com.openai.client.okhttp.OpenAIOkHttpClient;
 import io.micrometer.observation.ObservationRegistry;
 import io.milvus.client.MilvusServiceClient;
 import io.qdrant.client.QdrantClient;
@@ -43,7 +40,6 @@ import lombok.SneakyThrows;
 import org.springaicommunity.moonshot.MoonshotChatModel;
 import org.springaicommunity.moonshot.MoonshotChatOptions;
 import org.springaicommunity.moonshot.api.MoonshotApi;
-import org.springaicommunity.moonshot.autoconfigure.MoonshotChatAutoConfiguration;
 import org.springaicommunity.qianfan.QianFanChatModel;
 import org.springaicommunity.qianfan.QianFanEmbeddingModel;
 import org.springaicommunity.qianfan.QianFanEmbeddingOptions;
@@ -52,9 +48,8 @@ import org.springaicommunity.qianfan.api.QianFanApi;
 import org.springaicommunity.qianfan.api.QianFanImageApi;
 import org.springaicommunity.qianfan.autoconfigure.QianFanChatAutoConfiguration;
 import org.springaicommunity.qianfan.autoconfigure.QianFanEmbeddingAutoConfiguration;
-import org.springframework.ai.azure.openai.AzureOpenAiChatModel;
-import org.springframework.ai.azure.openai.AzureOpenAiEmbeddingModel;
 import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.anthropic.AnthropicChatOptions;
 import org.springframework.ai.deepseek.DeepSeekChatModel;
 import org.springframework.ai.deepseek.DeepSeekChatOptions;
 import org.springframework.ai.deepseek.api.DeepSeekApi;
@@ -63,27 +58,10 @@ import org.springframework.ai.embedding.BatchingStrategy;
 import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.ai.embedding.observation.EmbeddingModelObservationConvention;
 import org.springframework.ai.image.ImageModel;
-import org.springframework.ai.minimax.MiniMaxChatModel;
-import org.springframework.ai.minimax.MiniMaxChatOptions;
-import org.springframework.ai.minimax.MiniMaxEmbeddingModel;
-import org.springframework.ai.minimax.MiniMaxEmbeddingOptions;
-import org.springframework.ai.minimax.api.MiniMaxApi;
-import org.springframework.ai.model.anthropic.autoconfigure.AnthropicChatAutoConfiguration;
-import org.springframework.ai.model.azure.openai.autoconfigure.AzureOpenAiChatAutoConfiguration;
-import org.springframework.ai.model.azure.openai.autoconfigure.AzureOpenAiEmbeddingAutoConfiguration;
-import org.springframework.ai.model.azure.openai.autoconfigure.AzureOpenAiEmbeddingProperties;
 import org.springframework.ai.model.deepseek.autoconfigure.DeepSeekChatAutoConfiguration;
-import org.springframework.ai.model.minimax.autoconfigure.MiniMaxChatAutoConfiguration;
-import org.springframework.ai.model.minimax.autoconfigure.MiniMaxEmbeddingAutoConfiguration;
 import org.springframework.ai.model.ollama.autoconfigure.OllamaChatAutoConfiguration;
-import org.springframework.ai.model.openai.autoconfigure.OpenAiChatAutoConfiguration;
-import org.springframework.ai.model.openai.autoconfigure.OpenAiEmbeddingAutoConfiguration;
-import org.springframework.ai.model.openai.autoconfigure.OpenAiImageAutoConfiguration;
 import org.springframework.ai.model.stabilityai.autoconfigure.StabilityAiImageAutoConfiguration;
 import org.springframework.ai.model.tool.ToolCallingManager;
-import org.springframework.ai.model.zhipuai.autoconfigure.ZhiPuAiChatAutoConfiguration;
-import org.springframework.ai.model.zhipuai.autoconfigure.ZhiPuAiEmbeddingAutoConfiguration;
-import org.springframework.ai.model.zhipuai.autoconfigure.ZhiPuAiImageAutoConfiguration;
 import org.springframework.ai.ollama.OllamaChatModel;
 import org.springframework.ai.ollama.OllamaEmbeddingModel;
 import org.springframework.ai.ollama.api.OllamaApi;
@@ -92,11 +70,7 @@ import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.openai.OpenAiEmbeddingModel;
 import org.springframework.ai.openai.OpenAiEmbeddingOptions;
 import org.springframework.ai.openai.OpenAiImageModel;
-import org.springframework.ai.openai.api.OpenAiApi;
-import org.springframework.ai.openai.api.OpenAiImageApi;
-import org.springframework.ai.openai.api.common.OpenAiApiConstants;
 import org.springframework.ai.anthropic.AnthropicChatModel;
-import org.springframework.ai.anthropic.api.AnthropicApi;
 import org.springframework.ai.stabilityai.StabilityAiImageModel;
 import org.springframework.ai.stabilityai.api.StabilityAiApi;
 import org.springframework.ai.vectorstore.SimpleVectorStore;
@@ -114,14 +88,10 @@ import org.springframework.ai.vectorstore.qdrant.autoconfigure.QdrantVectorStore
 import org.springframework.ai.vectorstore.redis.RedisVectorStore;
 import org.springframework.ai.vectorstore.redis.autoconfigure.RedisVectorStoreAutoConfiguration;
 import org.springframework.ai.vectorstore.redis.autoconfigure.RedisVectorStoreProperties;
-import org.springframework.ai.zhipuai.*;
-import org.springframework.ai.zhipuai.api.ZhiPuAiApi;
-import org.springframework.ai.zhipuai.api.ZhiPuAiImageApi;
 import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.boot.autoconfigure.data.redis.RedisProperties;
-import org.springframework.web.client.RestClient;
-import redis.clients.jedis.JedisPooled;
+import org.springframework.boot.data.redis.autoconfigure.DataRedisProperties;
+import redis.clients.jedis.RedisClient;
 
 import java.io.File;
 import java.time.Duration;
@@ -131,7 +101,6 @@ import java.util.Timer;
 import java.util.TimerTask;
 
 import static com.qiji.cps.framework.common.util.collection.CollectionUtils.convertList;
-import static org.springframework.ai.retry.RetryUtils.DEFAULT_RETRY_TEMPLATE;
 
 /**
  * AI Model 模型工厂的实现类
@@ -159,9 +128,8 @@ public class AiModelFactoryImpl implements AiModelFactory {
                 case SILICON_FLOW:
                     return buildSiliconFlowChatModel(apiKey);
                 case ZHI_PU:
-                    return buildZhiPuChatModel(apiKey, url);
                 case MINI_MAX:
-                    return buildMiniMaxChatModel(apiKey, url);
+                    throw unsupportedProvider(platform);
                 case MOONSHOT:
                     return buildMoonshotChatModel(apiKey, url);
                 case XING_HUO:
@@ -171,7 +139,7 @@ public class AiModelFactoryImpl implements AiModelFactory {
                 case OPENAI:
                     return buildOpenAiChatModel(apiKey, url);
                 case AZURE_OPENAI:
-                    return buildAzureOpenAiChatModel(apiKey, url);
+                    return buildOpenAiChatModel(apiKey, url);
                 case ANTHROPIC:
                     return buildAnthropicChatModel(apiKey, url);
                 case GEMINI:
@@ -203,9 +171,8 @@ public class AiModelFactoryImpl implements AiModelFactory {
             case SILICON_FLOW:
                 return SpringUtil.getBean(SiliconFlowChatModel.class);
             case ZHI_PU:
-                return SpringUtil.getBean(ZhiPuAiChatModel.class);
             case MINI_MAX:
-                return SpringUtil.getBean(MiniMaxChatModel.class);
+                throw unsupportedProvider(platform);
             case MOONSHOT:
                 return SpringUtil.getBean(MoonshotChatModel.class);
             case XING_HUO:
@@ -215,7 +182,7 @@ public class AiModelFactoryImpl implements AiModelFactory {
             case OPENAI:
                 return SpringUtil.getBean(OpenAiChatModel.class);
             case AZURE_OPENAI:
-                return SpringUtil.getBean(AzureOpenAiChatModel.class);
+                return SpringUtil.getBean(OpenAiChatModel.class);
             case ANTHROPIC:
                 return SpringUtil.getBean(AnthropicChatModel.class);
             case GEMINI:
@@ -236,7 +203,7 @@ public class AiModelFactoryImpl implements AiModelFactory {
             case YI_YAN:
                 return SpringUtil.getBean(QianFanImageModel.class);
             case ZHI_PU:
-                return SpringUtil.getBean(ZhiPuAiImageModel.class);
+                throw unsupportedProvider(platform);
             case SILICON_FLOW:
                 return SpringUtil.getBean(SiliconFlowImageModel.class);
             case OPENAI:
@@ -257,7 +224,7 @@ public class AiModelFactoryImpl implements AiModelFactory {
             case YI_YAN:
                 return buildQianFanImageModel(apiKey);
             case ZHI_PU:
-                return buildZhiPuAiImageModel(apiKey, url);
+                throw unsupportedProvider(platform);
             case OPENAI:
                 return buildOpenAiImageModel(apiKey, url);
             case SILICON_FLOW:
@@ -297,13 +264,13 @@ public class AiModelFactoryImpl implements AiModelFactory {
                 case YI_YAN:
                     return buildYiYanEmbeddingModel(apiKey, model);
                 case ZHI_PU:
-                    return buildZhiPuEmbeddingModel(apiKey, url, model);
+                    throw unsupportedProvider(platform);
                 case MINI_MAX:
-                    return buildMiniMaxEmbeddingModel(apiKey, url, model);
+                    throw unsupportedProvider(platform);
                 case OPENAI:
                     return buildOpenAiEmbeddingModel(apiKey, url, model);
                 case AZURE_OPENAI:
-                    return buildAzureOpenAiEmbeddingModel(apiKey, url, model);
+                    return buildOpenAiEmbeddingModel(apiKey, url, model);
                 case OLLAMA:
                     return buildOllamaEmbeddingModel(url, model);
                 default:
@@ -344,12 +311,12 @@ public class AiModelFactoryImpl implements AiModelFactory {
     // ========== 各种创建 spring-ai 客户端的方法 ==========
 
     /**
-     * 可参考 {@link DashScopeChatAutoConfiguration} 的 dashscopeChatModel 方法
+     * Build the DashScope chat model directly to avoid the Boot 3-only auto-configuration.
      */
     private static DashScopeChatModel buildTongYiChatModel(String key) {
         DashScopeApi dashScopeApi = DashScopeApi.builder().apiKey(key).build();
-        DashScopeChatOptions options = DashScopeChatOptions.builder().withModel(DashScopeApi.DEFAULT_CHAT_MODEL)
-                .withTemperature(0.7).build();
+        DashScopeChatOptions options = DashScopeChatOptions.builder().model(DashScopeApi.DEFAULT_CHAT_MODEL)
+                .temperature(0.7).build();
         return DashScopeChatModel.builder()
                 .dashScopeApi(dashScopeApi)
                 .defaultOptions(options)
@@ -358,7 +325,7 @@ public class AiModelFactoryImpl implements AiModelFactory {
     }
 
     /**
-     * 可参考 {@link DashScopeImageAutoConfiguration} 的 dashScopeImageModel 方法
+     * Build the DashScope image model directly to avoid the Boot 3-only auto-configuration.
      */
     private static DashScopeImageModel buildTongYiImagesModel(String key) {
         DashScopeImageApi dashScopeImageApi = DashScopeImageApi.builder().apiKey(key).build();
@@ -402,7 +369,7 @@ public class AiModelFactoryImpl implements AiModelFactory {
                 .temperature(0.7).build();
         return DeepSeekChatModel.builder()
                 .deepSeekApi(deepSeekApi)
-                .defaultOptions(options)
+                .options(options)
                 .toolCallingManager(getToolCallingManager())
                 .build();
     }
@@ -435,39 +402,8 @@ public class AiModelFactoryImpl implements AiModelFactory {
     }
 
     /**
-     * 可参考 {@link ZhiPuAiChatAutoConfiguration} 的 zhiPuAiChatModel 方法
-     */
-    private ZhiPuAiChatModel buildZhiPuChatModel(String apiKey, String url) {
-        ZhiPuAiApi.Builder zhiPuAiApiBuilder = ZhiPuAiApi.builder().apiKey(apiKey);
-        if (StrUtil.isNotEmpty(url)) {
-            zhiPuAiApiBuilder.baseUrl(url);
-        }
-        ZhiPuAiChatOptions options = ZhiPuAiChatOptions.builder().model(ZhiPuAiApi.DEFAULT_CHAT_MODEL).temperature(0.7).build();
-        return new ZhiPuAiChatModel(zhiPuAiApiBuilder.build(), options, getToolCallingManager(), DEFAULT_RETRY_TEMPLATE,
-                getObservationRegistry().getIfAvailable());
-    }
-
-    /**
-     * 可参考 {@link ZhiPuAiImageAutoConfiguration} 的 zhiPuAiImageModel 方法
-     */
-    private ZhiPuAiImageModel buildZhiPuAiImageModel(String apiKey, String url) {
-        ZhiPuAiImageApi zhiPuAiApi = StrUtil.isEmpty(url) ? new ZhiPuAiImageApi(apiKey)
-                : new ZhiPuAiImageApi(url, apiKey, RestClient.builder());
-        return new ZhiPuAiImageModel(zhiPuAiApi);
-    }
-
-    /**
-     * 可参考 {@link MiniMaxChatAutoConfiguration} 的 miniMaxChatModel 方法
-     */
-    private MiniMaxChatModel buildMiniMaxChatModel(String apiKey, String url) {
-        MiniMaxApi miniMaxApi = StrUtil.isEmpty(url) ? new MiniMaxApi(apiKey)
-                : new MiniMaxApi(url, apiKey);
-        MiniMaxChatOptions options = MiniMaxChatOptions.builder().model(MiniMaxApi.DEFAULT_CHAT_MODEL).temperature(0.7).build();
-        return new MiniMaxChatModel(miniMaxApi, options, getToolCallingManager(), DEFAULT_RETRY_TEMPLATE);
-    }
-
-    /**
-     * 可参考 {@link MoonshotChatAutoConfiguration} 的 moonshotChatModel 方法
+     * Build the Moonshot model directly because the community starter's
+     * auto-configuration targets Spring Boot 3 and is excluded on Boot 4.
      */
     private MoonshotChatModel buildMoonshotChatModel(String apiKey, String url) {
         MoonshotApi.Builder moonshotApiBuilder = MoonshotApi.builder()
@@ -507,39 +443,26 @@ public class AiModelFactoryImpl implements AiModelFactory {
      * 可参考 {@link OpenAiChatAutoConfiguration} 的 openAiChatModel 方法
      */
     private static OpenAiChatModel buildOpenAiChatModel(String openAiToken, String url) {
-        url = StrUtil.blankToDefault(url, OpenAiApiConstants.DEFAULT_BASE_URL);
-        OpenAiApi openAiApi = OpenAiApi.builder().baseUrl(url).apiKey(openAiToken).build();
+        url = StrUtil.blankToDefault(url, "https://api.openai.com");
         return OpenAiChatModel.builder()
-                .openAiApi(openAiApi)
-                .toolCallingManager(getToolCallingManager())
+                .openAiClient(openAiClient(url, openAiToken))
                 .build();
     }
 
     /**
      * 可参考 {@link AzureOpenAiChatAutoConfiguration}
      */
-    private static AzureOpenAiChatModel buildAzureOpenAiChatModel(String apiKey, String url) {
-        // TODO @芋艿：使用前，请测试，暂时没密钥！！！
-        OpenAIClientBuilder openAIClientBuilder = new OpenAIClientBuilder()
-                .endpoint(url).credential(new KeyCredential(apiKey));
-        return AzureOpenAiChatModel.builder()
-                .openAIClientBuilder(openAIClientBuilder)
-                .toolCallingManager(getToolCallingManager())
-                .build();
-    }
-
     /**
      * 可参考 {@link AnthropicChatAutoConfiguration} 的 anthropicApi 方法
      */
     private static AnthropicChatModel buildAnthropicChatModel(String apiKey, String url) {
-        AnthropicApi.Builder builder = AnthropicApi.builder().apiKey(apiKey);
+        AnthropicChatOptions.Builder optionsBuilder = AnthropicChatOptions.builder()
+                .apiKey(apiKey);
         if (StrUtil.isNotEmpty(url)) {
-            builder.baseUrl(url);
+            optionsBuilder.baseUrl(url);
         }
-        AnthropicApi anthropicApi = builder.build();
         return AnthropicChatModel.builder()
-                .anthropicApi(anthropicApi)
-                .toolCallingManager(getToolCallingManager())
+                .options(optionsBuilder.build())
                 .build();
     }
 
@@ -556,9 +479,8 @@ public class AiModelFactoryImpl implements AiModelFactory {
      * 可参考 {@link OpenAiImageAutoConfiguration} 的 openAiImageModel 方法
      */
     private OpenAiImageModel buildOpenAiImageModel(String openAiToken, String url) {
-        url = StrUtil.blankToDefault(url, OpenAiApiConstants.DEFAULT_BASE_URL);
-        OpenAiImageApi openAiApi = OpenAiImageApi.builder().baseUrl(url).apiKey(openAiToken).build();
-        return new OpenAiImageModel(openAiApi);
+        url = StrUtil.blankToDefault(url, "https://api.openai.com");
+        return OpenAiImageModel.builder().openAiClient(openAiClient(url, openAiToken)).build();
     }
 
     /**
@@ -577,7 +499,6 @@ public class AiModelFactoryImpl implements AiModelFactory {
         OllamaApi ollamaApi = OllamaApi.builder().baseUrl(url).build();
         return OllamaChatModel.builder()
                 .ollamaApi(ollamaApi)
-                .toolCallingManager(getToolCallingManager())
                 .build();
     }
 
@@ -600,34 +521,12 @@ public class AiModelFactoryImpl implements AiModelFactory {
     // ========== 各种创建 EmbeddingModel 的方法 ==========
 
     /**
-     * 可参考 {@link DashScopeEmbeddingAutoConfiguration} 的 dashscopeEmbeddingModel 方法
+     * Build the DashScope embedding model directly to avoid the Boot 3-only auto-configuration.
      */
     private DashScopeEmbeddingModel buildTongYiEmbeddingModel(String apiKey, String model) {
         DashScopeApi dashScopeApi = DashScopeApi.builder().apiKey(apiKey).build();
-        DashScopeEmbeddingOptions dashScopeEmbeddingOptions = DashScopeEmbeddingOptions.builder().withModel(model).build();
+        DashScopeEmbeddingOptions dashScopeEmbeddingOptions = DashScopeEmbeddingOptions.builder().model(model).build();
         return new DashScopeEmbeddingModel(dashScopeApi, MetadataMode.EMBED, dashScopeEmbeddingOptions);
-    }
-
-    /**
-     * 可参考 {@link ZhiPuAiEmbeddingAutoConfiguration} 的 zhiPuAiEmbeddingModel 方法
-     */
-    private ZhiPuAiEmbeddingModel buildZhiPuEmbeddingModel(String apiKey, String url, String model) {
-        ZhiPuAiApi.Builder zhiPuAiApiBuilder = ZhiPuAiApi.builder().apiKey(apiKey);
-        if (StrUtil.isNotEmpty(url)) {
-            zhiPuAiApiBuilder.baseUrl(url);
-        }
-        ZhiPuAiEmbeddingOptions zhiPuAiEmbeddingOptions = ZhiPuAiEmbeddingOptions.builder().model(model).build();
-        return new ZhiPuAiEmbeddingModel(zhiPuAiApiBuilder.build(), MetadataMode.EMBED, zhiPuAiEmbeddingOptions);
-    }
-
-    /**
-     * 可参考 {@link MiniMaxEmbeddingAutoConfiguration} 的 miniMaxEmbeddingModel 方法
-     */
-    private EmbeddingModel buildMiniMaxEmbeddingModel(String apiKey, String url, String model) {
-        MiniMaxApi miniMaxApi = StrUtil.isEmpty(url)? new MiniMaxApi(apiKey)
-                : new MiniMaxApi(url, apiKey);
-        MiniMaxEmbeddingOptions miniMaxEmbeddingOptions = MiniMaxEmbeddingOptions.builder().model(model).build();
-        return new MiniMaxEmbeddingModel(miniMaxApi, MetadataMode.EMBED, miniMaxEmbeddingOptions);
     }
 
     /**
@@ -648,7 +547,7 @@ public class AiModelFactoryImpl implements AiModelFactory {
         OllamaEmbeddingOptions ollamaOptions = OllamaEmbeddingOptions.builder().model(model).build();
         return OllamaEmbeddingModel.builder()
                 .ollamaApi(ollamaApi)
-                .defaultOptions(ollamaOptions)
+                .options(ollamaOptions)
                 .build();
     }
 
@@ -656,25 +555,21 @@ public class AiModelFactoryImpl implements AiModelFactory {
      * 可参考 {@link OpenAiEmbeddingAutoConfiguration} 的 openAiEmbeddingModel 方法
      */
     private OpenAiEmbeddingModel buildOpenAiEmbeddingModel(String openAiToken, String url, String model) {
-        url = StrUtil.blankToDefault(url, OpenAiApiConstants.DEFAULT_BASE_URL);
-        OpenAiApi openAiApi = OpenAiApi.builder().baseUrl(url).apiKey(openAiToken).build();
+        url = StrUtil.blankToDefault(url, "https://api.openai.com");
         OpenAiEmbeddingOptions openAiEmbeddingProperties = OpenAiEmbeddingOptions.builder().model(model).build();
-        return new OpenAiEmbeddingModel(openAiApi, MetadataMode.EMBED, openAiEmbeddingProperties);
+        return OpenAiEmbeddingModel.builder().openAiClient(openAiClient(url, openAiToken))
+                .metadataMode(MetadataMode.EMBED).options(openAiEmbeddingProperties).build();
     }
 
     /**
      * 可参考 {@link AzureOpenAiEmbeddingAutoConfiguration} 的 azureOpenAiEmbeddingModel 方法
      */
-    private AzureOpenAiEmbeddingModel buildAzureOpenAiEmbeddingModel(String apiKey, String url, String model) {
-        // TODO @芋艿：手头暂时没密钥，使用建议再测试下
-        AzureOpenAiEmbeddingAutoConfiguration azureOpenAiAutoConfiguration = new AzureOpenAiEmbeddingAutoConfiguration();
-        // 创建 OpenAIClientBuilder 对象
-        OpenAIClientBuilder openAIClientBuilder = new OpenAIClientBuilder()
-                .endpoint(url).credential(new KeyCredential(apiKey));
-        // 获取 AzureOpenAiChatProperties 对象
-        AzureOpenAiEmbeddingProperties embeddingProperties = SpringUtil.getBean(AzureOpenAiEmbeddingProperties.class);
-        return azureOpenAiAutoConfiguration.azureOpenAiEmbeddingModel(openAIClientBuilder, embeddingProperties,
-                getObservationRegistry(), getEmbeddingModelObservationConvention());
+    private static OpenAIClient openAiClient(String url, String apiKey) {
+        return OpenAIOkHttpClient.builder().baseUrl(url).apiKey(apiKey).build();
+    }
+
+    private static IllegalArgumentException unsupportedProvider(AiPlatformEnum platform) {
+        return new IllegalArgumentException("Provider " + platform + " is not available in Spring AI 2.0.1; migrate its vendor SDK before enabling it");
     }
 
     // ========== 各种创建 VectorStore 的方法 ==========
@@ -738,12 +633,11 @@ public class AiModelFactoryImpl implements AiModelFactory {
     private RedisVectorStore buildRedisVectorStore(EmbeddingModel embeddingModel,
                                                    Map<String, Class<?>> metadataFields) {
         // 创建 JedisPooled 对象
-        RedisProperties redisProperties = SpringUtils.getBean(RedisProperties.class);
-        JedisPooled jedisPooled = new JedisPooled(redisProperties.getHost(), redisProperties.getPort(),
-                redisProperties.getUsername(), redisProperties.getPassword());
+        DataRedisProperties redisProperties = SpringUtils.getBean(DataRedisProperties.class);
+        RedisClient redisClient = RedisClient.create(redisProperties.getUrl());
         // 创建 RedisVectorStoreProperties 对象
         RedisVectorStoreProperties properties = SpringUtil.getBean(RedisVectorStoreProperties.class);
-        RedisVectorStore redisVectorStore = RedisVectorStore.builder(jedisPooled, embeddingModel)
+        RedisVectorStore redisVectorStore = RedisVectorStore.builder(redisClient, embeddingModel)
                 .indexName(properties.getIndexName()).prefix(properties.getPrefix())
                 .initializeSchema(properties.isInitializeSchema())
                 .metadataFields(convertList(metadataFields.entrySet(), entry -> {

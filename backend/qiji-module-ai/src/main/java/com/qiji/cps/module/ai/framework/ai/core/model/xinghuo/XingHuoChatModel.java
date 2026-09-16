@@ -43,8 +43,8 @@ public class XingHuoChatModel implements ChatModel {
     }
 
     @Override
-    public ChatOptions getDefaultOptions() {
-        return openAiChatModelV1.getDefaultOptions();
+    public ChatOptions getOptions() {
+        return openAiChatModelV1.getOptions();
     }
 
 }

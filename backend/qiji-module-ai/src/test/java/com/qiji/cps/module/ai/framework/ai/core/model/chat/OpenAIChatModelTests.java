@@ -28,7 +28,7 @@ public class OpenAIChatModelTests {
                     .baseUrl("https://api.holdai.top")
                     .apiKey("sk-z5joyRoV1iFEnh2SAi8QPNrIZTXyQSyxTmD5CoNDQbFixK2l") // apiKey
                     .build())
-            .defaultOptions(OpenAiChatOptions.builder()
+            .options(OpenAiChatOptions.builder()
                     .model("gpt-5-nano-2025-08-07") // 模型
 //                    .model(OpenAiApi.ChatModel.O1) // 模型
                     .temperature(0.7)

@@ -1,9 +1,9 @@
 package com.qiji.cps.module.ai.framework.ai.config;
 
 import org.junit.jupiter.api.Test;
-import org.springframework.ai.mcp.server.common.autoconfigure.properties.McpServerSseProperties;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.mock.env.MockEnvironment;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
@@ -19,12 +19,12 @@ class McpSseMessageEndpointConfigurationTest {
 
     @Test
     void shouldReturnHelpfulMethodNotAllowedForBrowserGetOnMessageEndpoint() throws Exception {
-        McpServerSseProperties properties = new McpServerSseProperties();
-        properties.setSseEndpoint("/sse");
-        properties.setSseMessageEndpoint("/mcp/message");
+        MockEnvironment environment = new MockEnvironment()
+                .withProperty("spring.ai.mcp.server.sse-endpoint", "/sse")
+                .withProperty("spring.ai.mcp.server.sse-message-endpoint", "/mcp/message");
 
         MockMvc mockMvc = MockMvcBuilders.routerFunctions(
-                new McpSseMessageEndpointConfiguration().mcpSseMessageEndpointGetGuard(properties))
+                new McpSseMessageEndpointConfiguration().mcpSseMessageEndpointGetGuard(environment))
                 .build();
 
         mockMvc.perform(get("/mcp/message"))
@@ -38,12 +38,12 @@ class McpSseMessageEndpointConfigurationTest {
 
     @Test
     void shouldLeavePostMessageRequestsToTheMcpHandler() throws Exception {
-        McpServerSseProperties properties = new McpServerSseProperties();
-        properties.setSseEndpoint("/sse");
-        properties.setSseMessageEndpoint("/mcp/message");
+        MockEnvironment environment = new MockEnvironment()
+                .withProperty("spring.ai.mcp.server.sse-endpoint", "/sse")
+                .withProperty("spring.ai.mcp.server.sse-message-endpoint", "/mcp/message");
 
         MockMvc mockMvc = MockMvcBuilders.routerFunctions(
-                new McpSseMessageEndpointConfiguration().mcpSseMessageEndpointGetGuard(properties))
+                new McpSseMessageEndpointConfiguration().mcpSseMessageEndpointGetGuard(environment))
                 .build();
 
         // The guard is deliberately GET-only; the actual MCP POST handler must own this route.

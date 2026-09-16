@@ -31,7 +31,7 @@ public class AzureOpenAIChatModelTests {
             .credential(new AzureKeyCredential("xxx"));
     private final AzureOpenAiChatModel chatModel = AzureOpenAiChatModel.builder()
             .openAIClientBuilder(openAiApi)
-            .defaultOptions(AzureOpenAiChatOptions.builder()
+            .options(AzureOpenAiChatOptions.builder()
                     .deploymentName(DEFAULT_DEPLOYMENT_NAME)
                     .build())
             .build();

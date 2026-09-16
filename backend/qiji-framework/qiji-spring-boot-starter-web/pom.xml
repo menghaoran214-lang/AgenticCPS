@@ -24,7 +24,24 @@
         <!-- Web 相关 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-web</artifactId>
+            <artifactId>spring-boot-starter-webmvc</artifactId>
+            <exclusions>
+                <!-- Keep Jackson 2 until the application's com.fasterxml API use is migrated. -->
+                <exclusion>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-starter-jackson</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <!-- Spring Boot 4 compatibility path for the existing Jackson 2 API surface. -->
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-jackson2</artifactId>
+        </dependency>
+        <dependency>
+            <!-- RestTemplate support moved out of the Web MVC starter in Spring Boot 4. -->
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-restclient</artifactId>
         </dependency>
         <!-- spring boot 配置所需依赖 -->
         <dependency>

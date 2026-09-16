@@ -25,7 +25,7 @@ class HainaMcpClientInitializerTest extends BaseMockitoUnitTest {
     @Test
     void initializeHainaClientInitializesConfiguredHainaClient() {
         HainaDecisionProperties properties = new HainaDecisionProperties();
-        when(hainaClient.getClientInfo()).thenReturn(new McpSchema.Implementation("mcp - haina", "1"));
+        when(hainaClient.getClientInfo()).thenReturn(McpSchema.Implementation.builder("mcp - haina", "1").build());
         when(hainaClient.isInitialized()).thenReturn(false);
         HainaMcpClientInitializer initializer = new HainaMcpClientInitializer(
                 properties, List.of(hainaClient), Runnable::run);
@@ -38,7 +38,7 @@ class HainaMcpClientInitializerTest extends BaseMockitoUnitTest {
     @Test
     void initializeHainaClientDoesNotBreakStartupWhenHainaIsUnavailable() {
         HainaDecisionProperties properties = new HainaDecisionProperties();
-        when(hainaClient.getClientInfo()).thenReturn(new McpSchema.Implementation("mcp - haina", "1"));
+        when(hainaClient.getClientInfo()).thenReturn(McpSchema.Implementation.builder("mcp - haina", "1").build());
         when(hainaClient.isInitialized()).thenReturn(false);
         when(hainaClient.initialize()).thenThrow(new IllegalStateException("unauthorized"));
         HainaMcpClientInitializer initializer = new HainaMcpClientInitializer(
@@ -62,7 +62,7 @@ class HainaMcpClientInitializerTest extends BaseMockitoUnitTest {
     @Test
     void onApplicationReadySchedulesInitializationOutsideTheStartupCaller() {
         HainaDecisionProperties properties = new HainaDecisionProperties();
-        when(hainaClient.getClientInfo()).thenReturn(new McpSchema.Implementation("mcp - haina", "1"));
+        when(hainaClient.getClientInfo()).thenReturn(McpSchema.Implementation.builder("mcp - haina", "1").build());
         when(hainaClient.isInitialized()).thenReturn(false);
         AtomicReference<Runnable> scheduledTask = new AtomicReference<>();
         Executor executor = scheduledTask::set;

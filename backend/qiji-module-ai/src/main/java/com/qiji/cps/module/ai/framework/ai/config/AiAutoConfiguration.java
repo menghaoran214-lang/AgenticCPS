@@ -18,6 +18,8 @@ import com.qiji.cps.module.ai.framework.ai.core.webserch.AiWebSearchClient;
 import com.qiji.cps.module.ai.framework.ai.core.webserch.bocha.AiBoChaWebSearchClient;
 import com.qiji.cps.module.ai.tool.method.PersonService;
 import io.micrometer.observation.ObservationRegistry;
+import com.openai.client.OpenAIClient;
+import com.openai.client.okhttp.OpenAIOkHttpClient;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.deepseek.DeepSeekChatModel;
@@ -28,7 +30,6 @@ import org.springframework.ai.embedding.TokenCountBatchingStrategy;
 import org.springframework.ai.model.tool.ToolCallingManager;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.openai.OpenAiChatOptions;
-import org.springframework.ai.openai.api.OpenAiApi;
 import org.springframework.ai.support.ToolCallbacks;
 import org.springframework.ai.tokenizer.JTokkitTokenCountEstimator;
 import org.springframework.ai.tokenizer.TokenCountEstimator;
@@ -38,6 +39,7 @@ import org.springframework.ai.vectorstore.milvus.autoconfigure.MilvusVectorStore
 import org.springframework.ai.vectorstore.qdrant.autoconfigure.QdrantVectorStoreProperties;
 import org.springframework.ai.vectorstore.redis.autoconfigure.RedisVectorStoreProperties;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -76,6 +78,7 @@ public class AiAutoConfiguration {
 
     @Bean
     @ConditionalOnProperty(value = "qiji.ai.gemini.enable", havingValue = "true")
+    @ConditionalOnExpression("T(org.springframework.util.StringUtils).hasText(@environment.getProperty('qiji.ai.gemini.api-key'))")
     public GeminiChatModel geminiChatModel(QijiAiProperties qijiAiProperties) {
         QijiAiProperties.Gemini properties = qijiAiProperties.getGemini();
         return buildGeminiChatClient(properties);
@@ -86,24 +89,20 @@ public class AiAutoConfiguration {
             properties.setModel(GeminiChatModel.MODEL_DEFAULT);
         }
         OpenAiChatModel openAiChatModel = OpenAiChatModel.builder()
-                .openAiApi(OpenAiApi.builder()
-                        .baseUrl(GeminiChatModel.BASE_URL)
-                        .completionsPath(GeminiChatModel.COMPLETE_PATH)
-                        .apiKey(properties.getApiKey())
-                        .build())
-                .defaultOptions(OpenAiChatOptions.builder()
+                .openAiClient(openAiClient(GeminiChatModel.BASE_URL, properties.getApiKey(), GeminiChatModel.COMPLETE_PATH))
+                .options(OpenAiChatOptions.builder()
                         .model(properties.getModel())
                         .temperature(properties.getTemperature())
                         .maxTokens(properties.getMaxTokens())
                         .topP(properties.getTopP())
                         .build())
-                .toolCallingManager(getToolCallingManager())
                 .build();
         return new GeminiChatModel(openAiChatModel);
     }
 
     @Bean
     @ConditionalOnProperty(value = "qiji.ai.doubao.enable", havingValue = "true")
+    @ConditionalOnExpression("T(org.springframework.util.StringUtils).hasText(@environment.getProperty('qiji.ai.doubao.api-key'))")
     public DouBaoChatModel douBaoChatClient(QijiAiProperties qijiAiProperties) {
         QijiAiProperties.DouBao properties = qijiAiProperties.getDoubao();
         return buildDouBaoChatClient(properties);
@@ -114,24 +113,20 @@ public class AiAutoConfiguration {
             properties.setModel(DouBaoChatModel.MODEL_DEFAULT);
         }
         OpenAiChatModel openAiChatModel = OpenAiChatModel.builder()
-                .openAiApi(OpenAiApi.builder()
-                        .baseUrl(DouBaoChatModel.BASE_URL)
-                        .completionsPath(DouBaoChatModel.COMPLETE_PATH)
-                        .apiKey(properties.getApiKey())
-                        .build())
-                .defaultOptions(OpenAiChatOptions.builder()
+                .openAiClient(openAiClient(DouBaoChatModel.BASE_URL, properties.getApiKey(), DouBaoChatModel.COMPLETE_PATH))
+                .options(OpenAiChatOptions.builder()
                         .model(properties.getModel())
                         .temperature(properties.getTemperature())
                         .maxTokens(properties.getMaxTokens())
                         .topP(properties.getTopP())
                         .build())
-                .toolCallingManager(getToolCallingManager())
                 .build();
         return new DouBaoChatModel(openAiChatModel);
     }
 
     @Bean
     @ConditionalOnProperty(value = "qiji.ai.siliconflow.enable", havingValue = "true")
+    @ConditionalOnExpression("T(org.springframework.util.StringUtils).hasText(@environment.getProperty('qiji.ai.siliconflow.api-key'))")
     public SiliconFlowChatModel siliconFlowChatClient(QijiAiProperties qijiAiProperties) {
         QijiAiProperties.SiliconFlow properties = qijiAiProperties.getSiliconflow();
         return buildSiliconFlowChatClient(properties);
@@ -146,7 +141,7 @@ public class AiAutoConfiguration {
                         .baseUrl(SiliconFlowApiConstants.DEFAULT_BASE_URL)
                         .apiKey(properties.getApiKey())
                         .build())
-                .defaultOptions(DeepSeekChatOptions.builder()
+                .options(DeepSeekChatOptions.builder()
                         .model(properties.getModel())
                         .temperature(properties.getTemperature())
                         .maxTokens(properties.getMaxTokens())
@@ -159,6 +154,7 @@ public class AiAutoConfiguration {
 
     @Bean
     @ConditionalOnProperty(value = "qiji.ai.hunyuan.enable", havingValue = "true")
+    @ConditionalOnExpression("T(org.springframework.util.StringUtils).hasText(@environment.getProperty('qiji.ai.hunyuan.api-key'))")
     public HunYuanChatModel hunYuanChatClient(QijiAiProperties qijiAiProperties) {
         QijiAiProperties.HunYuan properties = qijiAiProperties.getHunyuan();
         return buildHunYuanChatClient(properties);
@@ -181,7 +177,7 @@ public class AiAutoConfiguration {
                         .completionsPath(HunYuanChatModel.COMPLETE_PATH)
                         .apiKey(properties.getApiKey())
                         .build())
-                .defaultOptions(DeepSeekChatOptions.builder()
+                .options(DeepSeekChatOptions.builder()
                         .model(properties.getModel())
                         .temperature(properties.getTemperature())
                         .maxTokens(properties.getMaxTokens())
@@ -194,6 +190,8 @@ public class AiAutoConfiguration {
 
     @Bean
     @ConditionalOnProperty(value = "qiji.ai.xinghuo.enable", havingValue = "true")
+    @ConditionalOnExpression("T(org.springframework.util.StringUtils).hasText(@environment.getProperty('qiji.ai.xinghuo.app-key')) "
+            + "and T(org.springframework.util.StringUtils).hasText(@environment.getProperty('qiji.ai.xinghuo.secret-key'))")
     public XingHuoChatModel xingHuoChatClient(QijiAiProperties qijiAiProperties) {
         QijiAiProperties.XingHuo properties = qijiAiProperties.getXinghuo();
         return buildXingHuoChatClient(properties);
@@ -203,29 +201,26 @@ public class AiAutoConfiguration {
         if (StrUtil.isEmpty(properties.getModel())) {
             properties.setModel(XingHuoChatModel.MODEL_DEFAULT);
         }
-        OpenAiApi.Builder builder = OpenAiApi.builder()
-                .baseUrl(XingHuoChatModel.BASE_URL_V1)
-                .apiKey(properties.getAppKey() + ":" + properties.getSecretKey());
-        if ("x1".equals(properties.getModel())) {
-            builder.baseUrl(XingHuoChatModel.BASE_URL_V2)
-                    .completionsPath(XingHuoChatModel.BASE_COMPLETIONS_PATH_V2);
-        }
+        String baseUrl = "x1".equals(properties.getModel()) ? XingHuoChatModel.BASE_URL_V2
+                : XingHuoChatModel.BASE_URL_V1;
+        String completionPath = "x1".equals(properties.getModel()) ? XingHuoChatModel.BASE_COMPLETIONS_PATH_V2
+                : "/v1/chat/completions";
         OpenAiChatModel openAiChatModel = OpenAiChatModel.builder()
-                .openAiApi(builder.build())
-                .defaultOptions(OpenAiChatOptions.builder()
+                .openAiClient(openAiClient(baseUrl, properties.getAppKey() + ":" + properties.getSecretKey(), completionPath))
+                .options(OpenAiChatOptions.builder()
                         .model(properties.getModel())
                         .temperature(properties.getTemperature())
                         .maxTokens(properties.getMaxTokens())
                         .topP(properties.getTopP())
                         .build())
                 // TODO @芋艿：星火的 function call 有 bug，会报 ToolResponseMessage must have an id 错误！！！
-                .toolCallingManager(getToolCallingManager())
                 .build();
         return new XingHuoChatModel(openAiChatModel);
     }
 
     @Bean
     @ConditionalOnProperty(value = "qiji.ai.baichuan.enable", havingValue = "true")
+    @ConditionalOnExpression("T(org.springframework.util.StringUtils).hasText(@environment.getProperty('qiji.ai.baichuan.api-key'))")
     public BaiChuanChatModel baiChuanChatClient(QijiAiProperties qijiAiProperties) {
         QijiAiProperties.BaiChuan properties = qijiAiProperties.getBaichuan();
         return buildBaiChuanChatClient(properties);
@@ -236,17 +231,13 @@ public class AiAutoConfiguration {
             properties.setModel(BaiChuanChatModel.MODEL_DEFAULT);
         }
         OpenAiChatModel openAiChatModel = OpenAiChatModel.builder()
-                .openAiApi(OpenAiApi.builder()
-                        .baseUrl(BaiChuanChatModel.BASE_URL)
-                        .apiKey(properties.getApiKey())
-                        .build())
-                .defaultOptions(OpenAiChatOptions.builder()
+                .openAiClient(openAiClient(BaiChuanChatModel.BASE_URL, properties.getApiKey(), "/v1/chat/completions"))
+                .options(OpenAiChatOptions.builder()
                         .model(properties.getModel())
                         .temperature(properties.getTemperature())
                         .maxTokens(properties.getMaxTokens())
                         .topP(properties.getTopP())
                         .build())
-                .toolCallingManager(getToolCallingManager())
                 .build();
         return new BaiChuanChatModel(openAiChatModel);
     }
@@ -269,19 +260,14 @@ public class AiAutoConfiguration {
             properties.setModel(GrokChatModel.MODEL_DEFAULT);
         }
         OpenAiChatModel openAiChatModel = OpenAiChatModel.builder()
-                .openAiApi(OpenAiApi.builder()
-                        .baseUrl(Optional.ofNullable(properties.getBaseUrl())
-                                .orElse(GrokChatModel.BASE_URL))
-                        .completionsPath(GrokChatModel.COMPLETE_PATH)
-                        .apiKey(properties.getApiKey())
-                        .build())
-                .defaultOptions(OpenAiChatOptions.builder()
+                .openAiClient(openAiClient(Optional.ofNullable(properties.getBaseUrl())
+                                .orElse(GrokChatModel.BASE_URL), properties.getApiKey(), GrokChatModel.COMPLETE_PATH))
+                .options(OpenAiChatOptions.builder()
                         .model(properties.getModel())
                         .temperature(properties.getTemperature())
                         .maxTokens(properties.getMaxTokens())
                         .topP(properties.getTopP())
                         .build())
-                .toolCallingManager(getToolCallingManager())
                 .build();
         return new DouBaoChatModel(openAiChatModel);
     }
@@ -300,6 +286,17 @@ public class AiAutoConfiguration {
 
     private static ToolCallingManager getToolCallingManager() {
         return SpringUtil.getBean(ToolCallingManager.class);
+    }
+
+    private static OpenAIClient openAiClient(String baseUrl, String apiKey, String completionPath) {
+        String normalizedBaseUrl = baseUrl;
+        if (completionPath != null && completionPath.endsWith("/chat/completions")) {
+            String prefix = completionPath.substring(0, completionPath.length() - "/chat/completions".length());
+            if (!prefix.isEmpty() && !baseUrl.endsWith(prefix)) {
+                normalizedBaseUrl = baseUrl.replaceAll("/+$", "") + prefix;
+            }
+        }
+        return OpenAIOkHttpClient.builder().baseUrl(normalizedBaseUrl).apiKey(apiKey).build();
     }
 
     // ========== Web Search 相关 ==========

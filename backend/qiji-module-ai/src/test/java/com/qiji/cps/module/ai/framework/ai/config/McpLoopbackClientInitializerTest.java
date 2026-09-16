@@ -34,7 +34,7 @@ class McpLoopbackClientInitializerTest extends BaseMockitoUnitTest {
 
     @Test
     void onApplicationReady_initializesOnlyTheConfiguredUninitializedLoopbackClient() {
-        when(cpsClient.getClientInfo()).thenReturn(new McpSchema.Implementation("mcp - cps", "1"));
+        when(cpsClient.getClientInfo()).thenReturn(McpSchema.Implementation.builder("mcp - cps", "1").build());
         when(cpsClient.isInitialized()).thenReturn(false);
 
         initializer.onApplicationReady(null);
@@ -45,7 +45,7 @@ class McpLoopbackClientInitializerTest extends BaseMockitoUnitTest {
 
     @Test
     void onApplicationReady_skipsTheConfiguredClientWhenItIsAlreadyInitialized() {
-        when(cpsClient.getClientInfo()).thenReturn(new McpSchema.Implementation("mcp - cps", "1"));
+        when(cpsClient.getClientInfo()).thenReturn(McpSchema.Implementation.builder("mcp - cps", "1").build());
         when(cpsClient.isInitialized()).thenReturn(true);
 
         initializer.onApplicationReady(null);
@@ -56,7 +56,7 @@ class McpLoopbackClientInitializerTest extends BaseMockitoUnitTest {
 
     @Test
     void onApplicationReady_allowsTheConfiguredLoopbackClientToBeAbsent() {
-        when(filesystemClient.getClientInfo()).thenReturn(new McpSchema.Implementation("mcp - filesystem", "1"));
+        when(filesystemClient.getClientInfo()).thenReturn(McpSchema.Implementation.builder("mcp - filesystem", "1").build());
         McpLoopbackClientInitializer missingClientInitializer = new McpLoopbackClientInitializer(
                 createEnabledProperties(), List.of(filesystemClient));
 

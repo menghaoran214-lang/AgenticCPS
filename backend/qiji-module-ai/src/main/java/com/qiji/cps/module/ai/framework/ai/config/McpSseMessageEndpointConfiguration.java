@@ -1,10 +1,10 @@
 package com.qiji.cps.module.ai.framework.ai.config;
 
-import org.springframework.ai.mcp.server.common.autoconfigure.properties.McpServerSseProperties;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
@@ -19,17 +19,19 @@ import java.util.Map;
 import static org.springframework.web.servlet.function.RequestPredicates.GET;
 
 @Configuration(proxyBeanMethods = false)
-@ConditionalOnClass(McpServerSseProperties.class)
+@ConditionalOnClass(name = "org.springframework.ai.mcp.server.webmvc.transport.WebMvcSseServerTransportProvider")
 @ConditionalOnProperty(prefix = "spring.ai.mcp.server", name = "enabled", havingValue = "true")
 public class McpSseMessageEndpointConfiguration {
 
     @Bean
-    public RouterFunction<ServerResponse> mcpSseMessageEndpointGetGuard(McpServerSseProperties properties) {
-        return RouterFunctions.route(GET(properties.getSseMessageEndpoint()), request -> {
+    public RouterFunction<ServerResponse> mcpSseMessageEndpointGetGuard(Environment environment) {
+        String sseEndpoint = environment.getProperty("spring.ai.mcp.server.sse-endpoint", "/sse");
+        String messageEndpoint = environment.getProperty("spring.ai.mcp.server.sse-message-endpoint", "/mcp/message");
+        return RouterFunctions.route(GET(messageEndpoint), request -> {
             Map<String, String> body = new LinkedHashMap<>();
             body.put("error", "MCP SSE message endpoint only accepts POST requests from an MCP client. Use the SSE endpoint for browser or connectivity checks.");
-            body.put("sseEndpoint", properties.getSseEndpoint());
-            body.put("messageEndpoint", properties.getSseMessageEndpoint());
+            body.put("sseEndpoint", sseEndpoint);
+            body.put("messageEndpoint", messageEndpoint);
 
             return ServerResponse.status(HttpStatus.METHOD_NOT_ALLOWED)
                     .header(HttpHeaders.ALLOW, HttpMethod.POST.name())

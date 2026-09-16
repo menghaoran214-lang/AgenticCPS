@@ -29,7 +29,7 @@ public class GeminiChatModelTests {
                 .completionsPath(GeminiChatModel.COMPLETE_PATH)
                 .apiKey("AIzaSyAVoBxgoFvvte820vEQMma2LKBnC98bqMQ")
                 .build())
-        .defaultOptions(OpenAiChatOptions.builder()
+        .options(OpenAiChatOptions.builder()
                 .model(GeminiChatModel.MODEL_DEFAULT) // 模型
                 .temperature(0.7)
                 .build())

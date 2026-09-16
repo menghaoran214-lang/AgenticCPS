@@ -286,7 +286,7 @@ public class AiKnowledgeSegmentServiceImpl implements AiKnowledgeSegmentService 
         // 2. Rerank 重排序
         if (rerankModel != null) {
             RerankResponse rerankResponse = rerankModel.call(new RerankRequest(reqBO.getContent(), documents,
-                    DashScopeRerankOptions.builder().withTopN(topK).build()));
+                    DashScopeRerankOptions.builder().topN(topK).build()));
             documents = convertList(rerankResponse.getResults(),
                     documentWithScore -> documentWithScore.getScore() >= similarityThreshold
                             ? documentWithScore.getOutput() : null);

@@ -2,14 +2,11 @@ package com.qiji.cps.module.ai.framework.security.config;
 
 import com.qiji.cps.framework.security.config.AuthorizeRequestsCustomizer;
 import jakarta.annotation.Resource;
-import org.springframework.ai.mcp.server.common.autoconfigure.properties.McpServerSseProperties;
-import org.springframework.ai.mcp.server.common.autoconfigure.properties.McpServerStreamableHttpProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AuthorizeHttpRequestsConfigurer;
-
-import java.util.Optional;
 
 /**
  * AI 模块的 Security 配置
@@ -18,9 +15,7 @@ import java.util.Optional;
 public class SecurityConfiguration {
 
     @Resource
-    private Optional<McpServerSseProperties> mcpServerSseProperties;
-    @Resource
-    private Optional<McpServerStreamableHttpProperties> mcpServerStreamableHttpProperties;
+    private Environment environment;
 
     @Bean("aiAuthorizeRequestsCustomizer")
     public AuthorizeRequestsCustomizer authorizeRequestsCustomizer() {
@@ -28,12 +23,9 @@ public class SecurityConfiguration {
 
             @Override
             public void customize(AuthorizeHttpRequestsConfigurer<HttpSecurity>.AuthorizationManagerRequestMatcherRegistry registry) {
-                mcpServerSseProperties.ifPresent(properties -> {
-                    registry.requestMatchers(properties.getSseEndpoint()).permitAll();
-                    registry.requestMatchers(properties.getSseMessageEndpoint()).permitAll();
-                });
-                mcpServerStreamableHttpProperties.ifPresent(properties ->
-                        registry.requestMatchers(properties.getMcpEndpoint()).permitAll());
+                registry.requestMatchers(environment.getProperty("spring.ai.mcp.server.sse-endpoint", "/sse")).permitAll();
+                registry.requestMatchers(environment.getProperty("spring.ai.mcp.server.sse-message-endpoint", "/mcp/message")).permitAll();
+                registry.requestMatchers(environment.getProperty("spring.ai.mcp.server.streamable-http.mcp-endpoint", "/mcp")).permitAll();
             }
 
         };

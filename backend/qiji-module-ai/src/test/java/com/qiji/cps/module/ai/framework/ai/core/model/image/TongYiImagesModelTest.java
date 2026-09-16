@@ -27,8 +27,8 @@ public class TongYiImagesModelTest {
     public void imageCallTest() {
         // 准备参数
         ImageOptions options = DashScopeImageOptions.builder()
-                .withModel("wanx-v1")
-                .withHeight(256).withWidth(256)
+                .model("wanx-v1")
+                .height(256).width(256)
                 .build();
         ImagePrompt prompt = new ImagePrompt("中国长城!", options);
 

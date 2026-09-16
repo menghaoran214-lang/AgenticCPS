@@ -28,7 +28,7 @@ public class BaiChuanChatModelTests {
                     .baseUrl(BaiChuanChatModel.BASE_URL)
                     .apiKey("sk-61b6766a94c70786ed02673f5e16af3c") // apiKey
                     .build())
-            .defaultOptions(OpenAiChatOptions.builder()
+            .options(OpenAiChatOptions.builder()
                     .model("Baichuan4-Turbo") // 模型（https://platform.baichuan-ai.com/docs/api）
                     .temperature(0.7)
                     .build())

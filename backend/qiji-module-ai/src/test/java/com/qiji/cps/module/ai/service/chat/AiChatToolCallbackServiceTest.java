@@ -64,12 +64,20 @@ class AiChatToolCallbackServiceTest extends BaseMockitoUnitTest {
         properties.setName("ai-client");
         ReflectionTestUtils.setField(toolCallbackService, "mcpClients", List.of(externalMcpClient));
         ReflectionTestUtils.setField(toolCallbackService, "mcpClientCommonProperties", properties);
-        lenient().when(externalMcpClient.getClientInfo()).thenReturn(new McpSchema.Implementation("ai-client - external", "1"));
-        lenient().when(externalMcpClient.listTools()).thenReturn(new McpSchema.ListToolsResult(
-                List.of(McpSchema.Tool.builder().name("external_search").description("external")
-                        .inputSchema(new McpSchema.JsonSchema("object", Map.of(), List.of(), false, Map.of(), Map.of()))
-                        .build()), null));
-        lenient().when(externalMcpClient.callTool(any())).thenReturn(new McpSchema.CallToolResult("ok", false));
+        lenient().when(externalMcpClient.getClientInfo()).thenReturn(McpSchema.Implementation.builder("ai-client - external", "1").build());
+        lenient().when(externalMcpClient.getClientCapabilities())
+                .thenReturn(McpSchema.ClientCapabilities.builder().build());
+        lenient().when(externalMcpClient.getServerCapabilities())
+                .thenReturn(McpSchema.ServerCapabilities.builder().tools(false).build());
+        lenient().when(externalMcpClient.listTools()).thenReturn(McpSchema.ListToolsResult.builder(
+                List.of(McpSchema.Tool.builder("external_search", Map.of("type", "object"))
+                        .description("external")
+                        .build()))
+                .build());
+        lenient().when(externalMcpClient.callTool(any())).thenReturn(McpSchema.CallToolResult.builder()
+                .addTextContent("ok")
+                .isError(false)
+                .build());
     }
 
     @AfterEach

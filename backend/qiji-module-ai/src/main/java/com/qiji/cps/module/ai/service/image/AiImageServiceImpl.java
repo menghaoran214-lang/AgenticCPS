@@ -36,7 +36,6 @@ import org.springframework.ai.image.ImagePrompt;
 import org.springframework.ai.image.ImageResponse;
 import org.springframework.ai.openai.OpenAiImageOptions;
 import org.springframework.ai.stabilityai.api.StabilityAiImageOptions;
-import org.springframework.ai.zhipuai.ZhiPuAiImageOptions;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -164,8 +163,8 @@ public class AiImageServiceImpl implements AiImageService {
                     .build();
         } else if (ObjUtil.equal(model.getPlatform(), AiPlatformEnum.TONG_YI.getPlatform())) {
             return DashScopeImageOptions.builder()
-                    .withModel(model.getModel()).withN(1)
-                    .withHeight(draw.getHeight()).withWidth(draw.getWidth())
+                    .model(model.getModel()).n(1)
+                    .height(draw.getHeight()).width(draw.getWidth())
                     .build();
         } else if (ObjUtil.equal(model.getPlatform(), AiPlatformEnum.YI_YAN.getPlatform())) {
             return QianFanImageOptions.builder()
@@ -173,9 +172,7 @@ public class AiImageServiceImpl implements AiImageService {
                     .height(draw.getHeight()).width(draw.getWidth())
                     .build();
         } else if (ObjUtil.equal(model.getPlatform(), AiPlatformEnum.ZHI_PU.getPlatform())) {
-            return ZhiPuAiImageOptions.builder()
-                    .model(model.getModel())
-                    .build();
+            throw new IllegalArgumentException("Provider ZHI_PU is not available in Spring AI 2.0.1");
         }
         throw new IllegalArgumentException("不支持的 AI 平台：" + model.getPlatform());
     }

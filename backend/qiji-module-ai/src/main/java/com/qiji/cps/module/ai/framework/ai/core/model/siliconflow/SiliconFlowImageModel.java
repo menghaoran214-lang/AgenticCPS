@@ -25,14 +25,12 @@ import org.springframework.ai.image.observation.DefaultImageModelObservationConv
 import org.springframework.ai.image.observation.ImageModelObservationContext;
 import org.springframework.ai.image.observation.ImageModelObservationConvention;
 import org.springframework.ai.image.observation.ImageModelObservationDocumentation;
-import org.springframework.ai.model.ModelOptionsUtils;
 import org.springframework.ai.openai.OpenAiImageModel;
-import org.springframework.ai.openai.api.OpenAiImageApi;
 import org.springframework.ai.openai.metadata.OpenAiImageGenerationMetadata;
 import org.springframework.ai.retry.RetryUtils;
+import org.springframework.core.retry.RetryTemplate;
 import org.springframework.http.ResponseEntity;
 import org.springframework.lang.Nullable;
-import org.springframework.retry.support.RetryTemplate;
 import org.springframework.util.Assert;
 
 import java.util.List;
@@ -96,8 +94,8 @@ public class SiliconFlowImageModel implements ImageModel {
 			.observation(this.observationConvention, DEFAULT_OBSERVATION_CONVENTION, () -> observationContext,
 					this.observationRegistry)
 			.observe(() -> {
-				ResponseEntity<OpenAiImageApi.OpenAiImageResponse> imageResponseEntity = this.retryTemplate
-					.execute(ctx -> this.siliconFlowImageApi.createImage(imageRequest));
+					ResponseEntity<SiliconFlowImageApi.SiliconflowImageResponse> imageResponseEntity = this.retryTemplate
+					.invoke(() -> this.siliconFlowImageApi.createImage(imageRequest));
 
 				ImageResponse imageResponse = convertResponse(imageResponseEntity, imageRequest);
 
@@ -111,15 +109,21 @@ public class SiliconFlowImageModel implements ImageModel {
                                                                       SiliconFlowImageOptions requestImageOptions) {
 		String instructions = imagePrompt.getInstructions().get(0).getText();
 
-		SiliconFlowImageApi.SiliconflowImageRequest imageRequest = new SiliconFlowImageApi.SiliconflowImageRequest(instructions,
-                SiliconFlowApiConstants.DEFAULT_IMAGE_MODEL);
-
-		return ModelOptionsUtils.merge(requestImageOptions, imageRequest, SiliconFlowImageApi.SiliconflowImageRequest.class);
+		return new SiliconFlowImageApi.SiliconflowImageRequest(
+				instructions,
+				mergeOption(requestImageOptions.getModel(), SiliconFlowApiConstants.DEFAULT_IMAGE_MODEL),
+				requestImageOptions.getImageSize(),
+				requestImageOptions.getBatchSize(),
+				requestImageOptions.getNegativePrompt(),
+				requestImageOptions.getSeed(),
+				requestImageOptions.getNumInferenceSteps(),
+				requestImageOptions.getGuidanceScale(),
+				requestImageOptions.getImage());
 	}
 
-	private ImageResponse convertResponse(ResponseEntity<OpenAiImageApi.OpenAiImageResponse> imageResponseEntity,
+	private ImageResponse convertResponse(ResponseEntity<SiliconFlowImageApi.SiliconflowImageResponse> imageResponseEntity,
 										  SiliconFlowImageApi.SiliconflowImageRequest siliconflowImageRequest) {
-		OpenAiImageApi.OpenAiImageResponse imageApiResponse = imageResponseEntity.getBody();
+		SiliconFlowImageApi.SiliconflowImageResponse imageApiResponse = imageResponseEntity.getBody();
 		if (imageApiResponse == null) {
 			logger.warn("No image response returned for request: {}", siliconflowImageRequest);
 			return new ImageResponse(List.of());
@@ -136,24 +140,29 @@ public class SiliconFlowImageModel implements ImageModel {
 	}
 
     private SiliconFlowImageOptions mergeOptions(@Nullable ImageOptions runtimeOptions, SiliconFlowImageOptions defaultOptions) {
-        var runtimeOptionsForProvider = ModelOptionsUtils.copyToTarget(runtimeOptions, ImageOptions.class,
-                SiliconFlowImageOptions.class);
-
-        if (runtimeOptionsForProvider == null) {
+        if (runtimeOptions == null) {
             return defaultOptions;
         }
 
+        SiliconFlowImageOptions runtimeOptionsForProvider = runtimeOptions instanceof SiliconFlowImageOptions options
+                ? options : null;
+
         return SiliconFlowImageOptions.builder()
                 // Handle portable image options
-                .model(ModelOptionsUtils.mergeOption(runtimeOptionsForProvider.getModel(), defaultOptions.getModel()))
-                .batchSize(ModelOptionsUtils.mergeOption(runtimeOptionsForProvider.getN(), defaultOptions.getN()))
-                .width(ModelOptionsUtils.mergeOption(runtimeOptionsForProvider.getWidth(), defaultOptions.getWidth()))
-                .height(ModelOptionsUtils.mergeOption(runtimeOptionsForProvider.getHeight(), defaultOptions.getHeight()))
+                .model(mergeOption(runtimeOptions.getModel(), defaultOptions.getModel()))
+                .batchSize(mergeOption(runtimeOptions.getN(), defaultOptions.getN()))
+                .width(mergeOption(runtimeOptions.getWidth(), defaultOptions.getWidth()))
+                .height(mergeOption(runtimeOptions.getHeight(), defaultOptions.getHeight()))
                 // Handle SiliconFlow specific image options
-                .negativePrompt(ModelOptionsUtils.mergeOption(runtimeOptionsForProvider.getNegativePrompt(), defaultOptions.getNegativePrompt()))
-                .numInferenceSteps(ModelOptionsUtils.mergeOption(runtimeOptionsForProvider.getNumInferenceSteps(), defaultOptions.getNumInferenceSteps()))
-                .guidanceScale(ModelOptionsUtils.mergeOption(runtimeOptionsForProvider.getGuidanceScale(), defaultOptions.getGuidanceScale()))
-                .seed(ModelOptionsUtils.mergeOption(runtimeOptionsForProvider.getSeed(), defaultOptions.getSeed()))
+                .negativePrompt(mergeOption(runtimeOptionsForProvider == null ? null : runtimeOptionsForProvider.getNegativePrompt(), defaultOptions.getNegativePrompt()))
+                .numInferenceSteps(mergeOption(runtimeOptionsForProvider == null ? null : runtimeOptionsForProvider.getNumInferenceSteps(), defaultOptions.getNumInferenceSteps()))
+                .guidanceScale(mergeOption(runtimeOptionsForProvider == null ? null : runtimeOptionsForProvider.getGuidanceScale(), defaultOptions.getGuidanceScale()))
+                .seed(mergeOption(runtimeOptionsForProvider == null ? null : runtimeOptionsForProvider.getSeed(), defaultOptions.getSeed()))
+                .image(mergeOption(runtimeOptionsForProvider == null ? null : runtimeOptionsForProvider.getImage(), defaultOptions.getImage()))
                 .build();
+    }
+
+    private static <T> T mergeOption(@Nullable T runtimeValue, @Nullable T defaultValue) {
+        return runtimeValue != null ? runtimeValue : defaultValue;
     }
 }

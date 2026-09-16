@@ -8,6 +8,13 @@ spring:
   main:
     allow-circular-references: true # 允许循环依赖，因为项目是三层架构，无法避免这个情况。
 
+  # DashScope 2.0.0-M1.1 publishes an obsolete auto-configuration entry for a
+  # class that is not included in the starter. Exclude that optional feature so
+  # Boot 4 can sort the remaining auto-configurations.
+  autoconfigure:
+    exclude:
+      - com.alibaba.cloud.ai.autoconfigure.dashscope.DashScopeMultimodalEmbeddingAutoConfiguration
+
   # Servlet 配置
   servlet:
     # 文件上传相关配置项
@@ -18,9 +25,6 @@ spring:
   # Jackson 配置项
   jackson:
     serialization:
-      write-dates-as-timestamps: true # 设置 Date 的格式，使用时间戳
-      write-date-timestamps-as-nanoseconds: false # 设置不使用 nanoseconds 的格式。例如说 1611460870.401，而是直接 1611460870401
-      write-durations-as-timestamps: true # 设置 Duration 的格式，使用时间戳
       fail-on-empty-beans: false # 允许序列化无属性的 Bean
 
   # Cache 配置项
@@ -252,43 +256,43 @@ qiji:
       max-results: 10
   ai:
     gemini: # 谷歌 Gemini
-      enable: true
-      api-key: AIzaSyAVoBxgoFvvte820vEQMma2LKBnC98bqMQ
-      model: gemini-2.5-flash
+      enable: ${GEMINI_ENABLED:false}
+      api-key: ${GEMINI_API_KEY:}
+      model: ${GEMINI_MODEL:gemini-2.5-flash}
     doubao: # 字节豆包
-      enable: true
-      api-key: 5c1b5747-26d2-4ebd-a4e0-dd0e8d8b4272
-      model: doubao-1-5-lite-32k-250115
+      enable: ${DOUBAO_ENABLED:false}
+      api-key: ${DOUBAO_API_KEY:}
+      model: ${DOUBAO_MODEL:doubao-1-5-lite-32k-250115}
     hunyuan: # 腾讯混元
-      enable: true
-      api-key: sk-abc
-      model: hunyuan-turbo
+      enable: ${HUNYUAN_ENABLED:false}
+      api-key: ${HUNYUAN_API_KEY:}
+      model: ${HUNYUAN_MODEL:hunyuan-turbo}
     siliconflow: # 硅基流动
-      enable: true
-      api-key: sk-epsakfenqnyzoxhmbucsxlhkdqlcbnimslqoivkshalvdozz
-      model: deepseek-ai/DeepSeek-R1-Distill-Qwen-7B
+      enable: ${SILICONFLOW_ENABLED:false}
+      api-key: ${SILICONFLOW_API_KEY:}
+      model: ${SILICONFLOW_MODEL:deepseek-ai/DeepSeek-R1-Distill-Qwen-7B}
     xinghuo: # 讯飞星火
-      enable: true
-      appKey: 75b161ed2aef4719b275d6e7f2a4d4cd
-      secretKey: YWYxYWI2MTA4ODI2NGZlYTQyNjAzZTcz
-      model: x1
+      enable: ${XINGHUO_ENABLED:false}
+      app-key: ${XINGHUO_APP_KEY:}
+      secret-key: ${XINGHUO_SECRET_KEY:}
+      model: ${XINGHUO_MODEL:x1}
     baichuan: # 百川智能
-      enable: true
-      api-key: sk-abc
-      model: Baichuan4-Turbo
+      enable: ${BAICHUAN_ENABLED:false}
+      api-key: ${BAICHUAN_API_KEY:}
+      model: ${BAICHUAN_MODEL:Baichuan4-Turbo}
     midjourney:
-      enable: true
+      enable: ${MIDJOURNEY_ENABLED:false}
   #    base-url: https://api.holdai.top/mj-relax/mj
       base-url: https://api.holdai.top/mj
-      api-key: sk-dZEPiVaNcT3FHhef51996bAa0bC74806BeAb620dA5Da10Bf
+      api-key: ${MIDJOURNEY_API_KEY:}
       notify-url: http://java.nat300.top/admin-api/ai/image/midjourney/notify
     suno:
-      enable: true
+      enable: ${SUNO_ENABLED:false}
   #    base-url: https://suno-55ishh05u-status2xxs-projects.vercel.app
       base-url: http://127.0.0.1:3001
     web-search:
-      enable: true
-      api-key: sk-40500e52840f4d24b956d0b1d80d9abe
+      enable: ${WEB_SEARCH_ENABLED:false}
+      api-key: ${WEB_SEARCH_API_KEY:}
     mcp:
       self-test:
         enabled: false

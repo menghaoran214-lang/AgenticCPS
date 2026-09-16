@@ -6,12 +6,12 @@ import com.qiji.cps.framework.mybatis.config.QijiMybatisAutoConfiguration;
 import com.qiji.cps.framework.redis.config.QijiRedisAutoConfiguration;
 import com.qiji.cps.framework.test.config.RedisTestConfiguration;
 import com.qiji.cps.framework.test.config.SqlInitializationTestConfiguration;
-import com.alibaba.druid.spring.boot3.autoconfigure.DruidDataSourceAutoConfigure;
+import com.alibaba.druid.spring.boot4.autoconfigure.DruidDataSourceAutoConfigure;
 import com.baomidou.mybatisplus.autoconfigure.MybatisPlusAutoConfiguration;
-import org.redisson.spring.starter.RedissonAutoConfiguration;
-import org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration;
-import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
-import org.springframework.boot.autoconfigure.jdbc.DataSourceTransactionManagerAutoConfiguration;
+import org.redisson.spring.starter.RedissonAutoConfigurationV4;
+import org.springframework.boot.data.redis.autoconfigure.DataRedisAutoConfiguration;
+import org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration;
+import org.springframework.boot.jdbc.autoconfigure.DataSourceTransactionManagerAutoConfiguration;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
@@ -43,8 +43,8 @@ public class BaseDbAndRedisUnitTest {
             // Redis 配置类
             RedisTestConfiguration.class, // Redis 测试配置类，用于启动 RedisServer
             QijiRedisAutoConfiguration.class, // 自己的 Redis 配置类
-            RedisAutoConfiguration.class, // Spring Redis 自动配置类
-            RedissonAutoConfiguration.class, // Redisson 自动配置类
+            DataRedisAutoConfiguration.class, // Spring Redis 自动配置类
+            RedissonAutoConfigurationV4.class, // Redisson 自动配置类
 
             // 其它配置类
             SpringUtil.class

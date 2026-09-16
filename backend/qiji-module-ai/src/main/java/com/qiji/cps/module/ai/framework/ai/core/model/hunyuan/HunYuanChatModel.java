@@ -45,8 +45,8 @@ public class HunYuanChatModel implements ChatModel {
     }
 
     @Override
-    public ChatOptions getDefaultOptions() {
-        return openAiChatModel.getDefaultOptions();
+    public ChatOptions getOptions() {
+        return openAiChatModel.getOptions();
     }
 
 }

@@ -1,7 +1,7 @@
 package com.qiji.cps.framework.datasource.config;
 
 import com.qiji.cps.framework.datasource.core.filter.DruidAdRemoveFilter;
-import com.alibaba.druid.spring.boot3.autoconfigure.properties.DruidStatProperties;
+import com.alibaba.druid.spring.boot4.autoconfigure.properties.DruidStatProperties;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
