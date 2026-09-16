@@ -14,6 +14,9 @@ spring:
   autoconfigure:
     exclude:
       - com.alibaba.cloud.ai.autoconfigure.dashscope.DashScopeMultimodalEmbeddingAutoConfiguration
+      # AI 模块会根据知识库配置动态选择 EmbeddingModel 并手动创建 RedisVectorStore，
+      # 禁止自动配置在多个 EmbeddingModel 中强行选择默认实现。
+      - org.springframework.ai.vectorstore.redis.autoconfigure.RedisVectorStoreAutoConfiguration
 
   # Servlet 配置
   servlet:
@@ -250,9 +253,9 @@ spring:
 qiji:
   cps:
     haina:
-      enabled: ${HAINA_MCP_ENABLED:true}
+      enabled: ${HAINA_MCP_ENABLED:false}
       client-name: haina
-      api-key: ${HAINA_MCP_API_KEY:ca1ccb2d3211270a99e6b668a3454045} # 请替换为海纳控制台 API Key；生产环境建议使用环境变量
+      api-key: ${HAINA_MCP_API_KEY:} # 通过环境变量配置；设置凭据后再显式启用 HAINA_MCP_ENABLED
       max-results: 10
   ai:
     gemini: # 谷歌 Gemini

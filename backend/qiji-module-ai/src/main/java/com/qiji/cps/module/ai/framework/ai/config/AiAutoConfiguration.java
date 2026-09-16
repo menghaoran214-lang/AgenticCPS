@@ -44,6 +44,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.retry.support.RetryTemplate;
 
 import java.util.List;
 import java.util.Optional;
@@ -72,6 +73,17 @@ public class AiAutoConfiguration {
     public ObservationRegistry observationRegistry() {
         // 特殊：兜底有 ObservationRegistry Bean，避免相关的 ChatModel 创建报错。相关 issue：https://t.zsxq.com/CuPu4
         return ObservationRegistry.NOOP;
+    }
+
+    /**
+     * QianFan 1.0.0 still depends on Spring Retry while Spring AI 2.x uses its
+     * own retry abstraction. Keep the legacy bean isolated and replaceable so
+     * both generations of model starters can coexist.
+     */
+    @Bean
+    @ConditionalOnMissingBean(RetryTemplate.class)
+    public RetryTemplate qianFanRetryTemplate() {
+        return RetryTemplate.builder().maxAttempts(3).fixedBackoff(1000).build();
     }
 
     // ========== 各种 AI Client 创建 ==========
