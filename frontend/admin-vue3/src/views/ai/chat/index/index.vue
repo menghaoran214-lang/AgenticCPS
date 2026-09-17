@@ -197,7 +197,7 @@ const message = useMessage() // 消息弹窗
 
 // 聊天对话
 const conversationListRef = ref()
-const activeConversationId = ref<number | null>(null) // 选中的对话编号
+const activeConversationId = ref<string | null>(null) // 选中的对话编号
 const activeConversation = ref<ChatConversationVO | null>(null) // 选中的 Conversation
 const conversationInProgress = ref(false) // 对话是否正在进行中。目前只有【发送】消息时，会更新为 true，避免切换对话、删除对话等操作
 const toolActions = ref<ToolActionVO[]>([]) // 当前角色实际可用的业务工具入口
@@ -256,7 +256,7 @@ const receiveMessageDisplayedText = ref('')
 // =========== 【聊天对话】相关 ===========
 
 /** 加载当前会话实际绑定的快捷能力；失败时保持普通聊天体验。 */
-const loadToolActions = async (conversationId: number | null) => {
+const loadToolActions = async (conversationId: string | null) => {
   toolActions.value = []
   selectedToolAction.value = undefined
   selectedIntentRequestId.value = undefined
@@ -273,7 +273,7 @@ const loadToolActions = async (conversationId: number | null) => {
 }
 
 /** 获取对话信息 */
-const getConversation = async (id: number | null) => {
+const getConversation = async (id: string | null) => {
   if (!id) {
     return
   }
@@ -409,7 +409,7 @@ const messageList = computed(() => {
     return [
       {
         id: 0,
-        conversationId: activeConversation.value.id || 0,
+        conversationId: activeConversation.value.id,
         type: 'system',
         userId: '',
         roleId: '',
@@ -1037,7 +1037,10 @@ const textRoll = async () => {
 onMounted(async () => {
   // 如果有 conversationId 参数，则默认选中
   if (route.query.conversationId) {
-    const id = route.query.conversationId as unknown as number
+    const id = Array.isArray(route.query.conversationId)
+      ? route.query.conversationId[0]
+      : route.query.conversationId
+    if (!id) return
     activeConversationId.value = id
     await getConversation(id)
   }

@@ -26,7 +26,7 @@
 <script setup lang="ts">
 import { getUserPage, type UserVO } from '@/api/member/user'
 import { ChatMcpTestApi } from '@/api/ai/chat/mcpTest'
-const emit = defineEmits<{ success: [id: number] }>()
+const emit = defineEmits<{ success: [id: string] }>()
 const visible = ref(false); const loading = ref(false); const submitting = ref(false); const formRef = ref()
 const members = ref<UserVO[]>([]); const formData = reactive<{ memberId?: number }>({})
 const rules = { memberId: [{ required: true, message: '请选择测试会员', trigger: 'change' }] }

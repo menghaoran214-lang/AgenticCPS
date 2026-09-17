@@ -3,6 +3,7 @@ package com.qiji.cps.module.ai.controller.admin.chat;
 import com.qiji.cps.framework.security.core.util.SecurityFrameworkUtils;
 import com.qiji.cps.framework.test.core.ut.BaseMockitoUnitTest;
 import com.qiji.cps.module.ai.dal.dataobject.chat.AiChatConversationDO;
+import com.qiji.cps.module.ai.controller.admin.chat.vo.conversation.AiChatConversationCreateMyReqVO;
 import com.qiji.cps.module.ai.service.chat.AiChatConversationService;
 import com.qiji.cps.module.ai.service.chat.tool.AiChatToolAction;
 import com.qiji.cps.module.ai.service.chat.tool.AiChatToolActionService;
@@ -30,6 +31,19 @@ class AiChatConversationControllerToolActionTest extends BaseMockitoUnitTest {
     private AiChatConversationService conversationService;
     @Mock
     private AiChatToolActionService actionService;
+
+    @Test
+    void createConversation_returnsSnowflakeIdAsString() {
+        long conversationId = 1781604279872581799L;
+        when(conversationService.createChatConversationMy(org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.eq(42L))).thenReturn(conversationId);
+
+        try (MockedStatic<SecurityFrameworkUtils> security = mockStatic(SecurityFrameworkUtils.class)) {
+            security.when(SecurityFrameworkUtils::getLoginUserId).thenReturn(42L);
+            var result = controller.createChatConversationMy(new AiChatConversationCreateMyReqVO());
+            assertEquals("1781604279872581799", result.getData());
+        }
+    }
 
     @Test
     void getToolActions_checksAdminOwnershipAndNeverExposesToolName() {

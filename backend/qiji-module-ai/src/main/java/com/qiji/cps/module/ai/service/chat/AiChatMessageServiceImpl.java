@@ -201,6 +201,9 @@ public class AiChatMessageServiceImpl implements AiChatMessageService {
     @Override
     public Flux<CommonResult<AiChatMessageSendRespVO>> sendChatMessageStream(AiChatMessageSendReqVO sendReqVO,
             String ownerUserType, Long userId) {
+        // MVC subscribes to the returned Flux on an async thread. Capture the request tenant before
+        // returning so every deferred database operation remains scoped to the original tenant.
+        Long tenantId = TenantContextHolder.getRequiredTenantId();
         // Emit an acknowledgement before any database, retrieval, or provider work starts. This
         // prevents a slow dependency from leaving SSE clients with a blank screen.
         String requestId = UUID.randomUUID().toString();
@@ -210,11 +213,17 @@ public class AiChatMessageServiceImpl implements AiChatMessageService {
         return Flux.concat(Flux.just(success(accepted)),
                 Flux.just(success(progressEvent(requestId, "PREPARING", 0, 2, 0L,
                         "正在准备对话上下文"))),
-                Flux.defer(() -> doSendChatMessageStream(sendReqVO, ownerUserType, userId, requestId)));
+                Flux.defer(() -> TenantUtils.execute(tenantId,
+                        () -> doSendChatMessageStream(sendReqVO, ownerUserType, userId, requestId, tenantId))))
+                .onErrorResume(throwable -> {
+                    log.warn("[sendChatMessageStream][requestId({}) conversationId({}) 预处理失败]",
+                            requestId, sendReqVO.getConversationId(), throwable);
+                    return Flux.just(error(ErrorCodeConstants.CHAT_STREAM_ERROR));
+                });
     }
 
     private Flux<CommonResult<AiChatMessageSendRespVO>> doSendChatMessageStream(AiChatMessageSendReqVO sendReqVO,
-            String ownerUserType, Long userId, String requestId) {
+            String ownerUserType, Long userId, String requestId, Long tenantId) {
         long startedAt = System.nanoTime();
         // 1.1 校验对话存在
         AiChatConversationDO conversation = chatConversationService
@@ -226,8 +235,6 @@ public class AiChatMessageServiceImpl implements AiChatMessageService {
         // 1.2 校验模型
         AiModelDO model = modalService.validateModel(conversation.getModelId());
         StreamingChatModel chatModel = modalService.getChatModel(model.getId());
-        Long tenantId = TenantContextHolder.getRequiredTenantId();
-
         // Retrieval and web search are independent. Run them concurrently and degrade only the
         // timed-out enrichment path instead of delaying the model indefinitely.
         CompletableFuture<List<AiKnowledgeSegmentSearchRespBO>> knowledgeFuture = CompletableFuture.supplyAsync(
@@ -281,7 +288,7 @@ public class AiChatMessageServiceImpl implements AiChatMessageService {
             // 仅首次：返回知识库、联网搜索
             if (StrUtil.isEmpty(contentBuffer)) {
                 if (firstExecuteFlag.compareAndSet(true, false)) { // CAS 操作，确保仅执行一次
-                    Map<Long, AiKnowledgeDocumentDO> documentMap = TenantUtils.executeIgnore(() -> knowledgeDocumentService.getKnowledgeDocumentMap(
+                    Map<Long, AiKnowledgeDocumentDO> documentMap = TenantUtils.execute(tenantId, () -> knowledgeDocumentService.getKnowledgeDocumentMap(
                             convertSet(knowledgeSegments, AiKnowledgeSegmentSearchRespBO::getDocumentId)));
                     cacheSegments.set(BeanUtils.toBean(knowledgeSegments, AiChatMessageRespVO.KnowledgeSegment.class, segment -> {
                         AiKnowledgeDocumentDO document = documentMap.get(segment.getDocumentId());
@@ -313,8 +320,7 @@ public class AiChatMessageServiceImpl implements AiChatMessageService {
                             .setSegments(cacheSegments.get()).setWebSearchPages(cacheWebSearchPages.get())
                             .setBlocks(blocks.get()))); // 知识库 + 联网搜索
         }).doOnComplete(() -> {
-            // 忽略租户，因为 Flux 异步无法透传租户
-            TenantUtils.executeIgnore(() -> chatMessageMapper.updateById(
+            TenantUtils.execute(tenantId, () -> chatMessageMapper.updateById(
                     new AiChatMessageDO().setId(assistantMessage.getId()).setContent(contentBuffer.toString())
                             .setReasoningContent(reasoningContentBuffer.toString()).setBlocks(blocks.get())));
             completeSink.tryEmitValue(success(new AiChatMessageSendRespVO().setEventType("MESSAGE_COMPLETE")
@@ -327,8 +333,7 @@ public class AiChatMessageServiceImpl implements AiChatMessageService {
                             .setBlocks(blocks.get()))));
         }).doOnError(throwable -> {
             log.error("[sendChatMessageStream][userId({}) sendReqVO({}) 发生异常]", userId, sendReqVO, throwable);
-            // 忽略租户，因为 Flux 异步无法透传租户
-            TenantUtils.executeIgnore(() -> {
+            TenantUtils.execute(tenantId, () -> {
                 // 如果有内容，则更新内容
                 if (StrUtil.isNotEmpty(contentBuffer)) {
                     chatMessageMapper.updateById(new AiChatMessageDO().setId(assistantMessage.getId())
@@ -341,8 +346,7 @@ public class AiChatMessageServiceImpl implements AiChatMessageService {
             completeSink.tryEmitEmpty();
         }).doOnCancel(() -> {
             log.info("[sendChatMessageStream][userId({}) sendReqVO({}) 取消请求]", userId, sendReqVO);
-            // 忽略租户，因为 Flux 异步无法透传租户
-            TenantUtils.executeIgnore(() -> {
+            TenantUtils.execute(tenantId, () -> {
                 // 如果有内容，则更新内容
                 if (StrUtil.isNotEmpty(contentBuffer)) {
                     chatMessageMapper.updateById(new AiChatMessageDO().setId(assistantMessage.getId())

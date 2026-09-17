@@ -34,9 +34,9 @@ public class AppAiChatConversationController {
 
     @PostMapping("/create")
     @Operation(summary = "创建会员 AI 聊天会话")
-    public CommonResult<Long> create(@RequestBody @Valid AppAiChatConversationCreateReqVO reqVO) {
+    public CommonResult<String> create(@RequestBody @Valid AppAiChatConversationCreateReqVO reqVO) {
         return success(chatConversationService.createMemberConversation(
-                BeanUtils.toBean(reqVO, AiChatConversationCreateMyReqVO.class), getLoginUserId()));
+                BeanUtils.toBean(reqVO, AiChatConversationCreateMyReqVO.class), getLoginUserId()).toString());
     }
 
     @GetMapping("/list")

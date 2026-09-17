@@ -72,6 +72,19 @@ class AppAiChatConversationControllerTest extends com.qiji.cps.framework.test.co
         verify(conversationService).getOwnedConversation(7L, "MEMBER", 99L);
     }
 
+    @Test
+    void createReturnsSnowflakeIdAsString() {
+        LoginUser loginUser = new LoginUser().setId(99L);
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(loginUser, null));
+        when(conversationService.createMemberConversation(org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.eq(99L))).thenReturn(1781604279872581799L);
+
+        var result = controller.create(new AppAiChatConversationCreateReqVO());
+
+        assertEquals("1781604279872581799", result.getData());
+    }
+
     private static String path(String methodName) {
         Method method = Arrays.stream(AppAiChatConversationController.class.getDeclaredMethods())
                 .filter(it -> it.getName().equals(methodName)).findFirst().orElseThrow();

@@ -48,15 +48,15 @@ public class AiChatConversationController {
 
     @PostMapping("/create-my")
     @Operation(summary = "创建【我的】聊天对话")
-    public CommonResult<Long> createChatConversationMy(@RequestBody @Valid AiChatConversationCreateMyReqVO createReqVO) {
-        return success(chatConversationService.createChatConversationMy(createReqVO, getLoginUserId()));
+    public CommonResult<String> createChatConversationMy(@RequestBody @Valid AiChatConversationCreateMyReqVO createReqVO) {
+        return success(chatConversationService.createChatConversationMy(createReqVO, getLoginUserId()).toString());
     }
 
     @PostMapping("/create-mcp-test")
     @Operation(summary = "创建 CPS MCP 管理员自测会话")
     @PreAuthorize("@ss.hasPermission('ai:chat:mcp-test')")
-    public CommonResult<Long> createMcpTestConversation(@RequestBody @Valid AiChatConversationCreateMcpTestReqVO createReqVO) {
-        return success(chatConversationService.createMcpTestConversation(createReqVO, getLoginUserId()));
+    public CommonResult<String> createMcpTestConversation(@RequestBody @Valid AiChatConversationCreateMcpTestReqVO createReqVO) {
+        return success(chatConversationService.createMcpTestConversation(createReqVO, getLoginUserId()).toString());
     }
 
     @PutMapping("/update-my")

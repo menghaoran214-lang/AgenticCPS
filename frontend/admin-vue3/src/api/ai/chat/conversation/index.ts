@@ -2,7 +2,7 @@ import request from '@/config/axios'
 
 // AI 聊天对话 VO
 export interface ChatConversationVO {
-  id: number // ID 编号
+  id: string // ID 编号。雪花 ID 必须保持字符串，避免 JavaScript 丢失精度
   userId: number // 用户编号
   title: string // 对话标题
   pinned: boolean // 是否置顶
@@ -24,13 +24,13 @@ export interface ChatConversationVO {
 // AI 聊天对话 API
 export const ChatConversationApi = {
   // 获得【我的】聊天对话
-  getChatConversationMy: async (id: number) => {
+  getChatConversationMy: async (id: string | number) => {
     return await request.get({ url: `/ai/chat/conversation/get-my?id=${id}` })
   },
 
   // 新增【我的】聊天对话
   createChatConversationMy: async (data?: ChatConversationVO) => {
-    return await request.post({ url: `/ai/chat/conversation/create-my`, data })
+    return await request.post<string>({ url: `/ai/chat/conversation/create-my`, data })
   },
 
   // 更新【我的】聊天对话
@@ -59,7 +59,7 @@ export const ChatConversationApi = {
   },
 
   // 管理员删除消息
-  deleteChatConversationByAdmin: async (id: number) => {
+  deleteChatConversationByAdmin: async (id: string | number) => {
     return await request.delete({ url: `/ai/chat/conversation/delete-by-admin?id=${id}` })
   }
 }

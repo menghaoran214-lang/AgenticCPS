@@ -31,7 +31,7 @@ export interface ToolActionVO {
 }
 
 export const ChatToolActionApi = {
-  getToolActions: async (conversationId: number) => {
+  getToolActions: async (conversationId: string) => {
     return await request.get<ToolActionVO[]>({
       url: '/ai/chat/conversation/tool-actions',
       params: { conversationId }
