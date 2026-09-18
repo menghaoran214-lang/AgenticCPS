@@ -4,6 +4,7 @@ import cn.hutool.core.util.StrUtil;
 import cn.hutool.extra.spring.SpringUtil;
 import com.qiji.cps.module.ai.framework.ai.core.model.AiModelFactory;
 import com.qiji.cps.module.ai.framework.ai.core.model.AiModelFactoryImpl;
+import com.qiji.cps.module.ai.framework.ai.core.model.OpenAiCompatibleClientFactory;
 import com.qiji.cps.module.ai.framework.ai.core.model.baichuan.BaiChuanChatModel;
 import com.qiji.cps.module.ai.framework.ai.core.model.doubao.DouBaoChatModel;
 import com.qiji.cps.module.ai.framework.ai.core.model.gemini.GeminiChatModel;
@@ -19,7 +20,6 @@ import com.qiji.cps.module.ai.framework.ai.core.webserch.bocha.AiBoChaWebSearchC
 import com.qiji.cps.module.ai.tool.method.PersonService;
 import io.micrometer.observation.ObservationRegistry;
 import com.openai.client.OpenAIClient;
-import com.openai.client.okhttp.OpenAIOkHttpClient;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.deepseek.DeepSeekChatModel;
@@ -308,7 +308,7 @@ public class AiAutoConfiguration {
                 normalizedBaseUrl = baseUrl.replaceAll("/+$", "") + prefix;
             }
         }
-        return OpenAIOkHttpClient.builder().baseUrl(normalizedBaseUrl).apiKey(apiKey).build();
+        return OpenAiCompatibleClientFactory.create(normalizedBaseUrl, apiKey);
     }
 
     // ========== Web Search 相关 ==========

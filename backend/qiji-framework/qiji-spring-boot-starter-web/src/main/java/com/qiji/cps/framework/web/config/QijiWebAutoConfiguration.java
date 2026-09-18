@@ -21,6 +21,8 @@ import org.springframework.boot.restclient.RestTemplateBuilder;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.core.annotation.Order;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.util.AntPathMatcher;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.client.RestTemplate;
@@ -28,6 +30,8 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import org.springframework.web.filter.CorsFilter;
 import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping;
+import org.springframework.web.servlet.config.annotation.AsyncSupportConfigurer;
+import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 import java.util.Map;
 import java.util.function.Predicate;
@@ -35,6 +39,36 @@ import java.util.function.Predicate;
 @AutoConfiguration
 @EnableConfigurationProperties(WebProperties.class)
 public class QijiWebAutoConfiguration {
+
+    /**
+     * Streaming controllers must not fall back to Spring MVC's unbounded
+     * SimpleAsyncTaskExecutor. Keep the executor bounded and give long-lived
+     * SSE responses enough time to finish.
+     */
+    @Bean
+    @ConditionalOnMissingBean(name = "mvcAsyncTaskExecutor")
+    public ThreadPoolTaskExecutor mvcAsyncTaskExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(8);
+        executor.setMaxPoolSize(32);
+        executor.setQueueCapacity(500);
+        executor.setThreadNamePrefix("mvc-async-");
+        executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setAwaitTerminationSeconds(30);
+        return executor;
+    }
+
+    @Bean
+    public WebMvcConfigurer mvcAsyncWebMvcConfigurer(
+            @Qualifier("mvcAsyncTaskExecutor") ThreadPoolTaskExecutor mvcAsyncTaskExecutor) {
+        return new WebMvcConfigurer() {
+            @Override
+            public void configureAsyncSupport(AsyncSupportConfigurer configurer) {
+                configurer.setTaskExecutor(mvcAsyncTaskExecutor);
+                configurer.setDefaultTimeout(30 * 60 * 1000L);
+            }
+        };
+    }
 
     /**
      * 应用名

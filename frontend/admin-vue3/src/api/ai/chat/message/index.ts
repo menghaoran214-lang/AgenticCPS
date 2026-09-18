@@ -167,6 +167,7 @@ export type ChatStreamEventType =
   | 'TASK_COMPLETE'
   | 'TASK_FAILED'
   | 'MESSAGE_DELTA'
+  | 'MESSAGE_COMPLETE'
   | 'TOOL_STARTED'
   | 'TOOL_SUCCEEDED'
   | 'TOOL_FAILED'
@@ -229,6 +230,11 @@ export const ChatMessageApi = {
         Authorization: `Bearer ${token}`
       },
       openWhenHidden: true,
+      onopen: async (response) => {
+        if (!response.ok) {
+          throw new Error(`AI stream request failed with HTTP ${response.status}`)
+        }
+      },
       body: JSON.stringify({
         conversationId,
         content,

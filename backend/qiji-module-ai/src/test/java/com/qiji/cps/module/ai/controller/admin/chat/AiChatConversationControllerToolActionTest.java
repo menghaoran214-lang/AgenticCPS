@@ -1,10 +1,13 @@
 package com.qiji.cps.module.ai.controller.admin.chat;
 
+import com.qiji.cps.framework.common.pojo.PageResult;
 import com.qiji.cps.framework.security.core.util.SecurityFrameworkUtils;
 import com.qiji.cps.framework.test.core.ut.BaseMockitoUnitTest;
-import com.qiji.cps.module.ai.dal.dataobject.chat.AiChatConversationDO;
 import com.qiji.cps.module.ai.controller.admin.chat.vo.conversation.AiChatConversationCreateMyReqVO;
+import com.qiji.cps.module.ai.controller.admin.chat.vo.conversation.AiChatConversationPageReqVO;
+import com.qiji.cps.module.ai.dal.dataobject.chat.AiChatConversationDO;
 import com.qiji.cps.module.ai.service.chat.AiChatConversationService;
+import com.qiji.cps.module.ai.service.chat.AiChatMessageService;
 import com.qiji.cps.module.ai.service.chat.tool.AiChatToolAction;
 import com.qiji.cps.module.ai.service.chat.tool.AiChatToolActionService;
 import com.qiji.cps.module.ai.service.chat.tool.AiChatToolInteractionType;
@@ -14,8 +17,9 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockedStatic;
 
-import java.util.List;
 import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -30,6 +34,8 @@ class AiChatConversationControllerToolActionTest extends BaseMockitoUnitTest {
     @Mock
     private AiChatConversationService conversationService;
     @Mock
+    private AiChatMessageService chatMessageService;
+    @Mock
     private AiChatToolActionService actionService;
 
     @Test
@@ -43,6 +49,32 @@ class AiChatConversationControllerToolActionTest extends BaseMockitoUnitTest {
             var result = controller.createChatConversationMy(new AiChatConversationCreateMyReqVO());
             assertEquals("1781604279872581799", result.getData());
         }
+    }
+
+    @Test
+    void getConversationList_returnsSnowflakeIdAsString() {
+        long conversationId = 1781604279872581799L;
+        when(conversationService.getChatConversationListByUserId(42L))
+                .thenReturn(List.of(new AiChatConversationDO().setId(conversationId)));
+
+        try (MockedStatic<SecurityFrameworkUtils> security = mockStatic(SecurityFrameworkUtils.class)) {
+            security.when(SecurityFrameworkUtils::getLoginUserId).thenReturn(42L);
+            var result = controller.getChatConversationMyList();
+            assertEquals("1781604279872581799", result.getData().get(0).getId());
+        }
+    }
+
+    @Test
+    void getConversationPage_keepsMessageCountWhenIdIsString() {
+        long conversationId = 1781604279872581799L;
+        when(conversationService.getChatConversationPage(org.mockito.ArgumentMatchers.any()))
+                .thenReturn(new PageResult<>(List.of(new AiChatConversationDO().setId(conversationId)), 1L));
+        when(chatMessageService.getChatMessageCountMap(List.of(conversationId))).thenReturn(Map.of(conversationId, 3));
+
+        var result = controller.getChatConversationPage(new AiChatConversationPageReqVO());
+
+        assertEquals("1781604279872581799", result.getData().getList().get(0).getId());
+        assertEquals(3, result.getData().getList().get(0).getMessageCount());
     }
 
     @Test

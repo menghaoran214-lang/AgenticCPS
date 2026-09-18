@@ -25,13 +25,10 @@ import com.qiji.cps.module.ai.framework.ai.core.model.suno.api.SunoApi;
 import com.qiji.cps.module.ai.framework.ai.core.model.xinghuo.XingHuoChatModel;
 import com.alibaba.cloud.ai.dashscope.api.DashScopeApi;
 import com.alibaba.cloud.ai.dashscope.api.DashScopeImageApi;
-import com.alibaba.cloud.ai.dashscope.chat.DashScopeChatModel;
-import com.alibaba.cloud.ai.dashscope.chat.DashScopeChatOptions;
 import com.alibaba.cloud.ai.dashscope.embedding.text.DashScopeEmbeddingModel;
 import com.alibaba.cloud.ai.dashscope.embedding.text.DashScopeEmbeddingOptions;
 import com.alibaba.cloud.ai.dashscope.image.DashScopeImageModel;
 import com.openai.client.OpenAIClient;
-import com.openai.client.okhttp.OpenAIOkHttpClient;
 import io.micrometer.observation.ObservationRegistry;
 import io.milvus.client.MilvusServiceClient;
 import io.qdrant.client.QdrantClient;
@@ -67,6 +64,7 @@ import org.springframework.ai.ollama.OllamaEmbeddingModel;
 import org.springframework.ai.ollama.api.OllamaApi;
 import org.springframework.ai.ollama.api.OllamaEmbeddingOptions;
 import org.springframework.ai.openai.OpenAiChatModel;
+import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.ai.openai.OpenAiEmbeddingModel;
 import org.springframework.ai.openai.OpenAiEmbeddingOptions;
 import org.springframework.ai.openai.OpenAiImageModel;
@@ -91,6 +89,7 @@ import org.springframework.ai.vectorstore.redis.autoconfigure.RedisVectorStorePr
 import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.data.redis.autoconfigure.DataRedisProperties;
+import org.springframework.core.env.Environment;
 import redis.clients.jedis.RedisClient;
 
 import java.io.File;
@@ -109,6 +108,10 @@ import static com.qiji.cps.framework.common.util.collection.CollectionUtils.conv
  */
 public class AiModelFactoryImpl implements AiModelFactory {
 
+    private static final String TONG_YI_COMPATIBLE_BASE_URL =
+            "https://dashscope.aliyuncs.com/compatible-mode/v1";
+    private static final String TONG_YI_DEFAULT_CHAT_MODEL = "qwen-turbo";
+
     @Override
     public ChatModel getOrCreateChatModel(AiPlatformEnum platform, String apiKey, String url) {
         String cacheKey = buildClientCacheKey(ChatModel.class, platform, apiKey, url);
@@ -116,7 +119,7 @@ public class AiModelFactoryImpl implements AiModelFactory {
             // noinspection EnhancedSwitchMigration
             switch (platform) {
                 case TONG_YI:
-                    return buildTongYiChatModel(apiKey);
+                    return buildTongYiChatModel(apiKey, url);
                 case YI_YAN:
                     return buildYiYanChatModel(apiKey);
                 case DEEP_SEEK:
@@ -159,7 +162,9 @@ public class AiModelFactoryImpl implements AiModelFactory {
         // noinspection EnhancedSwitchMigration
         switch (platform) {
             case TONG_YI:
-                return SpringUtil.getBean(DashScopeChatModel.class);
+                Environment environment = SpringUtil.getBean(Environment.class);
+                return buildTongYiChatModel(environment.getProperty("spring.ai.dashscope.api-key"),
+                        environment.getProperty("spring.ai.dashscope.base-url"));
             case YI_YAN:
                 return SpringUtil.getBean(QianFanChatModel.class);
             case DEEP_SEEK:
@@ -311,17 +316,36 @@ public class AiModelFactoryImpl implements AiModelFactory {
     // ========== 各种创建 spring-ai 客户端的方法 ==========
 
     /**
-     * Build the DashScope chat model directly to avoid the Boot 3-only auto-configuration.
+     * Spring AI Alibaba 2.0.0-M1.1 is compiled against Spring AI 2.0.0-M1 and
+     * calls model APIs removed in Spring AI 2.0 GA. DashScope exposes an
+     * OpenAI-compatible endpoint, so chat uses the GA client while the vendor
+     * SDK remains available for image and embedding models.
      */
-    private static DashScopeChatModel buildTongYiChatModel(String key) {
-        DashScopeApi dashScopeApi = DashScopeApi.builder().apiKey(key).build();
-        DashScopeChatOptions options = DashScopeChatOptions.builder().model(DashScopeApi.DEFAULT_CHAT_MODEL)
-                .temperature(0.7).build();
-        return DashScopeChatModel.builder()
-                .dashScopeApi(dashScopeApi)
-                .defaultOptions(options)
-                .toolCallingManager(getToolCallingManager())
+    private static OpenAiChatModel buildTongYiChatModel(String key, String url) {
+        String baseUrl = normalizeTongYiChatBaseUrl(url);
+        OpenAiChatOptions options = OpenAiChatOptions.builder()
+                .apiKey(key)
+                .baseUrl(baseUrl)
+                .model(TONG_YI_DEFAULT_CHAT_MODEL)
+                .temperature(0.7)
+                .timeout(OpenAiCompatibleClientFactory.streamTimeout())
+                .extraBody(Map.of("enable_thinking", true))
                 .build();
+        return OpenAiChatModel.builder()
+                .openAiClient(openAiClient(baseUrl, key))
+                .options(options)
+                .build();
+    }
+
+    private static String normalizeTongYiChatBaseUrl(String url) {
+        if (StrUtil.isBlank(url)) {
+            return TONG_YI_COMPATIBLE_BASE_URL;
+        }
+        String normalized = StrUtil.removeSuffix(url.trim(), "/");
+        if (normalized.endsWith("/api/v1")) {
+            return StrUtil.removeSuffix(normalized, "/api/v1") + "/compatible-mode/v1";
+        }
+        return normalized;
     }
 
     /**
@@ -565,7 +589,7 @@ public class AiModelFactoryImpl implements AiModelFactory {
      * 可参考 {@link AzureOpenAiEmbeddingAutoConfiguration} 的 azureOpenAiEmbeddingModel 方法
      */
     private static OpenAIClient openAiClient(String url, String apiKey) {
-        return OpenAIOkHttpClient.builder().baseUrl(url).apiKey(apiKey).build();
+        return OpenAiCompatibleClientFactory.create(url, apiKey);
     }
 
     private static IllegalArgumentException unsupportedProvider(AiPlatformEnum platform) {

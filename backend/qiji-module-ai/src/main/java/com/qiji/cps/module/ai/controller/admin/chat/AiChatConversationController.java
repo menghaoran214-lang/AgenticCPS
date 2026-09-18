@@ -129,7 +129,8 @@ public class AiChatConversationController {
         Map<Long, Integer> messageCountMap = chatMessageService.getChatMessageCountMap(
                 convertList(pageResult.getList(), AiChatConversationDO::getId));
         return success(BeanUtils.toBean(pageResult, AiChatConversationRespVO.class,
-                conversation -> conversation.setMessageCount(messageCountMap.getOrDefault(conversation.getId(), 0))));
+                conversation -> conversation.setMessageCount(
+                        messageCountMap.getOrDefault(Long.valueOf(conversation.getId()), 0))));
     }
 
     @Operation(summary = "管理员删除对话")

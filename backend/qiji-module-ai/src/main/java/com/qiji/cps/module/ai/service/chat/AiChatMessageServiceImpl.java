@@ -273,7 +273,7 @@ public class AiChatMessageServiceImpl implements AiChatMessageService {
         };
         Prompt prompt = buildPrompt(conversation, historyMessages, knowledgeSegments, webSearchResponse, model, sendReqVO,
                 requestedAction, toolExecutionListener);
-        Flux<ChatResponse> streamResponse = chatModel.stream(prompt);
+        Flux<ChatResponse> streamResponse = startStreamSafely(chatModel, prompt);
 
         // 4.3 流式返回
         StringBuffer contentBuffer = new StringBuffer();
@@ -410,6 +410,23 @@ public class AiChatMessageServiceImpl implements AiChatMessageService {
                 .sorted(Comparator.comparing(AiKnowledgeSegmentSearchRespBO::getScore,
                         Comparator.nullsLast(Comparator.reverseOrder())))
                 .limit(10).toList();
+    }
+
+    /**
+     * Some model providers perform request conversion before returning their Flux. A binary
+     * incompatibility can therefore throw a fatal {@link LinkageError} outside Reactor's normal
+     * error channel. Convert it to a regular stream failure so message cleanup and the SSE error
+     * event still run instead of escaping into the servlet error dispatcher.
+     */
+    static Flux<ChatResponse> startStreamSafely(StreamingChatModel chatModel, Prompt prompt) {
+        return Flux.defer(() -> {
+            try {
+                return chatModel.stream(prompt);
+            } catch (LinkageError error) {
+                return Flux.error(new IllegalStateException(
+                        "AI model provider is binary-incompatible with the current Spring AI runtime", error));
+            }
+        });
     }
 
     private List<AiChatMessageDO> getRecentContextMessages(AiChatConversationDO conversation) {

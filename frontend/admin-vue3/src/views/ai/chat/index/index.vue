@@ -252,6 +252,7 @@ const workbenchResultSummary = computed(() => {
 // 接收 Stream 消息
 const receiveMessageFullText = ref('')
 const receiveMessageDisplayedText = ref('')
+let textRollTimer: ReturnType<typeof setTimeout> | undefined
 
 // =========== 【聊天对话】相关 ===========
 
@@ -809,6 +810,14 @@ const doSendMessageStream = async (userMessage: ChatMessageVO) => {
 
     // 2. 发送 event stream
     let isFirstChunk = true // 是否是第一个 chunk 消息段
+    let streamCompleted = false
+    let streamFailed = false
+    const handleStreamFailure = (reason = '分析请求异常中断，请重试') => {
+      if (streamFailed) return
+      streamFailed = true
+      failCurrentTask(reason)
+      stopStream('FAILED')
+    }
     await ChatMessageApi.sendChatMessageStream(
       userMessage.conversationId,
       userMessage.content,
@@ -816,20 +825,46 @@ const doSendMessageStream = async (userMessage: ChatMessageVO) => {
       enableContext.value,
       enableWebSearch.value,
       async (res) => {
-        const { code, data, msg } = JSON.parse(res.data) as {
-          code: number
-          data: ChatMessageStreamData
-          msg?: string
+        let payload: { code: number; data: ChatMessageStreamData; msg?: string }
+        try {
+          payload = JSON.parse(res.data)
+        } catch {
+          handleStreamFailure('服务端返回了无法解析的响应，请重试')
+          return
         }
+        const { code, data, msg } = payload
         if (code !== 0) {
-          message.alert(`对话异常! ${msg}`)
-          failCurrentTask(friendlyToolText(msg, '分析请求未完成，请稍后重试'))
+          handleStreamFailure(friendlyToolText(msg, '分析请求未完成，请稍后重试'))
           return
         }
 
         const eventType = data.eventType || 'MESSAGE_DELTA'
         if (eventType.startsWith('TASK_')) {
+          if (eventType === 'TASK_COMPLETE') streamCompleted = true
           updateTaskLifecycle(data)
+          await scrollToBottom()
+          return
+        }
+        if (eventType === 'MESSAGE_COMPLETE') {
+          streamCompleted = true
+          if (data.send && data.receive) {
+            if (isFirstChunk) {
+              isFirstChunk = false
+              activeMessageList.value.pop()
+              activeMessageList.value.pop()
+              activeMessageList.value.push(data.send)
+              data.send.attachmentUrls = userMessage.attachmentUrls
+              activeMessageList.value.push(data.receive)
+            } else {
+              const lastMessage = getCurrentAssistantMessage()
+              if (lastMessage) Object.assign(lastMessage, data.receive)
+            }
+            const completedText = data.receive.content || ''
+            if (!completedText.startsWith(receiveMessageDisplayedText.value)) {
+              receiveMessageDisplayedText.value = ''
+            }
+            receiveMessageFullText.value = completedText
+          }
           await scrollToBottom()
           return
         }
@@ -890,15 +925,17 @@ const doSendMessageStream = async (userMessage: ChatMessageVO) => {
       },
       (error: any) => {
         // 异常提示，并停止流
-        message.alert(`对话异常！`)
-        failCurrentTask('分析请求异常中断，请重试')
-        stopStream('FAILED')
+        handleStreamFailure('分析请求异常中断，请重试')
         // 需要抛出异常，禁止重试
         throw error
       },
       () => {
         // 人工停止或异常中止也会触发 onclose，不能把已停止/失败任务覆盖成成功。
         if (!conversationInProgress.value) return
+        if (!streamCompleted) {
+          handleStreamFailure('响应流意外中断，请重试')
+          return
+        }
         completeTaskProgress(getCurrentAssistantMessage())
         stopStream('SUCCEEDED')
       },
@@ -915,7 +952,11 @@ const getCurrentAssistantMessage = () =>
 
 const failCurrentTask = (error: string) => {
   const assistantMessage = getCurrentAssistantMessage()
-  if (!assistantMessage?.taskProgress) return
+  if (!assistantMessage) return
+  if (!assistantMessage.taskProgress) {
+    if (assistantMessage.content === '正在理解需求…') assistantMessage.content = error
+    return
+  }
   assistantMessage.taskProgress = {
     ...assistantMessage.taskProgress,
     status: 'FAILED',
@@ -980,7 +1021,6 @@ const scrollToBottom = async (isIgnore?: boolean) => {
 
 /** 自提滚动效果 */
 const textRoll = async () => {
-  let index = 0
   try {
     // 只能执行一次
     if (textRoleRunning.value) {
@@ -1007,9 +1047,9 @@ const textRoll = async () => {
         textSpeed.value = 10
       }
 
-      if (index < receiveMessageFullText.value.length) {
+      if (receiveMessageDisplayedText.value.length < receiveMessageFullText.value.length) {
+        const index = receiveMessageDisplayedText.value.length
         receiveMessageDisplayedText.value += receiveMessageFullText.value[index]
-        index++
 
         // 更新 message
         const lastMessage = activeMessageList.value[activeMessageList.value.length - 1]
@@ -1017,21 +1057,26 @@ const textRoll = async () => {
         // 滚动到住下面
         await scrollToBottom()
         // 重新设置任务
-        timer = setTimeout(task, textSpeed.value)
+        textRollTimer = setTimeout(task, textSpeed.value)
       } else {
         // 不是对话中可以结束
         if (!conversationInProgress.value) {
           textRoleRunning.value = false
-          clearTimeout(timer)
+          clearTimeout(textRollTimer)
         } else {
           // 重新设置任务
-          timer = setTimeout(task, textSpeed.value)
+          textRollTimer = setTimeout(task, textSpeed.value)
         }
       }
     }
-    let timer = setTimeout(task, textSpeed.value)
+    textRollTimer = setTimeout(task, textSpeed.value)
   } catch {}
 }
+
+onBeforeUnmount(() => {
+  clearTimeout(textRollTimer)
+  conversationInAbortController.value?.abort()
+})
 
 /** 初始化 **/
 onMounted(async () => {

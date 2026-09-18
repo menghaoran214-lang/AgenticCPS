@@ -5,6 +5,7 @@ import com.qiji.cps.module.ai.enums.model.AiPlatformEnum;
 import org.junit.jupiter.api.Test;
 import org.springaicommunity.qianfan.QianFanChatOptions;
 import org.springframework.ai.chat.prompt.ChatOptions;
+import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.ai.tool.ToolCallback;
 
 import java.util.EnumMap;
@@ -18,6 +19,16 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.mockito.Mockito.mock;
 
 class AiUtilsToolCapabilityTest extends BaseMockitoUnitTest {
+
+    @Test
+    void buildChatOptions_tongYiUsesOpenAiCompatibleOptions() {
+        ChatOptions options = AiUtils.buildChatOptions(AiPlatformEnum.TONG_YI, "qwen3-max", 0.7, 1024,
+                List.of(), Map.of());
+
+        OpenAiChatOptions openAiOptions = assertInstanceOf(OpenAiChatOptions.class, options);
+        assertEquals("qwen3-max", openAiOptions.getModel());
+        assertEquals(Boolean.TRUE, openAiOptions.getExtraBody().get("enable_thinking"));
+    }
 
     @Test
     void supportsToolCalling_declaresEveryPlatformExplicitly() {

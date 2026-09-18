@@ -15,7 +15,7 @@ import java.time.LocalDateTime;
 public class AiChatConversationRespVO implements VO {
 
     @Schema(description = "对话编号", requiredMode = Schema.RequiredMode.REQUIRED, example = "1024")
-    private Long id;
+    private String id;
 
     @Schema(description = "用户编号", requiredMode = Schema.RequiredMode.REQUIRED, example = "2048")
     private Long userId;

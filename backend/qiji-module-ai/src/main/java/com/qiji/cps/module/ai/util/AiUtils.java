@@ -3,7 +3,7 @@ package com.qiji.cps.module.ai.util;
 import cn.hutool.core.util.ObjUtil;
 import cn.hutool.core.util.StrUtil;
 import com.qiji.cps.module.ai.enums.model.AiPlatformEnum;
-import com.alibaba.cloud.ai.dashscope.chat.DashScopeChatOptions;
+import com.qiji.cps.module.ai.framework.ai.core.model.OpenAiCompatibleClientFactory;
 import org.springaicommunity.moonshot.MoonshotChatOptions;
 import org.springaicommunity.qianfan.QianFanChatOptions;
 import org.springframework.ai.anthropic.AnthropicChatOptions;
@@ -53,9 +53,9 @@ public class AiUtils {
         // noinspection EnhancedSwitchMigration
         switch (platform) {
             case TONG_YI:
-                return DashScopeChatOptions.builder().model(model).temperature(temperature).maxToken(maxTokens)
-                        .enableThinking(true) // TODO 芋艿：默认都开启 thinking 模式，后续可以让用户配置
-                        .multiModel(true)
+                return OpenAiChatOptions.builder().model(model).temperature(temperature).maxTokens(maxTokens)
+                        .timeout(OpenAiCompatibleClientFactory.streamTimeout())
+                        .extraBody(Map.of("enable_thinking", true))
                         .toolCallbacks(toolCallbacks).toolContext(toolContext).build();
             case YI_YAN:
                 return QianFanChatOptions.builder().model(model).temperature(temperature).maxTokens(maxTokens).build();
@@ -77,9 +77,11 @@ public class AiUtils {
             case BAI_CHUAN: // 复用 OpenAI 客户端
             case GROK: // 复用 OpenAI 客户端
                 return OpenAiChatOptions.builder().model(model).temperature(temperature).maxTokens(maxTokens)
+                        .timeout(OpenAiCompatibleClientFactory.streamTimeout())
                         .toolCallbacks(toolCallbacks).toolContext(toolContext).build();
             case AZURE_OPENAI:
                 return OpenAiChatOptions.builder().model(model).temperature(temperature).maxTokens(maxTokens)
+                        .timeout(OpenAiCompatibleClientFactory.streamTimeout())
                         .toolCallbacks(toolCallbacks).toolContext(toolContext).build();
             case ANTHROPIC:
                 return AnthropicChatOptions.builder().model(model).temperature(temperature).maxTokens(maxTokens)

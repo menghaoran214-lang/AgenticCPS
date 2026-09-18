@@ -13,6 +13,9 @@ spring:
   # Boot 4 can sort the remaining auto-configurations.
   autoconfigure:
     exclude:
+      # Chat uses DashScope's OpenAI-compatible endpoint because the current Alibaba
+      # chat adapter is compiled against pre-GA Spring AI APIs removed in 2.0.1.
+      - com.alibaba.cloud.ai.autoconfigure.dashscope.DashScopeChatAutoConfiguration
       - com.alibaba.cloud.ai.autoconfigure.dashscope.DashScopeMultimodalEmbeddingAutoConfiguration
       # AI 模块会根据知识库配置动态选择 EmbeddingModel 并手动创建 RedisVectorStore，
       # 禁止自动配置在多个 EmbeddingModel 中强行选择默认实现。

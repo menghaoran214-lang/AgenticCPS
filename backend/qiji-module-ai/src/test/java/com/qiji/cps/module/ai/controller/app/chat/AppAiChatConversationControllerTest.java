@@ -1,16 +1,16 @@
 package com.qiji.cps.module.ai.controller.app.chat;
 
+import com.qiji.cps.framework.security.core.LoginUser;
 import com.qiji.cps.module.ai.controller.app.chat.vo.conversation.AppAiChatConversationCreateReqVO;
 import com.qiji.cps.module.ai.controller.app.chat.vo.conversation.AppAiChatConversationUpdateReqVO;
+import com.qiji.cps.module.ai.dal.dataobject.chat.AiChatConversationDO;
 import com.qiji.cps.module.ai.service.chat.AiChatConversationService;
-import com.qiji.cps.framework.security.core.LoginUser;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
-import com.qiji.cps.module.ai.service.chat.AiChatConversationService;
-import org.junit.jupiter.api.Test;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -20,6 +20,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.Arrays;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -83,6 +84,19 @@ class AppAiChatConversationControllerTest extends com.qiji.cps.framework.test.co
         var result = controller.create(new AppAiChatConversationCreateReqVO());
 
         assertEquals("1781604279872581799", result.getData());
+    }
+
+    @Test
+    void listReturnsSnowflakeIdAsString() {
+        LoginUser loginUser = new LoginUser().setId(99L);
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(loginUser, null));
+        when(conversationService.getChatConversationListByOwner("MEMBER", 99L))
+                .thenReturn(List.of(new AiChatConversationDO().setId(1781604279872581799L)));
+
+        var result = controller.list();
+
+        assertEquals("1781604279872581799", result.getData().get(0).getId());
     }
 
     private static String path(String methodName) {

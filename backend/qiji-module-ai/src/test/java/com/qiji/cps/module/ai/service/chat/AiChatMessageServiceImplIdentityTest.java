@@ -13,6 +13,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.springframework.ai.chat.model.StreamingChatModel;
+import org.springframework.ai.chat.prompt.Prompt;
 
 import java.util.List;
 
@@ -21,7 +23,10 @@ import static com.qiji.cps.module.ai.enums.ErrorCodeConstants.CHAT_CONVERSATION_
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -166,6 +171,30 @@ class AiChatMessageServiceImplIdentityTest extends BaseMockitoUnitTest {
                 results.get(results.size() - 1).getCode());
         assertNull(TenantContextHolder.getTenantId());
         verify(conversationService).getOwnedConversation(7L, "ADMIN", 42L);
+    }
+
+    @Test
+    void startStreamSafely_convertsProviderLinkageErrorToRecoverableStreamError() {
+        StreamingChatModel chatModel = mock(StreamingChatModel.class);
+        NoSuchMethodError linkageError = new NoSuchMethodError("missing provider method");
+        when(chatModel.stream(any(Prompt.class))).thenThrow(linkageError);
+
+        IllegalStateException error = assertThrows(IllegalStateException.class,
+                () -> AiChatMessageServiceImpl.startStreamSafely(chatModel, new Prompt("test")).blockLast());
+
+        assertSame(linkageError, error.getCause());
+    }
+
+    @Test
+    void startStreamSafely_propagatesAsynchronousProviderTimeout() {
+        StreamingChatModel chatModel = mock(StreamingChatModel.class);
+        IllegalStateException timeout = new IllegalStateException("stream timeout");
+        when(chatModel.stream(any(Prompt.class))).thenReturn(reactor.core.publisher.Flux.error(timeout));
+
+        IllegalStateException error = assertThrows(IllegalStateException.class,
+                () -> AiChatMessageServiceImpl.startStreamSafely(chatModel, new Prompt("test")).blockLast());
+
+        assertSame(timeout, error);
     }
 
 }

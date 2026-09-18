@@ -10,7 +10,7 @@ import java.time.LocalDateTime;
 @Data
 public class AppAiChatConversationRespVO implements VO {
 
-    private Long id;
+    private String id;
     private String title;
     private Boolean pinned;
     private Long roleId;
