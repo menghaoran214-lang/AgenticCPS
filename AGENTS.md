@@ -61,6 +61,8 @@ Service-to-service calls use shared OpenAPI headers:
 - Default to solo execution for scoped work.
 - Use native subagents only for independent, bounded, verifiable subtasks that improve throughput without shared-file conflicts.
 - Use TDD for feature/bugfix work when behavior changes: write the smallest failing test, prove it fails, implement, prove it passes, then broaden verification.
+- Spring AI 工作必须先阅读 `docs/spring-ai-development-guide.md`。当前基线是 Spring AI `2.0.1`、Spring Boot `4.1.1`、Java `17`；新增 API、starter、配置键或 MCP 包名必须以当前官方 2.0.x 文档/Javadoc、Maven 依赖树和编译结果核对。2.0.0-M3 中文文档与外部文章只能作为设计背景，不能覆盖当前版本事实。
+- Spring AI 代码优先复用 `AiModelFactory`、`AiUtils`、`AiChatToolCallbackService` 和既有 Advisor/会话/知识库边界；新工具必须有风险登记、可信租户/会员上下文、幂等/审计策略和契约测试。禁止在 Controller 中直接创建模型、全局暴露高风险工具或记录未经脱敏的 prompt、completion、工具参数和结果。
 - CPS P0/P1 paths require tests before implementation: rebate freeze/deduct, exchange saga, order transitions, tenant isolation, OpenAPI signatures, MCP member attribution, MCP audit logs, and platform adapter failures.
 - Frontend issue fixes should start with deterministic Playwright reproduction in `frontend/admin-vue3/e2e` when practical.
 - Midscene.js may assist visual/semantic E2E for admin-vue3, but final acceptance still needs Playwright `expect` assertions or backend tests.

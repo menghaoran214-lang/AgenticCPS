@@ -46,6 +46,23 @@ class AiChatConversationServiceImplTest extends BaseMockitoUnitTest {
     private MemberUserApi memberUserApi;
 
     @Test
+    void newRoleConversationCannotReferenceAnotherOwnersConversation() {
+        AiChatConversationCreateMyReqVO request = new AiChatConversationCreateMyReqVO().setSourceConversationId(9L);
+        assertServiceException(() -> conversationService.createChatConversationMy(request,42L), CHAT_CONVERSATION_NOT_EXISTS);
+        org.mockito.Mockito.verifyNoInteractions(modelService);
+    }
+
+    @Test
+    void privateRoleCannotBeSelectedByAnotherUser() {
+        when(chatRoleService.validateChatRole(7L)).thenReturn(
+                new com.qiji.cps.module.ai.dal.dataobject.model.AiChatRoleDO().setId(7L)
+                        .setPublicStatus(false).setUserId(99L));
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+                () -> conversationService.createChatConversationMy(new AiChatConversationCreateMyReqVO().setRoleId(7L),42L));
+        org.mockito.Mockito.verifyNoInteractions(modelService);
+    }
+
+    @Test
     void createChatConversationMy_persistsAdminStandardIdentity() {
         givenDefaultModel();
         doAnswer(invocation -> {

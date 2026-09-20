@@ -563,6 +563,12 @@ CREATE TABLE `cps_mcp_api_key` (
 DROP TABLE IF EXISTS `cps_mcp_access_log`;
 CREATE TABLE `cps_mcp_access_log` (
   `id`             bigint       NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `role_code` varchar(64) NULL,
+  `role_version` int NULL,
+  `skill_code` varchar(64) NULL,
+  `skill_version` int NULL,
+  `policy_result` varchar(32) NULL,
+  `reject_reason` varchar(128) NULL,
   `api_key_id`     bigint                DEFAULT NULL COMMENT 'API Key ID（NULL=匿名访问）',
   `member_id`      bigint                DEFAULT NULL COMMENT '会员编号',
   `actor_user_id`  bigint                DEFAULT NULL COMMENT '实际调用用户编号',

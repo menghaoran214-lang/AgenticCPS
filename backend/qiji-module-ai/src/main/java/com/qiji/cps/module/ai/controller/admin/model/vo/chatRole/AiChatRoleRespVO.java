@@ -37,6 +37,11 @@ public class AiChatRoleRespVO implements VO {
     @Schema(description = "角色类别", requiredMode = Schema.RequiredMode.REQUIRED, example = "创作")
     private String category;
 
+    private String presetCode;
+    private String roleType;
+    private String audience;
+    private String channelScope;
+
     @Schema(description = "角色排序", requiredMode = Schema.RequiredMode.REQUIRED, example = "1")
     private Integer sort;
 
@@ -54,6 +59,12 @@ public class AiChatRoleRespVO implements VO {
 
     @Schema(description = "引用的 MCP Client 名字列表", example = "filesystem")
     private List<String> mcpClientNames;
+    private List<Long> skillIds;
+    private Long mcpPolicyId;
+    private String riskLevel;
+    private Integer version;
+    private String publishStatus;
+    private Boolean allowMutation;
 
     @Schema(description = "是否公开", requiredMode = Schema.RequiredMode.REQUIRED, example = "1")
     private Boolean publicStatus;

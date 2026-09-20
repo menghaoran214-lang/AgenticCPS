@@ -14,6 +14,9 @@ public class AiChatRoleSaveMyReqVO {
     @Schema(description = "角色编号", example = "32746")
     private Long id;
 
+    @Schema(description = "期望当前版本，用于避免覆盖他人修改")
+    private Integer version;
+
     @Schema(description = "角色名称", requiredMode = Schema.RequiredMode.REQUIRED, example = "李四")
     @NotEmpty(message = "角色名称不能为空")
     private String name;

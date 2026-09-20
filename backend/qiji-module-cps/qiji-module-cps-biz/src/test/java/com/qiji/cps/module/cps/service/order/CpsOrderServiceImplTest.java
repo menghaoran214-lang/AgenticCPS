@@ -99,6 +99,9 @@ class CpsOrderServiceImplTest {
     void allowSuccessfulVersionedOrderUpdates() {
         lenient().when(orderMapper.updateByIdAndStatusVersion(any(CpsOrderDO.class), any(Integer.class)))
                 .thenReturn(1);
+        // The real factory executes the supplier even when no vendor override was requested.
+        lenient().when(platformClientFactory.withVendorCode(org.mockito.ArgumentMatchers.isNull(), org.mockito.ArgumentMatchers.notNull()))
+                .thenAnswer(invocation -> ((Supplier<?>) invocation.getArgument(1)).get());
     }
 
     @Test

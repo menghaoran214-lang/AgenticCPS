@@ -37,7 +37,7 @@
         >
           <el-option
             v-for="dict in getBoolDictOptions(DICT_TYPE.INFRA_BOOLEAN_STRING)"
-            :key="dict.value"
+            :key="String(dict.value)"
             :label="dict.label"
             :value="dict.value"
           />
@@ -69,6 +69,9 @@
         </template>
       </el-table-column>
       <el-table-column label="角色类别" align="center" prop="category" />
+      <el-table-column label="预设编码" align="center" prop="presetCode" />
+      <el-table-column label="适用渠道" align="center" prop="channelScope" />
+      <el-table-column label="风险等级" align="center" prop="riskLevel" />
       <el-table-column label="角色描述" align="center" prop="description" />
       <el-table-column label="角色设定" align="center" prop="systemMessage" />
       <el-table-column label="知识库" align="center" prop="knowledgeIds">
@@ -86,6 +89,12 @@
       <el-table-column label="是否公开" align="center" prop="publicStatus">
         <template #default="scope">
           <dict-tag :type="DICT_TYPE.INFRA_BOOLEAN_STRING" :value="scope.row.publicStatus" />
+        </template>
+      </el-table-column>
+      <el-table-column label="Skills" align="center" prop="skillIds">
+        <template #default="scope">
+          <span v-if="!scope.row.skillIds || scope.row.skillIds.length === 0">-</span>
+          <span v-else>绑定 {{ scope.row.skillIds.length }} 个</span>
         </template>
       </el-table-column>
       <el-table-column label="会员可用" align="center" prop="memberEnabled">
@@ -109,6 +118,9 @@
           >
             编辑
           </el-button>
+          <el-button link @click="openHistory(scope.row)" v-hasPermi="['ai:chat-role:query']"
+            >版本历史</el-button
+          >
           <el-button
             link
             type="danger"
@@ -131,11 +143,29 @@
 
   <!-- 表单弹窗：添加/修改 -->
   <ChatRoleForm ref="formRef" @success="getList" />
+  <Dialog v-model="historyVisible" :title="`${historyRoleName} · 版本历史`" width="900px">
+    <el-table :data="historyVersions" v-loading="historyLoading">
+      <el-table-column type="expand"
+        ><template #default="{ row }">
+          <pre class="whitespace-pre-wrap break-all p-16px">{{
+            formatDefinition(row.definitionSnapshot)
+          }}</pre>
+        </template></el-table-column
+      >
+      <el-table-column prop="version" label="版本" /><el-table-column
+        prop="publishStatus"
+        label="发布状态"
+      /><el-table-column prop="creator" label="操作人" /><el-table-column
+        prop="createTime"
+        label="保存时间"
+      />
+    </el-table>
+  </Dialog>
 </template>
 
 <script setup lang="ts">
 import { getBoolDictOptions, DICT_TYPE } from '@/utils/dict'
-import { ChatRoleApi, ChatRoleVO } from '@/api/ai/model/chatRole'
+import { ChatRoleApi, ChatRoleVO, type ChatRoleVersionVO } from '@/api/ai/model/chatRole'
 import ChatRoleForm from './ChatRoleForm.vue'
 
 /** AI 聊天角色 列表 */
@@ -146,6 +176,28 @@ const { t } = useI18n() // 国际化
 
 const loading = ref(true) // 列表的加载中
 const list = ref<ChatRoleVO[]>([]) // 列表的数据
+const historyVisible = ref(false)
+const historyLoading = ref(false)
+const historyRoleName = ref('')
+const historyVersions = ref<ChatRoleVersionVO[]>([])
+const openHistory = async (role: ChatRoleVO) => {
+  historyRoleName.value = role.name
+  historyVisible.value = true
+  historyLoading.value = true
+  historyVersions.value = []
+  try {
+    historyVersions.value = await ChatRoleApi.getVersions(role.id)
+  } finally {
+    historyLoading.value = false
+  }
+}
+const formatDefinition = (value: string) => {
+  try {
+    return JSON.stringify(JSON.parse(value), null, 2)
+  } catch {
+    return '历史版本内容不可解析'
+  }
+}
 const total = ref(0) // 列表的总页数
 const queryParams = reactive({
   pageNo: 1,

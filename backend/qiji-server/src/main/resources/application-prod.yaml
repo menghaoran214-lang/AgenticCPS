@@ -182,16 +182,8 @@ qiji:
     mock-enable: true
   ai:
     mcp:
-      loopback-client:
-        enabled: true
-        connection-name: cps
       self-test:
-        enabled: ${AI_MCP_SELF_TEST_ENABLED:false}
         client-name: ${AI_MCP_SELF_TEST_CLIENT_NAME:}
-        base-url: ${AI_MCP_SELF_TEST_BASE_URL:http://127.0.0.1:48080}
-        endpoint: ${AI_MCP_SELF_TEST_ENDPOINT:/mcp/cps}
-        connect-timeout: ${AI_MCP_SELF_TEST_CONNECT_TIMEOUT:5s}
-        read-timeout: ${AI_MCP_SELF_TEST_READ_TIMEOUT:30s}
         ttl: ${AI_MCP_SELF_TEST_TTL:60s}
         secret: ${AI_MCP_SELF_TEST_SECRET:}
   pay:

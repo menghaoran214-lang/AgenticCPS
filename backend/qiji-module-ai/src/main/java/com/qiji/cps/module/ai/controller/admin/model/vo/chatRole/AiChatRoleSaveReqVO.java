@@ -32,6 +32,18 @@ public class AiChatRoleSaveReqVO {
     @NotEmpty(message = "角色类别不能为空")
     private String category;
 
+    @Schema(description = "系统预设编码", example = "traffic_selection_officer")
+    private String presetCode;
+
+    @Schema(description = "角色类型", example = "PRESET")
+    private String roleType;
+
+    @Schema(description = "适用用户类型", example = "ADMIN")
+    private String audience;
+
+    @Schema(description = "适用渠道", example = "WECHAT_VIDEO")
+    private String channelScope;
+
     @Schema(description = "角色排序", requiredMode = Schema.RequiredMode.REQUIRED, example = "1")
     @NotNull(message = "角色排序不能为空")
     private Integer sort;
@@ -52,6 +64,24 @@ public class AiChatRoleSaveReqVO {
 
     @Schema(description = "引用的 MCP Client 名字列表", example = "filesystem")
     private List<String> mcpClientNames;
+
+    @Schema(description = "绑定的 Skill 编号列表", example = "1,2")
+    private List<Long> skillIds;
+
+    @Schema(description = "MCP 权限策略编号", example = "1")
+    private Long mcpPolicyId;
+
+    @Schema(description = "风险级别", example = "READ_ONLY")
+    private String riskLevel;
+
+    @Schema(description = "角色版本", example = "1")
+    private Integer version;
+
+    @Schema(description = "发布状态", example = "PUBLISHED")
+    private String publishStatus;
+
+    @Schema(description = "是否允许执行变更类工具", example = "false")
+    private Boolean allowMutation;
 
     @Schema(description = "是否公开", requiredMode = Schema.RequiredMode.REQUIRED, example = "1")
     @NotNull(message = "是否公开不能为空")

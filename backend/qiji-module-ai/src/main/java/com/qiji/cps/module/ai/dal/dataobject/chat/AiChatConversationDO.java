@@ -26,6 +26,8 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 public class AiChatConversationDO extends BaseDO {
 
+    private Long sourceConversationId;
+
     public static final String TITLE_DEFAULT = "新对话";
 
     /**
@@ -57,6 +59,16 @@ public class AiChatConversationDO extends BaseDO {
      * MCP Client 名称
      */
     private String mcpClientName;
+    /** 创建会话时选择的系统预设编码 */
+    private String rolePresetCode;
+    /** 创建会话时固定的角色版本 */
+    private Integer roleVersion;
+    /** 创建会话时固定的能力快照（JSON） */
+    private String effectiveCapabilitySnapshot;
+    /** 创建会话时固定的 Skill 快照（JSON） */
+    private String skillSnapshot;
+    /** 创建会话时固定的 MCP 策略快照（JSON） */
+    private String mcpPolicySnapshot;
     /**
      * 是否允许执行变更类工具
      */

@@ -17,6 +17,16 @@ export interface ChatRoleVO {
   knowledgeIds?: number[] // 引用的知识库 ID 列表
   toolIds?: number[] // 引用的工具 ID 列表
   mcpClientNames?: string[] // 引用的 MCP Client 名字列表
+  roleType?: 'PRESET' | 'CUSTOM'
+  presetCode?: string
+  audience?: string
+  channelScope?: string
+  skillIds?: number[]
+  mcpPolicyId?: number
+  riskLevel?: string
+  version?: number
+  publishStatus?: string
+  allowMutation?: boolean
 }
 
 // AI 聊天角色 分页请求 vo
@@ -29,7 +39,19 @@ export interface ChatRolePageReqVO {
 }
 
 // AI 聊天角色 API
+export interface ChatRoleVersionVO {
+  id: number
+  roleId: number
+  version: number
+  publishStatus: string
+  definitionSnapshot: string
+  creator: string
+  createTime: string
+}
+
 export const ChatRoleApi = {
+  getVersions: (roleId: number) =>
+    request.get<ChatRoleVersionVO[]>({ url: '/ai/chat-role/version/list', params: { roleId } }),
   // 查询聊天角色分页
   getChatRolePage: async (params: any) => {
     return await request.get({ url: `/ai/chat-role/page`, params })
@@ -65,6 +87,16 @@ export const ChatRoleApi = {
   // 获取角色分类
   getCategoryList: async () => {
     return await request.get({ url: `/ai/chat-role/category-list` })
+  },
+
+  // 获取已发布角色预设，用于新建会话角色选择
+  getPresetList: async (params?: Record<string, unknown>) => {
+    return await request.get({ url: `/ai/chat-role/preset-list`, params })
+  },
+
+  // 获取角色在当前租户下的有效能力摘要
+  getCapabilitySummary: async (roleId: number) => {
+    return await request.get({ url: `/ai/chat-role/capability-summary`, params: { roleId } })
   },
 
   // 创建角色

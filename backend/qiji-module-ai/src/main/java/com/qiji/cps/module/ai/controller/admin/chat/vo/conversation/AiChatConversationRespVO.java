@@ -14,6 +14,8 @@ import java.time.LocalDateTime;
 @Data
 public class AiChatConversationRespVO implements VO {
 
+    private Long sourceConversationId;
+
     @Schema(description = "对话编号", requiredMode = Schema.RequiredMode.REQUIRED, example = "1024")
     private String id;
 
@@ -31,6 +33,11 @@ public class AiChatConversationRespVO implements VO {
 
     @Schema(description = "MCP Client 名称", example = "cps")
     private String mcpClientName;
+    private String rolePresetCode;
+    private Integer roleVersion;
+    private String effectiveCapabilitySnapshot;
+    private String skillSnapshot;
+    private String mcpPolicySnapshot;
 
     @Schema(description = "是否允许执行变更类工具", example = "false")
     private Boolean allowMutation;

@@ -38,6 +38,28 @@
         </div>
       </el-header>
 
+      <div
+        v-if="capabilitySummary"
+        class="px-20px py-8px flex flex-wrap items-center gap-8px"
+        data-testid="conversation-capabilities"
+      >
+        <el-tag>{{ capabilitySummary.roleCode }} · v{{ capabilitySummary.roleVersion }}</el-tag>
+        <el-tag v-for="skill in capabilitySummary.skills" :key="skill" type="success">{{
+          skill
+        }}</el-tag>
+        <el-tag type="info"
+          >{{ capabilitySummary.serviceCount }} 个 MCP 服务 ·
+          {{ capabilitySummary.toolCount }} 项能力</el-tag
+        >
+        <el-tag type="warning">{{ capabilitySummary.riskLevel }}</el-tag>
+        <el-button
+          link
+          type="primary"
+          :disabled="conversationInProgress"
+          @click="conversationListRef.createWithAnotherRole()"
+          >基于此会话新建其他角色会话</el-button
+        >
+      </div>
       <CpsSelectionWorkbench
         v-if="activeConversation"
         v-model:mode="workbenchMode"
@@ -88,6 +110,12 @@
 
       <!-- 底部 -->
       <el-footer class="flex flex-col !h-auto !p-0">
+        <ToolConfirmationCards
+          ref="confirmationCardsRef"
+          :conversation-id="activeConversationId || undefined"
+          :active="!!activeConversation?.effectiveCapabilitySnapshot"
+          @processed="handleConfirmationProcessed"
+        />
         <CpsToolActionBar
           :actions="toolActions"
           :disabled="conversationInProgress"
@@ -179,6 +207,8 @@ import MessageLoading from './components/message/MessageLoading.vue'
 import MessageNewConversation from './components/message/MessageNewConversation.vue'
 import MessageFileUpload from './components/message/MessageFileUpload.vue'
 import CpsToolActionBar from './components/tool/CpsToolActionBar.vue'
+import ToolConfirmationCards from './components/tool/ToolConfirmationCards.vue'
+import { readCapabilitySummary } from './capabilities'
 import CpsSelectionWorkbench, {
   type CpsWorkbenchMode
 } from './components/workbench/CpsSelectionWorkbench.vue'
@@ -199,6 +229,26 @@ const message = useMessage() // 消息弹窗
 const conversationListRef = ref()
 const activeConversationId = ref<string | null>(null) // 选中的对话编号
 const activeConversation = ref<ChatConversationVO | null>(null) // 选中的 Conversation
+const confirmationCardsRef = ref<InstanceType<typeof ToolConfirmationCards>>()
+const capabilitySummary = computed(() =>
+  readCapabilitySummary(activeConversation.value?.effectiveCapabilitySnapshot)
+)
+const handleConfirmationProcessed = async (conversationId: string) => {
+  if (conversationId !== activeConversationId.value) return
+  for (const item of activeMessageList.value) {
+    for (const execution of item.toolExecutions || []) {
+      if (execution.status === 'WAITING_CONFIRMATION') {
+        execution.status = 'PROCESSED'
+        execution.message = '已处理，请核对结果'
+      }
+    }
+    if (item.taskProgress?.status === 'WAITING_CONFIRMATION') {
+      item.taskProgress.status = 'PARTIAL_SUCCESS'
+      item.taskProgress.currentStep = '已处理，请核对结果'
+    }
+  }
+  if (!conversationInProgress.value) await getMessageList()
+}
 const conversationInProgress = ref(false) // 对话是否正在进行中。目前只有【发送】消息时，会更新为 true，避免切换对话、删除对话等操作
 const toolActions = ref<ToolActionVO[]>([]) // 当前角色实际可用的业务工具入口
 const selectedToolAction = ref<ToolActionVO>() // 输入框携带的隐藏路由意图
@@ -235,10 +285,13 @@ const currentWorkbenchToolIntent = computed(
   () => selectedToolAction.value?.intent || lastWorkbenchRequest.value?.toolIntent
 )
 const activeTaskProgress = computed(
-  () => [...activeMessageList.value].reverse().find((item) => item.type === 'assistant')?.taskProgress
+  () =>
+    [...activeMessageList.value].reverse().find((item) => item.type === 'assistant')?.taskProgress
 )
 const workbenchResultSummary = computed(() => {
-  const latestAssistant = [...activeMessageList.value].reverse().find((item) => item.type === 'assistant')
+  const latestAssistant = [...activeMessageList.value]
+    .reverse()
+    .find((item) => item.type === 'assistant')
   const block = latestAssistant?.blocks?.find(
     (item) =>
       item.type === 'SELECTION_REPORT' ||
@@ -610,12 +663,14 @@ const updateToolExecution = (
   const statusByEvent = {
     TOOL_STARTED: 'RUNNING',
     TOOL_SUCCEEDED: 'SUCCEEDED',
-    TOOL_FAILED: 'FAILED'
+    TOOL_FAILED: 'FAILED',
+    TOOL_CONFIRM_REQUIRED: 'WAITING_CONFIRMATION'
   } as const
   const fallbackByEvent = {
     TOOL_STARTED: `正在${friendlyToolText(execution.label, '处理业务请求')}`,
     TOOL_SUCCEEDED: `${friendlyToolText(execution.label, '业务处理')}已完成`,
-    TOOL_FAILED: `${friendlyToolText(execution.label, '业务处理')}未完成，请稍后重试`
+    TOOL_FAILED: `${friendlyToolText(execution.label, '业务处理')}未完成，请稍后重试`,
+    TOOL_CONFIRM_REQUIRED: '等待用户确认'
   } as const
   assistantMessage.toolExecutions = upsertToolExecution(assistantMessage.toolExecutions || [], {
     ...execution,
@@ -638,16 +693,42 @@ const updateTaskLifecycle = (data: ChatMessageStreamData) => {
   if (!assistant) return
   const eventType = data.eventType
   if (!eventType || eventType === 'MESSAGE_DELTA' || eventType.startsWith('TOOL_')) return
+  if (
+    assistant.toolExecutions?.some((item) => item.status === 'WAITING_CONFIRMATION') &&
+    eventType !== 'TASK_FAILED'
+  )
+    return
   const previous = assistant.taskProgress || createTaskProgress()
   const payload = data.taskProgress || {}
-  const status = (payload.status || data.taskStatus ||
-    (eventType === 'TASK_ACCEPTED' ? 'QUEUED' : eventType === 'TASK_FAILED' ? 'FAILED' : eventType === 'TASK_COMPLETE' ? 'SUCCEEDED' : 'RUNNING')) as ChatTaskProgress['status']
-  const percent = typeof payload.percent === 'number' ? payload.percent : typeof data.percent === 'number' ? data.percent : status === 'SUCCEEDED' || status === 'FAILED' ? 100 : previous.percent
+  const status = (payload.status ||
+    data.taskStatus ||
+    (eventType === 'TASK_ACCEPTED'
+      ? 'QUEUED'
+      : eventType === 'TASK_FAILED'
+        ? 'FAILED'
+        : eventType === 'TASK_COMPLETE'
+          ? 'SUCCEEDED'
+          : 'RUNNING')) as ChatTaskProgress['status']
+  const percent =
+    typeof payload.percent === 'number'
+      ? payload.percent
+      : typeof data.percent === 'number'
+        ? data.percent
+        : status === 'SUCCEEDED' || status === 'FAILED'
+          ? 100
+          : previous.percent
   const completedItems = payload.completedItems ?? data.completedItems
   const totalItems = payload.totalItems ?? data.totalItems
   const stage = payload.stage || data.stage
   const eventMessage = payload.currentStep || data.message
-  const friendlyMessage = toFriendlyToolText(eventMessage, status === 'FAILED' ? '任务未完成，可重试' : status === 'SUCCEEDED' ? '任务已完成' : '正在处理您的请求')
+  const friendlyMessage = toFriendlyToolText(
+    eventMessage,
+    status === 'FAILED'
+      ? '任务未完成，可重试'
+      : status === 'SUCCEEDED'
+        ? '任务已完成'
+        : '正在处理您的请求'
+  )
   assistant.taskProgress = {
     ...previous,
     ...payload,
@@ -705,6 +786,21 @@ const updateTaskProgress = (
       steps
     }
   }
+  if (eventType === 'TOOL_CONFIRM_REQUIRED') {
+    understand.status = 'SUCCEEDED'
+    retrieve.status = 'PENDING'
+    retrieve.message = '等待用户确认'
+    void confirmationCardsRef.value?.refresh()
+    return {
+      ...progress,
+      status: 'WAITING_CONFIRMATION',
+      percent: 45,
+      currentStep: '等待用户确认',
+      error: undefined,
+      retryable: false,
+      steps
+    }
+  }
   if (eventType === 'TOOL_SUCCEEDED') {
     understand.status = 'SUCCEEDED'
     retrieve.status = 'SUCCEEDED'
@@ -737,20 +833,26 @@ const updateTaskProgress = (
 }
 
 const completeTaskProgress = (assistantMessage?: ChatMessageVO) => {
-  if (!assistantMessage?.taskProgress || assistantMessage.taskProgress.status === 'FAILED') return
+  if (
+    !assistantMessage?.taskProgress ||
+    assistantMessage.taskProgress.status === 'FAILED' ||
+    assistantMessage.toolExecutions?.some((item) => item.status === 'WAITING_CONFIRMATION')
+  )
+    return
   assistantMessage.taskProgress = {
     ...assistantMessage.taskProgress,
     status: 'SUCCEEDED',
     percent: 100,
     currentStep: '结构化结果已生成',
-    summary: assistantMessage.blocks?.find(
-      (block) =>
-        block.type === 'SELECTION_REPORT' ||
-        block.type === 'ALTERNATIVES_REPORT' ||
-        block.type === 'GOODS_ANALYSIS' ||
-        block.type === 'ORDER_PROFILE' ||
-        block.type === 'ORDER_TREND'
-    )?.summary || '分析已完成，可查看数据证据、推荐理由和风险提示。',
+    summary:
+      assistantMessage.blocks?.find(
+        (block) =>
+          block.type === 'SELECTION_REPORT' ||
+          block.type === 'ALTERNATIVES_REPORT' ||
+          block.type === 'GOODS_ANALYSIS' ||
+          block.type === 'ORDER_PROFILE' ||
+          block.type === 'ORDER_TREND'
+      )?.summary || '分析已完成，可查看数据证据、推荐理由和风险提示。',
     retryable: false,
     steps: assistantMessage.taskProgress.steps.map((step) => ({
       ...step,
@@ -973,7 +1075,12 @@ const failCurrentTask = (error: string) => {
 
 const cancelCurrentTask = () => {
   const assistantMessage = getCurrentAssistantMessage()
-  if (!assistantMessage?.taskProgress || assistantMessage.taskProgress.status === 'FAILED') return
+  if (
+    !assistantMessage?.taskProgress ||
+    assistantMessage.taskProgress.status === 'FAILED' ||
+    assistantMessage.toolExecutions?.some((item) => item.status === 'WAITING_CONFIRMATION')
+  )
+    return
   assistantMessage.taskProgress = {
     ...assistantMessage.taskProgress,
     status: 'CANCELLED',
@@ -997,6 +1104,7 @@ const stopStream = async (result: 'SUCCEEDED' | 'FAILED' | 'CANCELLED' = 'CANCEL
   if (result === 'FAILED') failCurrentTask('分析请求异常中断，请重试')
   // 设置为 false
   conversationInProgress.value = false
+  void confirmationCardsRef.value?.refresh()
 }
 
 /** 编辑 message：设置为 prompt，可以再次编辑 */

@@ -11,7 +11,13 @@ import java.util.Set;
  * Complete CPS/CPX MCP tool risk registry. Unknown self-test tools are intentionally not registered.
  */
 @Component
-public class CpsMcpToolRiskRegistry {
+public class CpsMcpToolRiskRegistry implements com.qiji.cps.module.ai.service.capability.AiCapabilityRiskProvider {
+
+    @Override
+    public String riskOf(String toolName) {
+        CpsMcpToolRisk risk = getRisk(toolName);
+        return risk == null ? null : risk.name();
+    }
 
     private static final Map<String, CpsMcpToolRisk> RISKS;
 

@@ -19,17 +19,37 @@ export interface ChatConversationVO {
   roleAvatar?: string // 角色头像
   modelMaxTokens?: string // 模型的单条回复的最大 Token 数量
   modelMaxContexts?: string // 模型的上下文的最大 Message 数量
+  rolePresetCode?: string
+  roleVersion?: number
+  effectiveCapabilitySnapshot?: string
+  skillSnapshot?: string
+  mcpPolicySnapshot?: string
+}
+
+export interface ToolConfirmationVO {
+  id: string
+  toolLabel: string
+  summary?: string
+  status: string
+  expiresAt: string
 }
 
 // AI 聊天对话 API
 export const ChatConversationApi = {
+  getToolConfirmations: (conversationId: string) =>
+    request.get<ToolConfirmationVO[]>({
+      url: '/ai/chat/conversation/tool-confirmations',
+      params: { conversationId }
+    }),
+  confirmTool: (id: string) =>
+    request.post<string>({ url: '/ai/chat/conversation/confirm-tool', params: { id } }),
   // 获得【我的】聊天对话
   getChatConversationMy: async (id: string | number) => {
     return await request.get({ url: `/ai/chat/conversation/get-my?id=${id}` })
   },
 
   // 新增【我的】聊天对话
-  createChatConversationMy: async (data?: ChatConversationVO) => {
+  createChatConversationMy: async (data?: { roleId?: number; sourceConversationId?: string }) => {
     return await request.post<string>({ url: `/ai/chat/conversation/create-my`, data })
   },
 

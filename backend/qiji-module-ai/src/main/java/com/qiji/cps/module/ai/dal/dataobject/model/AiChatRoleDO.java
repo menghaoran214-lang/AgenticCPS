@@ -44,6 +44,14 @@ public class AiChatRoleDO extends BaseDO {
      * 角色分类
      */
     private String category;
+    /** 系统预设编码；自定义角色为空 */
+    private String presetCode;
+    /** 角色类型（PRESET/CUSTOM） */
+    private String roleType;
+    /** 适用用户类型（ADMIN/MEMBER/MERCHANT） */
+    private String audience;
+    /** 适用渠道（ALL/WECHAT_VIDEO/DOUYIN/MALL） */
+    private String channelScope;
     /**
      * 角色描述
      */
@@ -88,6 +96,19 @@ public class AiChatRoleDO extends BaseDO {
      */
     @TableField(typeHandler = StringListTypeHandler.class)
     private List<String> mcpClientNames;
+    /** 绑定的 Skill 编号列表 */
+    @TableField(typeHandler = LongListTypeHandler.class)
+    private List<Long> skillIds;
+    /** MCP 权限策略编号 */
+    private Long mcpPolicyId;
+    /** 风险级别（READ_ONLY/ATTRIBUTION_WRITE/ASSET_WRITE/ADMIN） */
+    private String riskLevel;
+    /** 角色版本 */
+    private Integer version;
+    /** 发布状态（DRAFT/PUBLISHED/ARCHIVED） */
+    private String publishStatus;
+    /** 是否允许执行变更类工具 */
+    private Boolean allowMutation;
 
     /**
      * 是否公开

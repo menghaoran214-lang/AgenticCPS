@@ -12,4 +12,10 @@ public class AppAiChatRoleSimpleRespVO {
     private String category;
     private String description;
     private Long modelId;
+    private String presetCode;
+    private String roleType;
+    private String audience;
+    private String channelScope;
+    private String riskLevel;
+    private Integer version;
 }

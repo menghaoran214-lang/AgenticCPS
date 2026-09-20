@@ -430,6 +430,7 @@ CREATE TABLE IF NOT EXISTS "cps_rebate_asset_policy" (
     "migration_ready" bit NOT NULL DEFAULT FALSE,
     "latest_ready_check_batch_no" varchar(64) NULL,
     "ready_check_time" datetime NULL,
+    "migration_approval_ref" varchar(128) NULL,
     "read_only" bit NOT NULL DEFAULT FALSE,
     "large_debt_threshold_cent" bigint NOT NULL DEFAULT 10000,
     "reminder_interval_days" int NOT NULL DEFAULT 7,

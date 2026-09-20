@@ -26,6 +26,15 @@
       <el-form-item label="角色类别" prop="category" v-if="!isUser">
         <el-input v-model="formData.category" placeholder="请输入角色类别" />
       </el-form-item>
+      <el-form-item label="预设编码" prop="presetCode" v-if="!isUser">
+        <el-input v-model="formData.presetCode" placeholder="例如 TRAFFIC_SELECTION_OFFICER" />
+      </el-form-item>
+      <el-form-item label="适用人群" prop="audience" v-if="!isUser">
+        <el-input v-model="formData.audience" placeholder="后台运营 / 会员 / 商家" />
+      </el-form-item>
+      <el-form-item label="适用渠道" prop="channelScope" v-if="!isUser">
+        <el-input v-model="formData.channelScope" placeholder="通用 / 视频号 / 抖音号 / 商城" />
+      </el-form-item>
       <el-form-item label="角色描述" prop="description">
         <el-input type="textarea" v-model="formData.description" placeholder="请输入角色描述" />
       </el-form-item>
@@ -44,7 +53,7 @@
       </el-form-item>
       <el-form-item label="引用工具" prop="toolIds">
         <el-select v-model="formData.toolIds" placeholder="请选择工具" clearable multiple>
-          <el-option v-for="item in toolList" :key="item.id" :label="item.name" :value="item.id" />
+          <el-option v-for="item in toolList" :key="item.id" :label="item.name" :value="item.id!" />
         </el-select>
       </el-form-item>
       <el-form-item label="引用 MCP" prop="toolIds">
@@ -61,18 +70,43 @@
         <el-radio-group v-model="formData.publicStatus">
           <el-radio
             v-for="dict in getBoolDictOptions(DICT_TYPE.INFRA_BOOLEAN_STRING)"
-            :key="dict.value"
+            :key="String(dict.value)"
             :value="dict.value"
           >
             {{ dict.label }}
           </el-radio>
         </el-radio-group>
       </el-form-item>
+      <el-form-item label="发布状态" v-if="!isUser"
+        ><el-select v-model="formData.publishStatus"
+          ><el-option label="草稿" value="DRAFT" /><el-option
+            label="已发布"
+            value="PUBLISHED" /><el-option label="已下线" value="ARCHIVED" /></el-select
+      ></el-form-item>
+      <el-form-item label="角色类型" v-if="!isUser"
+        ><el-select v-model="formData.roleType"
+          ><el-option label="自定义" value="CUSTOM" /><el-option
+            label="系统预设"
+            value="PRESET" /></el-select
+      ></el-form-item>
+      <el-form-item label="MCP 策略编号" v-if="!isUser"
+        ><el-input-number v-model="formData.mcpPolicyId" :min="1"
+      /></el-form-item>
+      <el-form-item label="绑定 Skills" prop="skillIds" v-if="!isUser">
+        <el-select v-model="formData.skillIds" placeholder="请选择已发布 Skill" clearable multiple>
+          <el-option
+            v-for="item in skillList"
+            :key="item.id"
+            :label="item.name"
+            :value="item.id!"
+          />
+        </el-select>
+      </el-form-item>
       <el-form-item label="会员可用" prop="memberEnabled" v-if="!isUser">
         <el-radio-group v-model="formData.memberEnabled">
           <el-radio
             v-for="dict in getBoolDictOptions(DICT_TYPE.INFRA_BOOLEAN_STRING)"
-            :key="dict.value"
+            :key="String(dict.value)"
             :value="dict.value"
           >
             {{ dict.label }}
@@ -86,12 +120,23 @@
         <el-radio-group v-model="formData.status">
           <el-radio
             v-for="dict in getIntDictOptions(DICT_TYPE.COMMON_STATUS)"
-            :key="dict.value"
+            :key="String(dict.value)"
             :value="dict.value"
           >
             {{ dict.label }}
           </el-radio>
         </el-radio-group>
+      </el-form-item>
+      <el-form-item label="风险等级" prop="riskLevel" v-if="!isUser">
+        <el-select v-model="formData.riskLevel" class="w-full">
+          <el-option label="只读" value="READ_ONLY" />
+          <el-option label="归因写入" value="ATTRIBUTION_WRITE" />
+          <el-option label="资产写入" value="ASSET_WRITE" />
+          <el-option label="管理员" value="ADMIN" />
+        </el-select>
+      </el-form-item>
+      <el-form-item label="允许写操作" prop="allowMutation" v-if="!isUser">
+        <el-switch v-model="formData.allowMutation" />
       </el-form-item>
     </el-form>
     <template #footer>
@@ -109,6 +154,7 @@ import { FormRules } from 'element-plus'
 import { AiModelTypeEnum } from '@/views/ai/utils/constants'
 import { KnowledgeApi, KnowledgeVO } from '@/api/ai/knowledge/knowledge'
 import { ToolApi, ToolVO } from '@/api/ai/model/tool'
+import { SkillApi, SkillVO } from '@/api/ai/skill'
 
 /** AI 聊天角色 表单 */
 defineOptions({ name: 'ChatRoleForm' })
@@ -134,12 +180,22 @@ const formData = ref({
   status: CommonStatusEnum.ENABLE,
   knowledgeIds: [] as number[],
   toolIds: [] as number[],
-  mcpClientNames: [] as string[]
+  mcpClientNames: [] as string[],
+  presetCode: undefined,
+  roleType: 'CUSTOM',
+  publishStatus: 'DRAFT',
+  audience: undefined,
+  channelScope: undefined,
+  skillIds: [] as number[],
+  mcpPolicyId: undefined,
+  riskLevel: 'READ_ONLY',
+  allowMutation: false
 })
 const formRef = ref() // 表单 Ref
 const models = ref([] as ModelVO[]) // 聊天模型列表
 const knowledgeList = ref([] as KnowledgeVO[]) // 知识库列表
 const toolList = ref([] as ToolVO[]) // 工具列表
+const skillList = ref([] as SkillVO[]) // 已发布 Skill 列表
 
 /** 是否【我】自己创建，私有角色 */
 const isUser = computed(() => {
@@ -179,6 +235,12 @@ const open = async (type: string, id?: number, title?: string) => {
   knowledgeList.value = await KnowledgeApi.getSimpleKnowledgeList()
   // 获取工具列表
   toolList.value = await ToolApi.getToolSimpleList()
+  if (!isUser.value) {
+    const skillPage = await SkillApi.getPage({ pageNo: 1, pageSize: 100, status: 0 })
+    skillList.value = (skillPage.list || []).filter(
+      (item: SkillVO) => (item.currentVersion || 0) > 0
+    )
+  }
 }
 defineExpose({ open }) // 提供 open 方法，用于打开弹窗
 
@@ -230,7 +292,16 @@ const resetForm = () => {
     status: CommonStatusEnum.ENABLE,
     knowledgeIds: [],
     toolIds: [],
-    mcpClientNames: []
+    mcpClientNames: [],
+    presetCode: undefined,
+    roleType: 'CUSTOM',
+    publishStatus: 'DRAFT',
+    audience: undefined,
+    channelScope: undefined,
+    skillIds: [],
+    mcpPolicyId: undefined,
+    riskLevel: 'READ_ONLY',
+    allowMutation: false
   }
   formRef.value?.resetFields()
 }

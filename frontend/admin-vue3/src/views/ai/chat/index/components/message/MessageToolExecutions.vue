@@ -26,12 +26,16 @@ defineProps<{
 const friendly = (value?: string) => toFriendlyToolText(value)
 
 const statusIcon = (status: string) => {
+  if (status === 'PROCESSED') return 'ep:info-filled'
+  if (status === 'WAITING_CONFIRMATION') return 'ep:warning-filled'
   if (status === 'SUCCEEDED' || status === 'SUCCESS') return 'ep:circle-check-filled'
   if (status === 'FAILED' || status === 'FAILURE') return 'ep:circle-close-filled'
   return 'ep:loading'
 }
 
 const statusClass = (status: string) => {
+  if (status === 'PROCESSED') return 'text-[var(--el-color-info)]'
+  if (status === 'WAITING_CONFIRMATION') return 'text-[var(--el-color-warning)]'
   if (status === 'SUCCEEDED' || status === 'SUCCESS') return 'text-[var(--el-color-success)]'
   if (status === 'FAILED' || status === 'FAILURE') return 'text-[var(--el-color-danger)]'
   return 'animate-spin text-[var(--el-color-primary)]'

@@ -1,8 +1,35 @@
 # AgenticCPS Spring AI 开发指导
 
-> 本文面向 AgenticCPS 后续 AI 功能开发，依据 [Spring AI 1.1.3 中文文档](https://www.spring-doc.cn/spring-ai/1.1.3/index.html) 整理，并结合仓库当前实现约束编写。
+> 本文是 AgenticCPS 开发 Spring AI 功能的仓库级指导手册。内容以 Spring AI 2.0.0-M3 中文开发文档、Spring AI 2.0.1 官方文档和仓库现状为依据，并吸收腾讯云文章《Spring AI 2.0 正式发布：Java 程序员必须关注的 8 个升级清单》的工程启示。
 >
-> 当前 `backend/qiji-module-ai/pom.xml` 使用 Spring AI `1.1.8`。1.1.x API 基本兼容；升级到其他版本时，必须以对应版本的官方 API 和编译结果为准。
+> **当前基线（2026-09-18）**：`backend/qiji-module-ai/pom.xml` 使用 Spring AI `2.0.1`，根 POM 使用 Spring Boot `4.1.1`、Java `17`。新增代码按 2.0.1 API 编写；2.0.0-M3 文档只作为 2.0 API 设计参考，不能替代当前版本的 Javadoc、依赖源码和编译结果。
+>
+> **文档状态**：2.0.0-M3 页面明确标记为开发中，页面示例仍出现 Spring Boot 3.4/3.5；当前官方 2.0.1 文档已改为支持 Spring Boot 4.0.x/4.1.x。文章中的“Spring Boot 4 + Jackson 3”等结论可作为方向判断，但升级决策必须以当前官方版本和本仓库构建结果为准。
+
+## 0. 版本与资料优先级
+
+遇到版本差异时按以下顺序判断：
+
+1. `backend/qiji-module-ai/pom.xml`、`backend/pom.xml` 和 Maven 的实际依赖树；
+2. 当前 Spring AI 官方版本文档/Javadoc（当前为 2.0.1）；
+3. 2.0.0-M3 中文文档，用于理解 API 设计和迁移背景；
+4. 腾讯云文章，用于理解版本方向，不作为 API、配置或依赖的唯一依据。
+
+任何新 API、starter、配置键或包名，都必须用 `mvn dependency:tree`、IDE/Javadoc 或模块编译确认，不能只凭文章或旧代码记忆。
+
+### 0.1 腾讯云文章的工程结论
+
+文章的核心判断是：Spring AI 2.0 的重点从“调用模型”转向“构建可治理的 Agent”。对本仓库的落地要求如下：
+
+| 文章观点 | 本仓库采用的要求 | 版本核对结论 |
+| --- | --- | --- |
+| Spring Boot 4、Jackson 3、JSpecify | 新模块以 Boot 4、当前 JSON 运行时和明确的空值边界为前提；升级旧模块先做依赖树和编译验证 | Boot 4 已由当前基线确认；Jackson/JSpecify 的具体落点仍以 2.0.1 依赖和源码为准 |
+| Options Builder、不可变配置 | 统一在 factory/builder 构造 options，请求间不共享可变状态 | 与 2.0 文档一致 |
+| 工具调用循环进入 Advisor 链 | 使用 `ToolCallingAdvisor` 的统一循环；需要审批/中断时显式用 `ToolCallingManager` | 与 2.0.1 官方工具文档一致 |
+| 海量工具渐进式暴露 | 工具数量增长时评估 `ToolSearchToolCallingAdvisor`，按角色和会话按需暴露 | 2.0.1 官方文档有对应能力，使用前核对 starter/配置 |
+| 结构化输出自修复 | DTO/schema + Bean Validation + 有限重试；不能只依赖模型“保证 JSON” | 文章提到的 `StructuredOutputValidationAdvisor` 必须先在 2.0.1 Javadoc/依赖中确认，未确认前不得直接引用 |
+| MCP 标准化和注解驱动 | 通过 Spring AI MCP starter，按权限暴露工具/资源/提示，保留身份、审计和超时 | 2.0 文档确认注解和传输迁移；SDK/starter 坐标以当前 POM 为准 |
+| 社区记忆、工具和 Agent 扩展 | 新增第三方组件必须做版本、许可证、维护度和安全评估 | 社区项目不是默认依赖 |
 
 ## 1. 技术定位与边界
 
@@ -24,7 +51,7 @@ Spring AI 为模型、提示词、工具调用、向量检索和可观测性提�
 
 AI 代码位于 `backend/qiji-module-ai`，模型、向量库和 MCP starter 已集中在该模块的 POM 中。新增依赖前先确认当前 BOM/版本，避免同一组件引入多个版本。
 
-常用依赖（版本号应统一为项目属性）：
+常用依赖（版本号应统一为项目属性；本仓库实际依赖以 POM 为准）：
 
 ```xml
 <!-- 对话模型：按实际供应商选择，不要无条件全部引入 -->
@@ -34,7 +61,7 @@ AI 代码位于 `backend/qiji-module-ai`，模型、向量库和 MCP starter 已
   <version>${spring-ai.version}</version>
 </dependency>
 
-<!-- 使用 QuestionAnswerAdvisor / VectorStoreChatMemoryAdvisor 时需要 -->
+<!-- 仅在使用向量顾问时按需引入 -->
 <dependency>
   <groupId>org.springframework.ai</groupId>
   <artifactId>spring-ai-advisors-vector-store</artifactId>
@@ -42,7 +69,7 @@ AI 代码位于 `backend/qiji-module-ai`，模型、向量库和 MCP starter 已
 </dependency>
 ```
 
-本仓库已经接入 OpenAI、Azure OpenAI、Anthropic、DeepSeek、Ollama、智谱、通义等模型，以及 Redis、Qdrant、Milvus 向量存储。运行时由 `AiModelFactory` 按平台和配置创建/缓存模型；业务服务不要自行散落创建 HTTP 客户端。
+本仓库已经接入 OpenAI、Anthropic、DeepSeek、Ollama、通义等模型，以及 Redis、Qdrant、Milvus 向量存储。运行时由 `AiModelFactory` 按平台和配置创建/缓存模型；业务服务不要自行散落创建 HTTP 客户端。Spring AI 2.0 的官方模型生态趋向少而精，新增供应商前先确认官方 starter、官方 SDK 和 2.0 兼容性，不要因为社区示例存在就直接加入依赖。
 
 ## 3. 配置与密钥
 
@@ -71,7 +98,9 @@ spring:
 1. API Key、数据库密码和 MCP 密钥只能来自环境变量、密钥管理系统或本地未提交配置；不得写入 Git、日志、异常消息或 Markdown 示例。
 2. 生产环境关闭不需要的模型、向量库初始化和演示工具；为每个供应商设置连接与读取超时、重试上限和熔断策略。
 3. 供应商特有参数通过对应的 `*ChatOptions`/`*EmbeddingOptions` 设置，通用参数（模型、温度、最大 token）由 `AiUtils.buildChatOptions` 统一转换。
-4. 本项目使用 Spring MVC。MCP 服务端使用 `spring-ai-starter-mcp-server-webmvc`，不要引入 WebFlux starter；配置 `type: SYNC`。混用 WebFlux 可能导致 SSE 失效。
+4. 本项目使用 Spring MVC。MCP 服务端使用 `spring-ai-starter-mcp-server-webmvc`，不要引入 WebFlux server/client starter；配置 `type: SYNC`。流式 ChatClient 仍需要响应式栈，不能据此把 MCP 传输栈替换成 WebFlux。混用 WebFlux MCP starter 可能导致 SSE 失效。
+
+5. Spring AI 2.0 的 Options 使用 Builder、创建后不可变，并减少了旧版配置中的多余 `.options` 层级。不要在共享单例上修改 options；优先在模型工厂中构造默认 options，在请求级别使用不可变的请求 options 覆盖。
 
 ## 4. 对话调用模式
 
@@ -132,7 +161,7 @@ Flux<String> chunks = streamingModel.stream(prompt)
 
 ## 5. 结构化输出
 
-需要驱动前端卡片、报表或后续服务时，优先让模型输出 DTO，而不是解析自由文本。Spring AI 1.1.x 支持 Bean/Map/List 输出转换器及部分模型的原生 JSON Schema：
+需要驱动前端卡片、报表或后续服务时，优先让模型输出 DTO，而不是解析自由文本。Spring AI 2.0 提供 Bean/Map/List 输出转换器；模型支持时优先使用原生 JSON Schema/Structured Output，模型不支持时再使用 converter 的格式指令：
 
 ```java
 record ProductSummary(String title, BigDecimal price, List<String> reasons) {}
@@ -159,15 +188,21 @@ ProductSummary result = chatClient.prompt()
 ```java
 public class CpsTools {
     @Tool(description = "按关键词搜索商品，仅返回运营分析快照，不生成推广链接")
-    public GoodsSearchResult search(@ToolParam(description = "搜索关键词") String keyword) {
+    public GoodsSearchResult search(@ToolParam(description = "搜索关键词", required = true) String keyword) {
         return goodsService.search(keyword);
     }
 }
 ```
 
-通过 `ToolCallbacks.from(new CpsTools())` 转为 `ToolCallback`，按会话/角色动态装配。`defaultTools` 会作用于同一个 Builder 创建的所有请求；涉及权限或写操作的工具不要设为默认工具。
+通过 `ToolCallbacks.from(new CpsTools())` 转为 `ToolCallback`，按会话/角色动态装配。2.0 推荐 `ToolCallback`/`ToolCallbacks`，不要新增旧的 `FunctionCallback` API。`defaultToolCallbacks` 会作用于同一个 Builder 创建的所有请求；涉及权限或写操作的工具不要设为默认工具。工具定义的 description、输入 JSON Schema、返回值和异常语义都是模型决策所需的契约，必须稳定、清晰、可测试。
 
-### 6.2 安全与上下文
+### 6.2 工具调用循环与 Advisor
+
+Spring AI 2.0 将工具调用循环提升为 `ChatClient` Advisor 链中的一等组件，默认由 `ToolCallingAdvisor` 统一驱动；不要在每个供应商适配器中重复实现循环。需要自定义停止条件、逐轮审批、人工确认或细粒度观测时，使用 `AdvisorParams.toolCallingAdvisorAutoRegister(false)`，再通过 `ToolCallingManager` 显式执行循环。
+
+顾问链是栈式执行：`getOrder()` 数值越小越先处理请求、越后处理响应；相同 order 不保证顺序。构建时使用 `defaultAdvisors()` 注册稳定顾问，调用时仅传入会话 ID、租户过滤器等请求级参数。记忆顾问、RAG 顾问和工具顾问的顺序必须写在测试中，避免上下文和工具结果错位。
+
+### 6.3 安全与上下文
 
 本项目在 `AiUtils` 中使用工具上下文键：`LOGIN_USER_ID`、`TENANT_ID`、`CONVERSATION_ID`、`MCP_CLIENT_NAME`、`ALLOW_MUTATION`、`TRACE_ID` 等。工具必须从可信上下文取得会员/租户身份，不能信任模型生成的 `memberId`、`userId` 或租户字段。
 
@@ -201,6 +236,8 @@ spring:
         sse-message-endpoint: /mcp/message
 ```
 
+Spring AI 2.0 的 MCP 传输实现已从 MCP Java SDK 移入 Spring AI，传输依赖坐标使用 `org.springframework.ai:mcp-spring-webmvc`/`mcp-spring-webflux`；自动配置场景优先使用 `spring-ai-starter-mcp-server-webmvc`。直接导入传输类时，包名也应从 `io.modelcontextprotocol.*.transport` 迁移到 `org.springframework.ai.mcp.*.transport`。MCP Java SDK 需使用 1.0.x 发行线（2.0 文档要求 1.0.0 RC1 或更高）。
+
 新增 CPS 工具时同步：
 
 1. 工具实现和 `CpsMcpToolConfiguration` 注册；
@@ -211,9 +248,11 @@ spring:
 
 ### 7.2 MCP Client
 
-外部 MCP 连接按名称配置，建议按需初始化。单个外部服务不可用时不应阻断应用启动；连接、`listTools` 和调用都要设置超时、重试及降级。跨系统调用必须携带并验证 `X-App-Id`、`X-Tenant-Id`、`X-Timestamp`、`X-Nonce`、`X-Signature`、`X-Idempotency-Key` 等共享请求头。
+外部 MCP 连接统一通过管理后台的 MCP 管理页登记，数据库是运行时连接、启停状态、工具目录和授权策略的唯一来源；不得再向 `application*.yaml` 或 Java 配置类添加静态外部客户端。管理页保存后可先测试连接、同步工具并审核风险，再启用服务。密钥字段只保存 `env:` 引用，真实密钥必须来自部署环境或密钥管理系统，接口和页面不得回显明文。
 
-MCP 工具回调进入 ChatModel 前，使用 `AiChatToolCallbackService` 做角色授权和身份包装；不要把所有外部 MCP 工具全局暴露给每个会话。
+客户端按服务编码按需初始化。单个外部服务不可用时不应阻断应用启动；连接、`listTools` 和调用都要设置超时、重试及降级。跨系统调用必须携带并验证 `X-App-Id`、`X-Tenant-Id`、`X-Timestamp`、`X-Nonce`、`X-Signature`、`X-Idempotency-Key` 等共享请求头。`spring.ai.mcp.server` 仍用于本应用 `/mcp/cps` 服务端，不属于外部客户端管理范围。
+
+MCP 工具回调进入 ChatModel 前，使用 `AiChatToolCallbackService` 做角色授权和身份包装；不要把所有外部 MCP 工具全局暴露给每个会话。MCP 2.0 注解能力（如 `@McpTool`、`@McpResource`、`@McpPrompt`）只在确认 starter、扫描范围和传输协议后使用，并为每个暴露能力保留权限、审计和稳定错误码。
 
 ## 8. RAG 与向量存储
 
@@ -227,10 +266,11 @@ List<Document> docs = List.of(new Document(content,
 vectorStore.add(docs);
 List<Document> hits = vectorStore.similaritySearch(
         SearchRequest.builder().query(question).topK(5)
-                .filterExpression("tenantId == '" + tenantId + "'").build());
+                .filterExpression(new FilterExpressionBuilder()
+                        .eq("tenantId", tenantId.toString()).build()).build());
 ```
 
-过滤表达式必须使用安全的参数化/白名单构造，不能直接拼接用户输入。当前实现将部分 metadata 转为字符串以兼容 Qdrant；新增字段时同步检查各 VectorStore 的类型支持。
+过滤表达式必须使用 `FilterExpressionBuilder`、白名单字段和可信上下文构造，不能直接拼接用户输入。当前实现将部分 metadata 转为字符串以兼容 Qdrant；新增字段时同步检查各 VectorStore 的类型支持。租户过滤器必须在检索器构造或每次查询上下文中强制注入，不能由模型生成。
 
 ### 8.2 Advisor 方式
 
@@ -248,7 +288,7 @@ ChatResponse response = chatClient.prompt()
 
 ## 9. 记忆与顾问
 
-Advisor 适合封装可复用的生成式模式，例如会话记忆、RAG、日志和上下文增强。顾问有顺序和优先级：先确定会话标识，再加载记忆/检索上下文，最后执行工具和模型调用。每个顾问都要说明输入、输出、失败行为和 token 成本。
+Advisor 适合封装可复用的生成式模式，例如会话记忆、RAG、日志和上下文增强。顾问有顺序和优先级：先确定会话标识，再加载记忆/检索上下文，最后执行工具和模型调用。每个顾问都要说明输入、输出、失败行为和 token 成本。2.0 的 `MessageWindowChatMemory` 默认维护有限消息窗口；生产实现必须明确窗口大小、摘要策略和持久化仓库，不得把无限历史发送给模型。
 
 不要把无限历史全部发送给模型；按 token 预算截断或摘要，保留最近消息和关键事实。跨请求共享的记忆必须使用 `conversationId + tenantId + userId` 作为隔离键。
 
@@ -278,13 +318,27 @@ Spring AI 可对 `ChatClient`（含 Advisor）、`ChatModel`、`EmbeddingModel`�
 
 1. 明确 AI 功能的输入、输出 DTO、模型能力、是否需要工具/RAG/流式，以及失败和降级策略。
 2. 复用 `AiModelFactory`、`AiUtils`、`AiChatToolCallbackService` 和现有会话/知识库服务，先写最小失败测试。
-3. 选择 `ChatClient`（默认）或直接 `ChatModel + Prompt`（需要底层控制时），将供应商差异隔离在 options/factory 层。
-4. 工具按最小权限动态装配，建立风险登记、身份上下文、幂等与审计；高风险动作必须显式确认。
-5. 对结构化输出、RAG 引用、流式状态和 MCP 错误增加契约测试。
-6. 运行针对模块的 Maven 测试，再执行编译、静态检查和必要的端到端验证；记录模型/依赖版本。
-7. 更新配置说明、SQL（如有）、MCP instructions 和相关业务文档，检查是否泄露密钥或跨租户数据。
+3. 选择 `ChatClient`（默认）或直接 `ChatModel + Prompt`（需要底层控制时），将供应商差异隔离在 options/factory 层；不要在业务 Controller 中实例化模型。
+4. 设计 Advisor 链顺序：记忆、租户/RAG、工具调用、结构化校验和日志，并为每个 order 写测试。
+5. 工具按最小权限动态装配，建立风险登记、身份上下文、幂等与审计；高风险动作必须显式确认。工具多于少量时评估 `ToolSearchToolCallingAdvisor` 的渐进式暴露，避免把完整工具集塞进每次请求。
+6. 对结构化输出优先使用原生 schema；对失败结果做 Bean Validation 和有限次修正/重试，不能把修正循环变成无限调用。
+7. 对 RAG 引用、租户过滤、流式状态、MCP 错误和工具调用次数增加契约测试；使用 `RelevancyEvaluator`/`FactCheckingEvaluator` 或固定评估集验证生成质量。
+8. 运行针对模块的 Maven 测试、`mvn -pl qiji-module-ai -am compile` 和必要的静态检查；记录 Spring Boot、Spring AI、MCP SDK、模型和向量库版本。
+9. 更新配置说明、SQL（如有）、MCP instructions 和相关业务文档，检查是否泄露密钥或跨租户数据。
 
-## 13. 常见反模式
+## 13. 提交前检查清单
+
+- [ ] 已核对 `backend/qiji-module-ai/pom.xml` 与官方 2.0.1 文档，没有把 M3/1.x 示例直接复制到生产代码。
+- [ ] 新增依赖使用 BOM/项目属性管理，没有引入重复版本或未经评估的社区 starter。
+- [ ] `ChatClient`、`ChatModel`、options 和 Advisor 的职责边界清晰；共享对象没有被请求线程修改。
+- [ ] 工具使用 `ToolCallback`/`@Tool`，描述和 JSON Schema 稳定；工具从可信上下文取得用户、租户和幂等信息。
+- [ ] 工具调用循环有最大轮数、超时、取消和异常策略；高风险动作不自动执行。
+- [ ] RAG 有租户/知识库过滤、来源标识和“无证据不回答”策略。
+- [ ] 结构化输出有 schema、业务校验和有限修正；失败可诊断且不会静默落库。
+- [ ] prompt/completion、工具参数和向量结果默认不进入日志/trace；敏感观测只允许受控脱敏采样。
+- [ ] 已执行模块测试、编译和必要的契约/E2E 验证，并记录外部模型调用未覆盖的风险。
+
+## 14. 常见反模式
 
 - 在 Controller 中直接 `new OpenAiChatModel` 或硬编码 API Key；
 - 把用户输入、模型输出直接拼入 SQL、URL、命令或身份字段；
@@ -294,14 +348,21 @@ Spring AI 可对 `ChatClient`（含 Advisor）、`ChatModel`、`EmbeddingModel`�
 - RAG 不带 tenant/knowledge 过滤，或把检索结果当作结算事实；
 - 无限重试、无限历史和无限 token，导致费用失控；
 - 在日志中打印完整 prompt、响应、Authorization 或 MCP 签名。
+- 把 2.0.0-M3 页面中“开发中”或旧 Boot 版本示例当成 2.0.1 的稳定 API。
+- 在 `ChatClient` 外部手写供应商专属工具循环，导致 Advisor、观测和记忆链路失去统一治理。
+- 把工具调用参数/结果无条件作为 trace span 属性，造成个人信息和业务数据泄露。
 
-## 14. 参考资料
+## 15. 参考资料
 
-- [Spring AI 1.1.3 中文文档首页](https://www.spring-doc.cn/spring-ai/1.1.3/index.html)
-- [Chat Client API](https://www.spring-doc.cn/spring-ai/1.1.3/api_chatclient.html)
-- [Tool Calling](https://www.spring-doc.cn/spring-ai/1.1.3/api_tools.html)
-- [Retrieval Augmented Generation](https://www.spring-doc.cn/spring-ai/1.1.3/api_retrieval-augmented-generation.html)
-- [Vector Databases](https://www.spring-doc.cn/spring-ai/1.1.3/api_vectordbs.html)
-- [MCP Overview](https://www.spring-doc.cn/spring-ai/1.1.3/api_mcp_mcp-overview.html)
-- [Observability](https://www.spring-doc.cn/spring-ai/1.1.3/observability_index.html)
-- [Model Evaluation](https://www.spring-doc.cn/spring-ai/1.1.3/api_testing.html)
+- [Spring AI 2.0.1 官方文档](https://docs.spring.io/spring-ai/reference/)
+- [Spring AI 2.0.1 Getting Started](https://docs.spring.io/spring-ai/reference/getting-started.html)
+- [ChatClient API](https://docs.spring.io/spring-ai/reference/api/chatclient.html)
+- [Advisors API](https://docs.spring.io/spring-ai/reference/api/advisors.html)
+- [Tool Calling](https://docs.spring.io/spring-ai/reference/api/tools.html)
+- [RAG](https://docs.spring.io/spring-ai/reference/api/retrieval-augmented-generation.html)
+- [Structured Output](https://docs.spring.io/spring-ai/reference/api/structured-output/converters.html)
+- [MCP Overview](https://docs.spring.io/spring-ai/reference/api/mcp/mcp-overview.html)
+- [Observability](https://docs.spring.io/spring-ai/reference/observability/index.html)
+- [Model Evaluation](https://docs.spring.io/spring-ai/reference/api/testing.html)
+- [Spring AI 2.0.0-M3 中文文档](https://spring-ai.spring-doc.cn/docs/2.0.0-M3/index.html)
+- [腾讯云：Spring AI 2.0 正式发布：Java 程序员必须关注的 8 个升级清单](https://cloud.tencent.com/developer/article/2697474)

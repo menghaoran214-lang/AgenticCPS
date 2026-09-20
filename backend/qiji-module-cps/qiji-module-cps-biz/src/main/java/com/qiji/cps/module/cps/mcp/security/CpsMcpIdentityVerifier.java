@@ -84,8 +84,7 @@ public class CpsMcpIdentityVerifier {
     }
 
     private QijiAiProperties.McpSelfTest requiredSelfTest() {
-        if (properties == null || properties.getMcp() == null || properties.getMcp().getSelfTest() == null
-                || !properties.getMcp().getSelfTest().isEnabled()) {
+        if (properties == null || properties.getMcp() == null || properties.getMcp().getSelfTest() == null) {
             throw denied();
         }
         return properties.getMcp().getSelfTest();

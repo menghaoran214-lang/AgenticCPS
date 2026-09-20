@@ -743,6 +743,36 @@ const remainingRouter: AppRouteRecordRaw[] = [
           title: '设计 AI 工作流',
           activeMenu: '/ai/console/workflow'
         }
+      },
+      {
+        path: 'mcp',
+        component: () => import('@/views/ai/mcp/index.vue'),
+        name: 'AiMcpCenter',
+        meta: {
+          title: 'MCP 管理',
+          icon: 'ep:connection',
+          noCache: false
+        }
+      },
+      {
+        path: 'skill',
+        component: () => import('@/views/ai/skill/index.vue'),
+        name: 'AiSkillCenter',
+        meta: {
+          title: 'Skills 管理',
+          icon: 'ep:magic-stick',
+          noCache: false
+        }
+      },
+      {
+        path: 'role-preset',
+        component: () => import('@/views/ai/rolePreset/index.vue'),
+        name: 'AiRolePreset',
+        meta: {
+          title: '角色中心',
+          icon: 'ep:user-filled',
+          noCache: false
+        }
       }
     ]
   },

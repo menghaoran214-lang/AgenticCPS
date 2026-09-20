@@ -1,28 +1,21 @@
 package com.qiji.cps.module.ai.service.chat;
 
 import com.qiji.cps.framework.test.core.ut.BaseMockitoUnitTest;
-import com.qiji.cps.framework.common.mcp.McpIdentityClaims;
-import com.qiji.cps.framework.common.mcp.McpIdentityEnvelope;
 import com.qiji.cps.framework.tenant.core.context.TenantContextHolder;
 import com.qiji.cps.module.ai.dal.dataobject.chat.AiChatConversationDO;
 import com.qiji.cps.module.ai.dal.dataobject.model.AiChatRoleDO;
 import com.qiji.cps.module.ai.dal.dataobject.model.AiToolDO;
 import com.qiji.cps.module.ai.service.model.AiChatRoleService;
 import com.qiji.cps.module.ai.service.model.AiToolService;
-import com.qiji.cps.module.ai.service.mcp.AiMcpIdentitySigner;
-import io.modelcontextprotocol.client.McpSyncClient;
-import io.modelcontextprotocol.spec.McpSchema;
+import com.qiji.cps.module.ai.service.capability.McpRegistryService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.springframework.ai.chat.model.ToolContext;
-import org.springframework.ai.mcp.client.common.autoconfigure.properties.McpClientCommonProperties;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.resolution.ToolCallbackResolver;
-import org.springframework.test.util.ReflectionTestUtils;
 import com.qiji.cps.module.ai.service.chat.tool.AiChatToolAction;
 import com.qiji.cps.module.ai.service.chat.tool.AiChatToolExecutionEvent;
 
@@ -33,12 +26,10 @@ import java.util.ArrayList;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.lenient;
-import static org.mockito.Mockito.times;
 
 class AiChatToolCallbackServiceTest extends BaseMockitoUnitTest {
 
@@ -52,32 +43,21 @@ class AiChatToolCallbackServiceTest extends BaseMockitoUnitTest {
     @Mock
     private ToolCallbackResolver toolCallbackResolver;
     @Mock
-    private McpSyncClient externalMcpClient;
+    private McpRegistryService mcpRegistryService;
+    @Mock
+    private ToolCallback externalCallback;
     @Mock
     private ToolCallback localCallback;
-    @Mock
-    private AiMcpIdentitySigner identitySigner;
-
     @BeforeEach
-    void setUpMcpClient() {
-        McpClientCommonProperties properties = new McpClientCommonProperties();
-        properties.setName("ai-client");
-        ReflectionTestUtils.setField(toolCallbackService, "mcpClients", List.of(externalMcpClient));
-        ReflectionTestUtils.setField(toolCallbackService, "mcpClientCommonProperties", properties);
-        lenient().when(externalMcpClient.getClientInfo()).thenReturn(McpSchema.Implementation.builder("ai-client - external", "1").build());
-        lenient().when(externalMcpClient.getClientCapabilities())
-                .thenReturn(McpSchema.ClientCapabilities.builder().build());
-        lenient().when(externalMcpClient.getServerCapabilities())
-                .thenReturn(McpSchema.ServerCapabilities.builder().tools(false).build());
-        lenient().when(externalMcpClient.listTools()).thenReturn(McpSchema.ListToolsResult.builder(
-                List.of(McpSchema.Tool.builder("external_search", Map.of("type", "object"))
-                        .description("external")
-                        .build()))
-                .build());
-        lenient().when(externalMcpClient.callTool(any())).thenReturn(McpSchema.CallToolResult.builder()
-                .addTextContent("ok")
-                .isError(false)
-                .build());
+    void setUpMcpRegistry() {
+        lenient().when(externalCallback.getToolDefinition()).thenReturn(
+                org.springframework.ai.tool.definition.ToolDefinition.builder()
+                        .name("external_search").description("external").inputSchema("{}").build());
+        lenient().when(localCallback.getToolDefinition()).thenReturn(
+                org.springframework.ai.tool.definition.ToolDefinition.builder()
+                        .name("local_tool").description("local").inputSchema("{}").build());
+        lenient().when(mcpRegistryService.getToolCallbacksByCode("external"))
+                .thenReturn(List.of(externalCallback));
     }
 
     @AfterEach
@@ -86,7 +66,24 @@ class AiChatToolCallbackServiceTest extends BaseMockitoUnitTest {
     }
 
     @Test
-    void getToolCallbacks_mixesLocalCallbacksAndExternalMcpWithoutIdentityMetadata() {
+    void snapshotMustNotInheritToolsAddedToCurrentRole() {
+        when(chatRoleService.getChatRole(10L)).thenReturn(new AiChatRoleDO().setToolIds(List.of(999L)));
+        var conversation = new AiChatConversationDO().setRoleId(10L)
+                .setEffectiveCapabilitySnapshot("{\"toolIds\":null,\"mcpClientNames\":null}");
+        assertTrue(toolCallbackService.getToolCallbacks(conversation).isEmpty());
+        verifyNoInteractions(toolService);
+    }
+
+    @Test
+    void malformedSnapshotMustFailClosed() {
+        when(chatRoleService.getChatRole(10L)).thenReturn(new AiChatRoleDO().setToolIds(List.of(999L)));
+        var conversation = new AiChatConversationDO().setRoleId(10L).setEffectiveCapabilitySnapshot("invalid");
+        assertTrue(toolCallbackService.getToolCallbacks(conversation).isEmpty());
+        verifyNoInteractions(toolService);
+    }
+
+    @Test
+    void getToolCallbacks_mixesLocalCallbacksAndDatabaseManagedMcp() {
         AiChatRoleDO role = new AiChatRoleDO().setToolIds(List.of(1L)).setMcpClientNames(List.of("external"));
         when(chatRoleService.getChatRole(10L)).thenReturn(role);
         when(toolService.getToolList(List.of(1L))).thenReturn(List.of(new AiToolDO().setName("local_tool")));
@@ -97,15 +94,8 @@ class AiChatToolCallbackServiceTest extends BaseMockitoUnitTest {
 
         assertEquals(2, callbacks.size());
         assertSame(localCallback, callbacks.get(0));
-        ToolCallback externalCallback = callbacks.get(1);
-        externalCallback.call("{}", new ToolContext(Map.of(
-                "LOGIN_USER_ID", 42L, "TENANT_ID", 7L, "ACTOR_USER_ID", 42L,
-                "ACTOR_USER_TYPE", "MEMBER", "CONVERSATION_ID", 99L,
-                "CHAT_MODE", "STANDARD", "TRACE_ID", "trace-1")));
-
-        ArgumentCaptor<McpSchema.CallToolRequest> requestCaptor = ArgumentCaptor.forClass(McpSchema.CallToolRequest.class);
-        verify(externalMcpClient).callTool(requestCaptor.capture());
-        assertTrue(requestCaptor.getValue().meta().isEmpty());
+        assertSame(externalCallback, callbacks.get(1));
+        verify(mcpRegistryService).getToolCallbacksByCode("external");
     }
 
     @Test
@@ -114,7 +104,8 @@ class AiChatToolCallbackServiceTest extends BaseMockitoUnitTest {
         when(chatRoleService.getChatRole(10L)).thenReturn(role);
         when(toolService.getToolList(List.of(1L))).thenReturn(List.of(new AiToolDO().setName("local_tool")));
         when(toolCallbackResolver.resolve("local_tool")).thenReturn(localCallback);
-        when(externalMcpClient.listTools()).thenThrow(new IllegalStateException("unavailable"));
+        when(mcpRegistryService.getToolCallbacksByCode("external"))
+                .thenThrow(new IllegalStateException("unavailable"));
 
         List<ToolCallback> callbacks = toolCallbackService.getToolCallbacks(
                 new AiChatConversationDO().setRoleId(10L).setChatMode("STANDARD"));
@@ -123,41 +114,18 @@ class AiChatToolCallbackServiceTest extends BaseMockitoUnitTest {
     }
 
     @Test
-    void getToolCallbacks_selfMcpTestUsesConversationClientAndSendsSignedIdentity() {
+    void getToolCallbacks_selfMcpTestUsesDatabaseManagedConversationServer() {
         AiChatRoleDO role = new AiChatRoleDO().setToolIds(List.of(1L));
         when(chatRoleService.getChatRole(10L)).thenReturn(role);
-        when(identitySigner.sign(any(McpIdentityClaims.class)))
-                .thenReturn(new McpIdentityEnvelope("signed-payload", "signed-signature"));
         AiChatConversationDO conversation = new AiChatConversationDO().setId(99L).setRoleId(10L)
                 .setUserId(5L).setMemberId(42L).setOwnerUserType("ADMIN")
                 .setChatMode("SELF_MCP_TEST").setMcpClientName("external").setAllowMutation(true);
         TenantContextHolder.setTenantId(7L);
-        ToolContext trustedContext = new ToolContext(new AiChatIdentityContextService().buildToolContext(conversation));
-        TenantContextHolder.clear();
-
         List<ToolCallback> callbacks = toolCallbackService.getToolCallbacks(conversation);
 
         assertEquals(1, callbacks.size());
-        callbacks.get(0).call("{\"keyword\":\"test\"}", trustedContext);
-
-        ArgumentCaptor<McpSchema.CallToolRequest> requestCaptor = ArgumentCaptor.forClass(McpSchema.CallToolRequest.class);
-        verify(externalMcpClient).callTool(requestCaptor.capture());
-        McpSchema.CallToolRequest request = requestCaptor.getValue();
-        assertEquals(Boolean.TRUE, request.meta().get("CPS_MCP_SELF_TEST_INVOCATION"));
-        assertEquals(new McpIdentityEnvelope("signed-payload", "signed-signature"),
-                request.meta().get("CPS_MCP_IDENTITY_ENVELOPE"));
-        assertEquals("signed-payload", request.arguments().get("_cps_mcp_identity_payload"));
-        assertEquals("signed-signature", request.arguments().get("_cps_mcp_identity_signature"));
-        assertEquals(Boolean.TRUE, request.arguments().get("_cps_mcp_self_test"));
-        ArgumentCaptor<McpIdentityClaims> claimsCaptor = ArgumentCaptor.forClass(McpIdentityClaims.class);
-        verify(identitySigner, times(2)).sign(claimsCaptor.capture());
-        McpIdentityClaims claims = claimsCaptor.getAllValues().get(0);
-        assertEquals(42L, claims.memberId());
-        assertEquals(7L, claims.tenantId());
-        assertEquals(5L, claims.actorUserId());
-        assertEquals(99L, claims.conversationId());
-        assertEquals("external", claims.clientName());
-        assertEquals(true, claims.allowMutation());
+        assertSame(externalCallback, callbacks.get(0));
+        verify(mcpRegistryService).getToolCallbacksByCode("external");
         verifyNoInteractions(toolService, toolCallbackResolver);
     }
 

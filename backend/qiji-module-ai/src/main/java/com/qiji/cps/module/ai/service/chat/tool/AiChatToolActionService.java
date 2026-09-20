@@ -59,6 +59,12 @@ public class AiChatToolActionService {
     }
 
     private Set<String> getRoleToolNames(AiChatConversationDO conversation) {
+        if (conversation != null && conversation.getEffectiveCapabilitySnapshot() != null) {
+            try {
+                return com.qiji.cps.module.ai.service.capability.AiCapabilitySnapshotService.read(conversation)
+                        .getTools().stream().map(tool -> tool.getName()).collect(Collectors.toSet());
+            } catch (IllegalStateException invalid) { return Collections.emptySet(); }
+        }
         if (conversation == null || conversation.getRoleId() == null) {
             return Collections.emptySet();
         }

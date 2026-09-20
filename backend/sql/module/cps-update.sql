@@ -1862,3 +1862,13 @@ WHERE `deleted` = b'0'
 UPDATE `system_menu`
 SET `visible` = b'0', `updater` = '1', `update_time` = NOW()
 WHERE `id` IN (6249, 6250) AND `deleted` = b'0';
+
+-- 修改时间：2026-09-18 16:49:04
+-- AI capability audit metadata; no request/response body copied.
+ALTER TABLE cps_mcp_access_log
+ ADD COLUMN `role_code` varchar(64) NULL,
+ ADD COLUMN `role_version` int NULL,
+ ADD COLUMN `skill_code` varchar(64) NULL,
+ ADD COLUMN `skill_version` int NULL,
+ ADD COLUMN `policy_result` varchar(32) NULL,
+ ADD COLUMN `reject_reason` varchar(128) NULL;

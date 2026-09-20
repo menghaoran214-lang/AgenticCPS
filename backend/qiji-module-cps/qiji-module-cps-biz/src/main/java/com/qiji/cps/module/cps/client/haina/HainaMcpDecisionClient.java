@@ -2,12 +2,11 @@ package com.qiji.cps.module.cps.client.haina;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.qiji.cps.module.ai.service.capability.McpRegistryService;
 import com.qiji.cps.module.cps.client.haina.dto.HainaDecisionEvidence;
 import com.qiji.cps.module.cps.client.haina.dto.HainaDecisionRequest;
-import io.modelcontextprotocol.client.McpSyncClient;
 import io.modelcontextprotocol.spec.McpSchema;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.util.CollectionUtils;
 import org.springframework.util.StringUtils;
@@ -24,54 +23,33 @@ import java.util.Map;
 public class HainaMcpDecisionClient implements HainaDecisionClient {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static final String SERVER_CODE = "haina";
 
     private final HainaDecisionProperties properties;
+    private final McpRegistryService mcpRegistryService;
 
-    @Autowired(required = false)
-    private List<McpSyncClient> mcpClients;
-
-    public HainaMcpDecisionClient(HainaDecisionProperties properties) {
+    public HainaMcpDecisionClient(HainaDecisionProperties properties, McpRegistryService mcpRegistryService) {
         this.properties = properties;
+        this.mcpRegistryService = mcpRegistryService;
     }
 
     @Override
     public HainaDecisionEvidence collectEvidence(HainaDecisionRequest request) {
-        if (!properties.isEnabled()) {
-            return HainaDecisionEvidence.unavailable("海纳 MCP 未启用");
-        }
-        McpSyncClient client = findClient();
-        if (client == null) {
-            return HainaDecisionEvidence.unavailable("未找到海纳 MCP Client");
-        }
         try {
             String keyword = buildKeyword(request);
             return HainaDecisionEvidence.builder()
                     .available(true)
-                    .graphEvidence(parseGraphEvidence(callTool(client, "content_graph_search", Map.of(
+                    .graphEvidence(parseGraphEvidence(callTool("content_graph_search", Map.of(
                             "query", keyword,
                             "categories", "电脑数码"
                     ))))
-                    .discounts(parseDiscountEvidence(callTool(client, "discount_search", buildDiscountArgs(keyword, request))))
-                    .products(parseProductEvidence(callTool(client, "product_search_pro", buildProductArgs(keyword, request))))
+                    .discounts(parseDiscountEvidence(callTool("discount_search", buildDiscountArgs(keyword, request))))
+                    .products(parseProductEvidence(callTool("product_search_pro", buildProductArgs(keyword, request))))
                     .build();
         } catch (Exception e) {
             log.warn("[HainaMcpDecisionClient] 海纳 MCP 调用失败: {}", e.getMessage());
             return HainaDecisionEvidence.unavailable("海纳 MCP 暂不可用，已使用 CPS 自有商品数据生成建议");
         }
-    }
-
-    private McpSyncClient findClient() {
-        if (CollectionUtils.isEmpty(mcpClients)) {
-            return null;
-        }
-        for (McpSyncClient client : mcpClients) {
-            String name = client.getClientInfo() == null ? null : client.getClientInfo().name();
-            if (!StringUtils.hasText(properties.getClientName())
-                    || (StringUtils.hasText(name) && name.toLowerCase().contains(properties.getClientName().toLowerCase()))) {
-                return client;
-            }
-        }
-        return null;
     }
 
     private Map<String, Object> buildDiscountArgs(String keyword, HainaDecisionRequest request) {
@@ -115,8 +93,8 @@ public class HainaMcpDecisionClient implements HainaDecisionClient {
         return builder.toString().trim();
     }
 
-    private String callTool(McpSyncClient client, String toolName, Map<String, Object> args) {
-        McpSchema.CallToolResult result = client.callTool(new McpSchema.CallToolRequest(toolName, args));
+    private String callTool(String toolName, Map<String, Object> args) {
+        McpSchema.CallToolResult result = mcpRegistryService.callToolByCode(SERVER_CODE, toolName, args);
         if (Boolean.TRUE.equals(result.isError())) {
             throw new IllegalStateException("haina tool error: " + toolName);
         }

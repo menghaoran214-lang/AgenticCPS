@@ -81,12 +81,7 @@ class AiMcpIdentitySignerTest {
     private static QijiAiProperties properties(String clientName, String secret) {
         QijiAiProperties properties = new QijiAiProperties();
         QijiAiProperties.McpSelfTest selfTest = new QijiAiProperties.McpSelfTest();
-        selfTest.setEnabled(true);
         selfTest.setClientName(clientName);
-        selfTest.setBaseUrl("http://127.0.0.1:48080");
-        selfTest.setEndpoint("/mcp/cps");
-        selfTest.setConnectTimeout(Duration.ofSeconds(3));
-        selfTest.setReadTimeout(Duration.ofSeconds(10));
         selfTest.setTtl(Duration.ofSeconds(60));
         selfTest.setSecret(secret);
         properties.getMcp().setSelfTest(selfTest);

@@ -89,6 +89,7 @@ export type ChatTaskStatus =
   | 'PENDING'
   | 'RUNNING'
   | 'PARTIAL_SUCCESS'
+  | 'WAITING_CONFIRMATION'
   | 'SUCCEEDED'
   | 'FAILED'
   | 'CANCELLED'
@@ -171,6 +172,7 @@ export type ChatStreamEventType =
   | 'TOOL_STARTED'
   | 'TOOL_SUCCEEDED'
   | 'TOOL_FAILED'
+  | 'TOOL_CONFIRM_REQUIRED'
 
 export interface ToolExecutionVO {
   executionId: string

@@ -21,6 +21,8 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 import static com.qiji.cps.framework.common.pojo.CommonResult.success;
 import static com.qiji.cps.framework.security.core.util.SecurityFrameworkUtils.getLoginUserId;
@@ -54,11 +56,15 @@ public class AiChatRoleController {
         return success(BeanUtils.toBean(chatRole, AiChatRoleRespVO.class));
     }
 
+    @com.qiji.cps.framework.apilog.core.annotation.ApiAccessLog(requestEnable = false, responseEnable = false)
+
     @PostMapping("/create-my")
     @Operation(summary = "创建【我的】聊天角色")
     public CommonResult<Long> createChatRoleMy(@Valid @RequestBody AiChatRoleSaveMyReqVO createReqVO) {
         return success(chatRoleService.createChatRoleMy(createReqVO, getLoginUserId()));
     }
+
+    @com.qiji.cps.framework.apilog.core.annotation.ApiAccessLog(requestEnable = false, responseEnable = false)
 
     @PutMapping("/update-my")
     @Operation(summary = "更新【我的】聊天角色")
@@ -81,7 +87,44 @@ public class AiChatRoleController {
         return success(chatRoleService.getChatRoleCategoryList());
     }
 
+    @GetMapping("/preset-list")
+    @Operation(summary = "获得已发布的角色预设")
+    public CommonResult<List<AiChatRoleRespVO>> getPresetList() {
+        return success(BeanUtils.toBean(chatRoleService.getPresetList(), AiChatRoleRespVO.class));
+    }
+
+    @GetMapping("/capability-summary")
+    @Operation(summary = "获得角色有效能力摘要")
+    public CommonResult<Map<String, Object>> getCapabilitySummary(@RequestParam("roleId") Long roleId) {
+        AiChatRoleDO role = chatRoleService.validateChatRole(roleId);
+        if (!Boolean.TRUE.equals(role.getPublicStatus())
+                && !java.util.Objects.equals(role.getUserId(), getLoginUserId())) {
+            throw new IllegalArgumentException("角色不存在或无权使用");
+        }
+        Map<String, Object> summary = new LinkedHashMap<>();
+        summary.put("roleId", role.getId());
+        summary.put("presetCode", role.getPresetCode());
+        summary.put("version", role.getVersion());
+        summary.put("skillIds", role.getSkillIds());
+        summary.put("toolIds", role.getToolIds());
+        summary.put("mcpClientNames", role.getMcpClientNames());
+        summary.put("riskLevel", role.getRiskLevel());
+        summary.put("allowMutation", role.getAllowMutation());
+        return success(summary);
+    }
+
     // ========== 角色管理 ==========
+
+    @GetMapping("/version/list")
+    @Operation(summary = "查询角色版本历史")
+    @PreAuthorize("@ss.hasPermission('ai:chat-role:query')")
+    public CommonResult<List<com.qiji.cps.module.ai.controller.admin.model.vo.chatRole.AiChatRoleVersionRespVO>> versionHistory(
+            @RequestParam Long roleId) {
+        return success(BeanUtils.toBean(chatRoleService.getVersionHistory(roleId, getLoginUserId()),
+                com.qiji.cps.module.ai.controller.admin.model.vo.chatRole.AiChatRoleVersionRespVO.class));
+    }
+
+    @com.qiji.cps.framework.apilog.core.annotation.ApiAccessLog(requestEnable = false, responseEnable = false)
 
     @PostMapping("/create")
     @Operation(summary = "创建聊天角色")
@@ -89,6 +132,8 @@ public class AiChatRoleController {
     public CommonResult<Long> createChatRole(@Valid @RequestBody AiChatRoleSaveReqVO createReqVO) {
         return success(chatRoleService.createChatRole(createReqVO));
     }
+
+    @com.qiji.cps.framework.apilog.core.annotation.ApiAccessLog(requestEnable = false, responseEnable = false)
 
     @PutMapping("/update")
     @Operation(summary = "更新聊天角色")

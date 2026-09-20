@@ -10,6 +10,9 @@ public class AiChatConversationCreateMyReqVO {
     @Schema(description = "聊天角色编号", example = "666")
     private Long roleId;
 
+    @Schema(description = "来源会话编号；仅建立来源关系，不复制身份和能力授权")
+    private Long sourceConversationId;
+
     @Schema(description = "知识库编号", example = "1204")
     private Long knowledgeId;
 

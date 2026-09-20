@@ -539,6 +539,8 @@ const formatElapsed = (elapsedMs?: number) => {
 }
 const taskStatusText = computed(() => {
   const status = props.taskProgress?.status
+  if (status === 'WAITING_CONFIRMATION') return '等待用户确认'
+  if (status === 'PARTIAL_SUCCESS') return '已处理，请核对结果'
   if (status === 'SUCCEEDED') return '分析完成'
   if (status === 'FAILED') return '分析失败'
   if (status === 'CANCELLED') return '已停止'

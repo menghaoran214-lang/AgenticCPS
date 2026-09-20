@@ -148,4 +148,11 @@ public interface AiChatRoleService {
      */
     List<AiChatRoleDO> getChatRoleListByName(String name);
 
+    /**
+     * 获得已发布的系统角色预设。
+     */
+    List<AiChatRoleDO> getPresetList();
+
+    List<com.qiji.cps.module.ai.dal.dataobject.model.AiChatRoleVersionDO> getVersionHistory(Long roleId, Long userId);
+
 }

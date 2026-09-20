@@ -134,7 +134,6 @@ class CpsMcpAuthorizationServiceTest {
 
     private static CpsMcpAuthorizationService service() {
         QijiAiProperties properties = new QijiAiProperties();
-        properties.getMcp().getSelfTest().setEnabled(true);
         properties.getMcp().getSelfTest().setClientName("self-mcp");
         properties.getMcp().getSelfTest().setSecret(SECRET);
         CpsMcpIdentityVerifier verifier = new CpsMcpIdentityVerifier(properties, new InMemoryNonceStore(),

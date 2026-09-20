@@ -20,6 +20,10 @@ import com.qiji.cps.module.ai.dal.mysql.chat.AiChatConversationMapper;
 import com.qiji.cps.module.ai.service.knowledge.AiKnowledgeService;
 import com.qiji.cps.module.ai.service.model.AiModelService;
 import com.qiji.cps.module.ai.service.model.AiChatRoleService;
+import com.qiji.cps.module.ai.service.capability.AiSkillService;
+import com.qiji.cps.module.ai.dal.dataobject.capability.AiSkillDO;
+import com.qiji.cps.module.ai.dal.dataobject.capability.AiSkillVersionDO;
+import com.qiji.cps.framework.common.util.json.JsonUtils;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -27,6 +31,8 @@ import org.springframework.validation.annotation.Validated;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Objects;
 
 import static com.qiji.cps.framework.common.exception.util.ServiceExceptionUtil.exception;
@@ -52,6 +58,8 @@ public class AiChatConversationServiceImpl implements AiChatConversationService 
     @Resource
     private AiChatRoleService chatRoleService;
     @Resource
+    private com.qiji.cps.module.ai.service.capability.AiCapabilitySnapshotService capabilitySnapshotService;
+    @Resource
     private AiKnowledgeService knowledgeService;
     @Resource
     private MemberUserApi memberUserApi;
@@ -76,6 +84,8 @@ public class AiChatConversationServiceImpl implements AiChatConversationService 
                     .findFirst().map(AiChatRoleDO::getId).orElseThrow(() -> new IllegalStateException("CPS 联盟助手未配置"));
         }
         AiChatRoleDO role = chatRoleService.validateChatRole(roleId);
+        if (Boolean.FALSE.equals(role.getPublicStatus()) && !Objects.equals(role.getUserId(),adminUserId))
+            throw new IllegalArgumentException("角色不存在或无权使用");
         AiModelDO model = role.getModelId() != null ? modalService.validateModel(role.getModelId())
                 : modalService.getRequiredDefaultModel(AiModelTypeEnum.CHAT.getType());
         validateChatModel(model);
@@ -86,12 +96,16 @@ public class AiChatConversationServiceImpl implements AiChatConversationService 
                 .setRoleId(role.getId()).setTitle(role.getName()).setSystemMessage(role.getSystemMessage())
                 .setModelId(model.getId()).setModel(model.getModel()).setTemperature(model.getTemperature())
                 .setMaxTokens(model.getMaxTokens()).setMaxContexts(model.getMaxContexts());
+        applyCapabilitySnapshot(conversation, role);
         chatConversationMapper.insert(conversation);
         return conversation.getId();
     }
 
     private Long createConversation(AiChatConversationCreateMyReqVO createReqVO, Long ownerId,
                                     AiChatOwnerTypeEnum ownerType, Long memberId) {
+        if (createReqVO.getSourceConversationId() != null) {
+            getOwnedConversation(createReqVO.getSourceConversationId(), ownerType.name(), ownerId);
+        }
         // 1.1 获得 AiChatRoleDO 聊天角色
         AiChatRoleDO role = null;
         if (createReqVO.getRoleId() != null) {
@@ -100,6 +114,10 @@ public class AiChatConversationServiceImpl implements AiChatConversationService 
                     : chatRoleService.validateChatRole(createReqVO.getRoleId());
         } else if (ownerType == AiChatOwnerTypeEnum.MEMBER) {
             role = chatRoleService.getDefaultMemberChatRole();
+        }
+        if (role != null && Boolean.FALSE.equals(role.getPublicStatus())
+                && !Objects.equals(role.getUserId(), ownerId)) {
+            throw new IllegalArgumentException("角色不存在或无权使用");
         }
         // 1.2 获得 AiModelDO 聊天模型
         AiModelDO model = role != null && role.getModelId() != null ? modalService.validateModel(role.getModelId())
@@ -114,17 +132,23 @@ public class AiChatConversationServiceImpl implements AiChatConversationService 
 
         // 2. 创建 AiChatConversationDO 聊天对话
         AiChatConversationDO conversation = new AiChatConversationDO().setUserId(ownerId)
+                .setSourceConversationId(createReqVO.getSourceConversationId())
                 .setOwnerUserType(ownerType.name()).setMemberId(memberId)
                 .setChatMode(AiChatModeEnum.STANDARD.name()).setAllowMutation(false).setPinned(false)
                 .setModelId(model.getId()).setModel(model.getModel())
                 .setTemperature(model.getTemperature()).setMaxTokens(model.getMaxTokens()).setMaxContexts(model.getMaxContexts());
         if (role != null) {
             conversation.setTitle(role.getName()).setRoleId(role.getId()).setSystemMessage(role.getSystemMessage());
+            applyCapabilitySnapshot(conversation, role);
         } else {
             conversation.setTitle(AiChatConversationDO.TITLE_DEFAULT);
         }
         chatConversationMapper.insert(conversation);
         return conversation.getId();
+    }
+
+    private void applyCapabilitySnapshot(AiChatConversationDO conversation, AiChatRoleDO role) {
+        if (capabilitySnapshotService != null) capabilitySnapshotService.capture(conversation, role);
     }
 
     @Override
@@ -136,6 +160,12 @@ public class AiChatConversationServiceImpl implements AiChatConversationService 
     public void updateChatConversation(AiChatConversationUpdateMyReqVO updateReqVO, String ownerUserType, Long ownerId) {
         // 1.1 校验对话是否存在
         AiChatConversationDO conversation = getOwnedConversation(updateReqVO.getId(), ownerUserType, ownerId);
+        if (conversation.getEffectiveCapabilitySnapshot() != null && (
+                (updateReqVO.getModelId() != null && !Objects.equals(updateReqVO.getModelId(),conversation.getModelId()))
+                || (updateReqVO.getSystemMessage() != null && !Objects.equals(updateReqVO.getSystemMessage(),conversation.getSystemMessage()))
+                || updateReqVO.getKnowledgeId() != null)) {
+            throw new IllegalArgumentException("会话模型和能力已固定，请新建会话后调整角色");
+        }
         // 1.2 校验模型是否存在（修改模型的情况）
         AiModelDO model = null;
         if (updateReqVO.getModelId() != null) {
@@ -159,7 +189,7 @@ public class AiChatConversationServiceImpl implements AiChatConversationService 
         if (updateReqVO.getModelId() != null) {
             updateObj.setModelId(updateReqVO.getModelId());
         }
-        if (updateReqVO.getSystemMessage() != null) {
+        if (updateReqVO.getSystemMessage() != null && conversation.getEffectiveCapabilitySnapshot() == null) {
             updateObj.setSystemMessage(updateReqVO.getSystemMessage());
         }
         if (updateReqVO.getTemperature() != null) {
@@ -295,7 +325,8 @@ public class AiChatConversationServiceImpl implements AiChatConversationService 
             conversation.setChatMode(AiChatModeEnum.STANDARD.name());
         }
         if (AiChatOwnerTypeEnum.ADMIN.name().equals(conversation.getOwnerUserType())
-                && AiChatModeEnum.SELF_MCP_TEST.name().equals(conversation.getChatMode())) {
+                && AiChatModeEnum.SELF_MCP_TEST.name().equals(conversation.getChatMode())
+                && conversation.getEffectiveCapabilitySnapshot() == null) {
             conversation.setAllowMutation(true);
         }
         return conversation;

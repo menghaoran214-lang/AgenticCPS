@@ -17,6 +17,11 @@ spring:
       # chat adapter is compiled against pre-GA Spring AI APIs removed in 2.0.1.
       - com.alibaba.cloud.ai.autoconfigure.dashscope.DashScopeChatAutoConfiguration
       - com.alibaba.cloud.ai.autoconfigure.dashscope.DashScopeMultimodalEmbeddingAutoConfiguration
+      # QianFan 1.0.0 targets Spring Boot 3 and references the relocated
+      # RestClientAutoConfiguration; QianFan models are created by AiModelFactoryImpl.
+      - org.springaicommunity.qianfan.autoconfigure.QianFanChatAutoConfiguration
+      - org.springaicommunity.qianfan.autoconfigure.QianFanEmbeddingAutoConfiguration
+      - org.springaicommunity.qianfan.autoconfigure.QianFanImageAutoConfiguration
       # AI 模块会根据知识库配置动态选择 EmbeddingModel 并手动创建 RedisVectorStore，
       # 禁止自动配置在多个 EmbeddingModel 中强行选择默认实现。
       - org.springframework.ai.vectorstore.redis.autoconfigure.RedisVectorStoreAutoConfiguration
@@ -236,29 +241,13 @@ spring:
         sse-endpoint: /sse             # SSE 连接端点
         sse-message-endpoint: /mcp/message  # Streamable HTTP 消息端点
       client:
-        enabled: ${AI_MCP_CLIENT_ENABLED:true}
-        initialized: false             # 各 MCP 按需初始化；单个外部服务不可用时不阻断应用启动
-        toolcallback:
-          # 外部 MCP 的工具列表按需加载，避免启动阶段同步 listTools 阻塞或拖垮应用启动
-          enabled: ${AI_MCP_CLIENT_TOOLCALLBACK_ENABLED:false}
-        name: mcp
-        sse:
-          connections:
-            filesystem:
-              url: http://127.0.0.1:8089
-              sse-endpoint: /sse
-            haina:
-              url: https://sse-gw-openapi.zhidemai.com
-              sse-endpoint: /mcp-servers/ai-mcp/sse
+        enabled: false                 # 外部 MCP 客户端统一由数据库注册中心按租户动态创建
         annotation-scanner:
-          enabled: false # TODO @芋艿：有 bug https://github.com/spring-projects/spring-ai/issues/4917 需要官方修复
+          enabled: false               # 本项目不使用 @Mcp* 客户端回调，避免扫描 Springdoc 可选 Querydsl 类型
 
 qiji:
   cps:
     haina:
-      enabled: ${HAINA_MCP_ENABLED:false}
-      client-name: haina
-      api-key: ${HAINA_MCP_API_KEY:} # 通过环境变量配置；设置凭据后再显式启用 HAINA_MCP_ENABLED
       max-results: 10
   ai:
     gemini: # 谷歌 Gemini
@@ -301,12 +290,7 @@ qiji:
       api-key: ${WEB_SEARCH_API_KEY:}
     mcp:
       self-test:
-        enabled: false
         client-name: ${AI_MCP_SELF_TEST_CLIENT_NAME:}
-        base-url: ${AI_MCP_SELF_TEST_BASE_URL:}
-        endpoint: ${AI_MCP_SELF_TEST_ENDPOINT:/mcp/cps}
-        connect-timeout: ${AI_MCP_SELF_TEST_CONNECT_TIMEOUT:5s}
-        read-timeout: ${AI_MCP_SELF_TEST_READ_TIMEOUT:30s}
         ttl: ${AI_MCP_SELF_TEST_TTL:60s}
         secret: ${AI_MCP_SELF_TEST_SECRET:}
 
@@ -413,5 +397,9 @@ qiji:
   iot:
     message-bus:
       type: redis # 消息总线的类型
+
+ai:
+  capability-center:
+    v2: ${AI_CAPABILITY_CENTER_V2:false}
 
 debug: false

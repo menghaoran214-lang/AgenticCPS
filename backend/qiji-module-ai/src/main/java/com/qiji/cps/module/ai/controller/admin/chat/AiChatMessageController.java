@@ -57,6 +57,7 @@ public class AiChatMessageController {
     private AiKnowledgeDocumentService knowledgeDocumentService;
 
     @Operation(summary = "发送消息（段式）", description = "一次性返回，响应较慢")
+    @com.qiji.cps.framework.apilog.core.annotation.ApiAccessLog(requestEnable = false, responseEnable = false)
     @PostMapping("/send")
     public CommonResult<AiChatMessageSendRespVO> sendMessage(@Valid @RequestBody AiChatMessageSendReqVO sendReqVO) {
         return success(chatMessageService.sendMessage(sendReqVO, getLoginUserId()));

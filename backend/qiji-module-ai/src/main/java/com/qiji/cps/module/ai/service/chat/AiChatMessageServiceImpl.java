@@ -389,15 +389,20 @@ public class AiChatMessageServiceImpl implements AiChatMessageService {
         if (conversation == null || conversation.getRoleId() == null) {
             return Collections.emptyList();
         }
-        AiChatRoleDO role = chatRoleService.getChatRole(conversation.getRoleId());
-        if (role == null || CollUtil.isEmpty(role.getKnowledgeIds())) {
-            return Collections.emptyList();
+        List<Long> knowledgeIds;
+        if (conversation.getEffectiveCapabilitySnapshot() != null) {
+            knowledgeIds = com.qiji.cps.module.ai.service.capability.AiCapabilitySnapshotService
+                    .read(conversation).getKnowledgeIds();
+        } else {
+            AiChatRoleDO role = chatRoleService.getChatRole(conversation.getRoleId());
+            knowledgeIds = role == null ? List.of() : role.getKnowledgeIds();
         }
+        if (CollUtil.isEmpty(knowledgeIds)) return Collections.emptyList();
 
         // Independent vector stores can be queried concurrently. Keep a bounded merged result so
         // attaching an additional knowledge base does not linearly inflate prompt size.
         Long tenantId = TenantContextHolder.getRequiredTenantId();
-        List<CompletableFuture<List<AiKnowledgeSegmentSearchRespBO>>> futures = role.getKnowledgeIds().stream()
+        List<CompletableFuture<List<AiKnowledgeSegmentSearchRespBO>>> futures = knowledgeIds.stream()
                 .map(knowledgeId -> CompletableFuture.supplyAsync(() -> TenantUtils.execute(tenantId,
                         () -> knowledgeSegmentService.searchKnowledgeSegment(new AiKnowledgeSegmentSearchReqBO()
                                 .setKnowledgeId(knowledgeId).setContent(content)))

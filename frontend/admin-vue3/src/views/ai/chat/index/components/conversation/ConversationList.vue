@@ -134,6 +134,7 @@
     <el-drawer v-model="roleRepositoryOpen" title="角色仓库" size="754px">
       <RoleRepository />
     </el-drawer>
+    <RolePresetPicker ref="rolePresetPickerRef" @success="handleMcpTestConversationCreate" />
     <McpTestConversationDialog ref="mcpTestDialogRef" @success="handleMcpTestConversationCreate" />
   </el-aside>
 </template>
@@ -141,6 +142,7 @@
 <script setup lang="ts">
 import { ChatConversationApi, ChatConversationVO } from '@/api/ai/chat/conversation'
 import RoleRepository from '../role/RoleRepository.vue'
+import RolePresetPicker from '../role/RolePresetPicker.vue'
 import { Bottom, Top } from '@element-plus/icons-vue'
 import roleAvatarDefaultImg from '@/assets/ai/gpt.svg'
 import McpTestConversationDialog from '../mcp/McpTestConversationDialog.vue'
@@ -156,6 +158,7 @@ const conversationMap = ref<any>({}) // 对话分组 (置顶、今天、三天�
 const loading = ref<boolean>(false) // 加载中
 const loadingTime = ref<any>() // 加载中定时器
 const mcpTestDialogRef = ref()
+const rolePresetPickerRef = ref<InstanceType<typeof RolePresetPicker>>()
 
 // 定义组件 props
 const props = defineProps({
@@ -174,7 +177,7 @@ const emits = defineEmits([
 ])
 
 /** 搜索对话 */
-const searchConversation = async (e) => {
+const searchConversation = async () => {
   // 恢复数据
   if (!searchName.value.trim().length) {
     conversationMap.value = await getConversationGroupByCreateTime(conversationList.value)
@@ -195,11 +198,7 @@ const handleConversationClick = async (id: string) => {
   })
   // 回调 onConversationClick
   // noinspection JSVoidFunctionReturnValueUsed
-  const success = emits('onConversationClick', filterConversation[0])
-  // 切换对话
-  if (success) {
-    activeConversationId.value = id
-  }
+  emits('onConversationClick', filterConversation[0])
 }
 
 /** 获取对话列表 */
@@ -214,7 +213,7 @@ const getChatConversationList = async () => {
     conversationList.value = await ChatConversationApi.getChatConversationMyList()
     // 1.2 排序
     conversationList.value.sort((a, b) => {
-      return b.createTime - a.createTime
+      return new Date(b.createTime || 0).getTime() - new Date(a.createTime || 0).getTime()
     })
     // 1.3 没有任何对话情况
     if (conversationList.value.length === 0) {
@@ -261,7 +260,7 @@ const getConversationGroupByCreateTime = async (list: ChatConversationVO[]) => {
       continue
     }
     // 计算时间差（单位：毫秒）
-    const diff = now - conversation.createTime
+    const diff = now - new Date(conversation.createTime || 0).getTime()
     // 根据时间间隔判断
     if (diff < oneDay) {
       groupMap['今天'].push(conversation)
@@ -280,16 +279,10 @@ const getConversationGroupByCreateTime = async (list: ChatConversationVO[]) => {
 
 /** 新建对话 */
 const createConversation = async () => {
-  // 1. 新建对话
-  const conversationId = await ChatConversationApi.createChatConversationMy(
-    {} as unknown as ChatConversationVO
-  )
-  // 2. 获取对话内容
-  await getChatConversationList()
-  // 3. 选中对话
-  await handleConversationClick(conversationId)
-  // 4. 回调
-  emits('onConversationCreate')
+  await rolePresetPickerRef.value?.open()
+}
+const createWithAnotherRole = async () => {
+  await rolePresetPickerRef.value?.open(props.activeId || undefined)
 }
 const handleMcpTestConversationCreate = async (conversationId: string) => {
   await getChatConversationList()
@@ -377,12 +370,12 @@ const handleRoleRepository = async () => {
 
 /** 监听选中的对话 */
 const { activeId } = toRefs(props)
-watch(activeId, async (newValue, oldValue) => {
+watch(activeId, async (newValue) => {
   activeConversationId.value = newValue
 })
 
 // 定义 public 方法
-defineExpose({ createConversation })
+defineExpose({ createConversation, createWithAnotherRole })
 
 /** 初始化 */
 onMounted(async () => {

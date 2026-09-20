@@ -12,11 +12,12 @@
           type="textarea"
           v-model="formData.systemMessage"
           :rows="4"
+          :disabled="snapshotLocked"
           placeholder="请输入角色设定"
         />
       </el-form-item>
       <el-form-item label="模型" prop="modelId">
-        <el-select v-model="formData.modelId" placeholder="请选择模型">
+        <el-select v-model="formData.modelId" placeholder="请选择模型" :disabled="snapshotLocked">
           <el-option
             v-for="model in models"
             :key="model.id"
@@ -70,9 +71,10 @@ defineOptions({ name: 'ChatConversationUpdateForm' })
 
 const message = useMessage() // 消息弹窗
 
+const snapshotLocked = ref(false)
 const dialogVisible = ref(false) // 弹窗的是否展示
 const formLoading = ref(false) // 表单的加载中：1）修改时的数据加载；2）提交的按钮禁用
-const formData = ref({
+const formData = ref<Partial<ChatConversationVO>>({
   id: undefined,
   systemMessage: undefined,
   modelId: undefined,
@@ -91,7 +93,7 @@ const formRef = ref() // 表单 Ref
 const models = ref([] as ModelVO[]) // 聊天模型列表
 
 /** 打开弹窗 */
-const open = async (id: number) => {
+const open = async (id: string | number) => {
   dialogVisible.value = true
   resetForm()
   // 修改时，设置数据
@@ -99,12 +101,15 @@ const open = async (id: number) => {
     formLoading.value = true
     try {
       const data = await ChatConversationApi.getChatConversationMy(id)
-      formData.value = Object.keys(formData.value).reduce((obj, key) => {
-        if (data.hasOwnProperty(key)) {
-          obj[key] = data[key]
-        }
-        return obj
-      }, {})
+      snapshotLocked.value = !!data.effectiveCapabilitySnapshot
+      formData.value = {
+        id: data.id,
+        systemMessage: data.systemMessage,
+        modelId: data.modelId,
+        temperature: data.temperature,
+        maxTokens: data.maxTokens,
+        maxContexts: data.maxContexts
+      }
     } finally {
       formLoading.value = false
     }
@@ -123,7 +128,11 @@ const submitForm = async () => {
   formLoading.value = true
   try {
     const data = formData.value as unknown as ChatConversationVO
-    await ChatConversationApi.updateChatConversationMy(data)
+    await ChatConversationApi.updateChatConversationMy({
+      ...data,
+      modelId: snapshotLocked.value ? undefined : data.modelId,
+      systemMessage: snapshotLocked.value ? undefined : data.systemMessage
+    })
     message.success('对话配置已更新')
     dialogVisible.value = false
     // 发送操作成功的事件

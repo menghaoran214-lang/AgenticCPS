@@ -119,7 +119,6 @@ class CpsMcpIdentityVerifierTest {
 
     private static QijiAiProperties properties(String secret) {
         QijiAiProperties properties = new QijiAiProperties();
-        properties.getMcp().getSelfTest().setEnabled(true);
         properties.getMcp().getSelfTest().setClientName("self-mcp");
         properties.getMcp().getSelfTest().setSecret(secret);
         return properties;

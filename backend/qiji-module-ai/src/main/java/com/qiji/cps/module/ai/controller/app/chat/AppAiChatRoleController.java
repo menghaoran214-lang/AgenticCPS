@@ -30,4 +30,5 @@ public class AppAiChatRoleController {
         List<AiChatRoleDO> roles = chatRoleService.getMemberEnabledChatRoleList();
         return success(BeanUtils.toBean(roles, AppAiChatRoleSimpleRespVO.class));
     }
+
 }
