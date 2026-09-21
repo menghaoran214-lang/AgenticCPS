@@ -56,7 +56,7 @@
           <el-option v-for="item in toolList" :key="item.id" :label="item.name" :value="item.id!" />
         </el-select>
       </el-form-item>
-      <el-form-item label="引用 MCP" prop="toolIds">
+      <el-form-item label="引用 MCP" prop="mcpClientNames">
         <el-select v-model="formData.mcpClientNames" placeholder="请选择 MCP" clearable multiple>
           <el-option
             v-for="dict in getStrDictOptions(DICT_TYPE.AI_MCP_CLIENT_NAME)"
@@ -89,9 +89,16 @@
             label="系统预设"
             value="PRESET" /></el-select
       ></el-form-item>
-      <el-form-item label="MCP 策略编号" v-if="!isUser"
-        ><el-input-number v-model="formData.mcpPolicyId" :min="1"
-      /></el-form-item>
+      <el-form-item label="MCP 策略" prop="mcpPolicyId" v-if="!isUser">
+        <el-select v-model="formData.mcpPolicyId" placeholder="请选择 MCP 策略" clearable>
+          <el-option
+            v-for="policy in mcpPolicies"
+            :key="policy.id"
+            :label="policy.name || policy.code || `策略 ${policy.id}`"
+            :value="policy.id"
+          />
+        </el-select>
+      </el-form-item>
       <el-form-item label="绑定 Skills" prop="skillIds" v-if="!isUser">
         <el-select v-model="formData.skillIds" placeholder="请选择已发布 Skill" clearable multiple>
           <el-option
@@ -155,6 +162,7 @@ import { AiModelTypeEnum } from '@/views/ai/utils/constants'
 import { KnowledgeApi, KnowledgeVO } from '@/api/ai/knowledge/knowledge'
 import { ToolApi, ToolVO } from '@/api/ai/model/tool'
 import { SkillApi, SkillVO } from '@/api/ai/skill'
+import { McpApi, McpPolicyVO } from '@/api/ai/mcp'
 
 /** AI 聊天角色 表单 */
 defineOptions({ name: 'ChatRoleForm' })
@@ -196,6 +204,7 @@ const models = ref([] as ModelVO[]) // 聊天模型列表
 const knowledgeList = ref([] as KnowledgeVO[]) // 知识库列表
 const toolList = ref([] as ToolVO[]) // 工具列表
 const skillList = ref([] as SkillVO[]) // 已发布 Skill 列表
+const mcpPolicies = ref([] as McpPolicyVO[])
 
 /** 是否【我】自己创建，私有角色 */
 const isUser = computed(() => {
@@ -240,6 +249,8 @@ const open = async (type: string, id?: number, title?: string) => {
     skillList.value = (skillPage.list || []).filter(
       (item: SkillVO) => (item.currentVersion || 0) > 0
     )
+    const policyPage = await McpApi.getPolicyPage({ pageNo: 1, pageSize: 100, status: 0 })
+    mcpPolicies.value = policyPage.list || []
   }
 }
 defineExpose({ open }) // 提供 open 方法，用于打开弹窗

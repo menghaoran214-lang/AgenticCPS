@@ -90,6 +90,7 @@ public class AiChatMessageController {
         List<AiChatMessageRespVO> messageVOList = BeanUtils.toBean(messageList, AiChatMessageRespVO.class);
         for (int i = 0; i < messageList.size(); i++) {
             AiChatMessageDO message = messageList.get(i);
+            messageVOList.get(i).setUsage(toUsage(message));
             if (CollUtil.isEmpty(message.getSegmentIds())) {
                 continue;
             }
@@ -108,6 +109,20 @@ public class AiChatMessageController {
             }));
         }
         return success(messageVOList);
+    }
+
+    private AiChatMessageRespVO.ModelUsage toUsage(AiChatMessageDO message) {
+        if (message.getPromptTokens() == null && message.getCompletionTokens() == null
+                && message.getTotalTokens() == null && message.getCacheReadInputTokens() == null
+                && message.getCacheWriteInputTokens() == null) {
+            return null;
+        }
+        return new AiChatMessageRespVO.ModelUsage()
+                .setPromptTokens(message.getPromptTokens())
+                .setCompletionTokens(message.getCompletionTokens())
+                .setTotalTokens(message.getTotalTokens())
+                .setCacheReadInputTokens(message.getCacheReadInputTokens())
+                .setCacheWriteInputTokens(message.getCacheWriteInputTokens());
     }
 
     @Operation(summary = "删除消息")
@@ -140,8 +155,14 @@ public class AiChatMessageController {
         Map<Long, AiChatRoleDO> roleMap = chatRoleService.getChatRoleMap(
                 convertSet(pageResult.getList(), AiChatMessageDO::getRoleId));
         return success(BeanUtils.toBean(pageResult, AiChatMessageRespVO.class,
-                respVO -> MapUtils.findAndThen(roleMap, respVO.getRoleId(),
-                        role -> respVO.setRoleName(role.getName()))));
+                respVO -> {
+                    MapUtils.findAndThen(roleMap, respVO.getRoleId(),
+                            role -> respVO.setRoleName(role.getName()));
+                    pageResult.getList().stream()
+                            .filter(message -> message.getId().equals(respVO.getId()))
+                            .findFirst()
+                            .ifPresent(message -> respVO.setUsage(toUsage(message)));
+                }));
     }
 
     @Operation(summary = "管理员删除消息")

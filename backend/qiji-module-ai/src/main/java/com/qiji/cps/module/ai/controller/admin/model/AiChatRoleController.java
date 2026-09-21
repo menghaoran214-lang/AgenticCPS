@@ -87,10 +87,30 @@ public class AiChatRoleController {
         return success(chatRoleService.getChatRoleCategoryList());
     }
 
+    @GetMapping("/published-list")
+    @Operation(summary = "获得聊天框可选择的已发布角色")
+    public CommonResult<List<AiChatRoleRespVO>> getPublishedChatRoleList() {
+        return success(BeanUtils.toBean(chatRoleService.getPublishedChatRoleList(), AiChatRoleRespVO.class));
+    }
+
+    /**
+     * @deprecated 使用 {@code /published-list}。
+     */
+    @Deprecated
+    @GetMapping("/list")
+    @Operation(summary = "兼容旧客户端：获得聊天角色列表")
+    public CommonResult<List<AiChatRoleRespVO>> getChatRoleList() {
+        return getPublishedChatRoleList();
+    }
+
+    /**
+     * @deprecated 聊天角色已经统一替代角色预设，客户端应改用 {@code /published-list}。
+     */
+    @Deprecated
     @GetMapping("/preset-list")
-    @Operation(summary = "获得已发布的角色预设")
+    @Operation(summary = "兼容旧客户端：获得聊天角色列表")
     public CommonResult<List<AiChatRoleRespVO>> getPresetList() {
-        return success(BeanUtils.toBean(chatRoleService.getPresetList(), AiChatRoleRespVO.class));
+        return getPublishedChatRoleList();
     }
 
     @GetMapping("/capability-summary")

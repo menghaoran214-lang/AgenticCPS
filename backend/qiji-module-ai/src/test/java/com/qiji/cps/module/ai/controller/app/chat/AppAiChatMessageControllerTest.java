@@ -75,6 +75,25 @@ class AppAiChatMessageControllerTest extends com.qiji.cps.framework.test.core.ut
     }
 
     @Test
+    void synchronousResponsePreservesUsageAndToolSource() {
+        AppAiChatMessageSendReqVO req = new AppAiChatMessageSendReqVO().setConversationId(7L).setContent("hi");
+        AiChatMessageSendRespVO response = new AiChatMessageSendRespVO()
+                .setUsage(new AiChatMessageSendRespVO.ModelUsage().setPromptTokens(12).setTotalTokens(20))
+                .setToolExecution(new AiChatMessageSendRespVO.ToolExecution()
+                        .setSource("MCP").setMcpClientName("cps").setSkillCode("goods-search"));
+        when(messageService.sendMessage(any(), eq("MEMBER"), eq(42L))).thenReturn(response);
+
+        try (MockedStatic<SecurityFrameworkUtils> security = mockStatic(SecurityFrameworkUtils.class)) {
+            security.when(SecurityFrameworkUtils::getLoginUserId).thenReturn(42L);
+            var result = controller.sendMessage(req).getData();
+            assertEquals(12, result.getUsage().getPromptTokens());
+            assertEquals("MCP", result.getToolExecution().getSource());
+            assertEquals("cps", result.getToolExecution().getMcpClientName());
+            assertEquals("goods-search", result.getToolExecution().getSkillCode());
+        }
+    }
+
+    @Test
     void streamPassesThroughToolLifecycleEventsForMemberUi() {
         AppAiChatMessageSendReqVO req = new AppAiChatMessageSendReqVO().setConversationId(7L).setContent("hi");
         AiChatMessageSendRespVO toolEvent = new AiChatMessageSendRespVO().setEventType("TOOL_STARTED");

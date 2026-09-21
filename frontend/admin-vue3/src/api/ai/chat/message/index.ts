@@ -102,6 +102,31 @@ export interface ChatTaskStep {
   message?: string
 }
 
+export interface ChatTokenUsage {
+  promptTokens?: number | null
+  completionTokens?: number | null
+  totalTokens?: number | null
+  cacheReadInputTokens?: number | null
+  cacheWriteInputTokens?: number | null
+}
+
+export interface ChatDebugMessage {
+  role: string
+  content: string
+}
+
+export interface ChatDebugTrace {
+  traceId: string
+  round?: number
+  model?: string
+  status?: string
+  durationMs?: number
+  input?: ChatDebugMessage[]
+  output?: string
+  reasoning?: string
+  usage?: ChatTokenUsage
+}
+
 /**
  * 前端流式任务状态。该字段只存在于当前页面的临时消息，不改变后端消息接口。
  * 用于把工具事件转换成可理解的任务进度，并为失败任务提供重试入口。
@@ -156,6 +181,8 @@ export interface ChatMessageVO {
   userAvatar: string // 用户头像
   blocks?: ChatMessageBlock[] // 允许列表业务工具生成的结构化展示块
   toolExecutions?: ToolExecutionVO[] // 当前回答的工具执行状态（仅当前页面保留）
+  usage?: ChatTokenUsage
+  debugTraces?: ChatDebugTrace[] // 仅调试模式在当前页面保留，服务端不持久化原始提示词
   taskProgress?: ChatTaskProgress // 当前页面的任务进度（仅流式执行期间/结果摘要使用）
   toolIntent?: string // 仅发送时使用的隐藏路由意图
   intentRequestId?: string // 仅发送时使用的幂等请求编号
@@ -173,13 +200,19 @@ export type ChatStreamEventType =
   | 'TOOL_SUCCEEDED'
   | 'TOOL_FAILED'
   | 'TOOL_CONFIRM_REQUIRED'
+  | 'MODEL_TRACE'
 
 export interface ToolExecutionVO {
   executionId: string
+  toolName?: string
   intent: string
   label: string
   status: string
   message: string
+  source?: 'LOCAL' | 'MCP' | 'SELF_MCP' | string
+  mcpClientName?: string
+  skillCode?: string
+  skillVersion?: number
 }
 
 export interface ChatMessageStreamData {
@@ -197,6 +230,8 @@ export interface ChatMessageStreamData {
   send?: ChatMessageVO
   receive?: ChatMessageVO
   toolExecution?: ToolExecutionVO
+  modelTrace?: ChatDebugTrace
+  usage?: ChatTokenUsage
   requestId?: string
 }
 
@@ -217,6 +252,7 @@ export const ChatMessageApi = {
     ctrl,
     enableContext: boolean,
     enableWebSearch: boolean,
+    debugMode: boolean,
     onMessage,
     onError,
     onClose,
@@ -242,6 +278,7 @@ export const ChatMessageApi = {
         content,
         useContext: enableContext,
         useSearch: enableWebSearch,
+        debugMode,
         attachmentUrls: attachmentUrls || [],
         toolIntent,
         intentRequestId

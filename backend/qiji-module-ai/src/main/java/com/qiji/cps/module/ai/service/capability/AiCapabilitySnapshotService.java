@@ -29,10 +29,22 @@ public class AiCapabilitySnapshotService {
 
     @Transactional(readOnly = true)
     public void capture(AiChatConversationDO conversation, AiChatRoleDO role) {
-        if (role == null || "MEMBER".equals(conversation.getOwnerUserType())) return;
+        if (role == null) return;
+        // 会员端保留旧会话语义，直到能力中心开关显式开启。
+        if (!enabled && "MEMBER".equals(conversation.getOwnerUserType())) return;
         if (!enabled) {
             if (role.getSkillIds() != null && !role.getSkillIds().isEmpty())
                 throw new IllegalArgumentException("AI 能力中心尚未启用，请使用兼容角色");
+            return;
+        }
+        // Legacy roles may still select database-managed MCP clients by name. Keep
+        // those roles on the legacy callback path until an explicit policy is set;
+        // a client name alone must never become a v2 whole-server grant.
+        if (hasLegacyMcpClientConfig(role)) {
+            validateLegacyMcpConfig(role);
+            if (!"PUBLISHED".equals(role.getPublishStatus())) {
+                throw new IllegalArgumentException("角色未发布，不能创建新会话");
+            }
             return;
         }
         capturePublished(conversation, role);
@@ -40,6 +52,7 @@ public class AiCapabilitySnapshotService {
 
     @Transactional(readOnly = true)
     public AiCapabilitySnapshot validateRole(AiChatRoleDO role) {
+        validateLegacyMcpConfig(role);
         AiChatConversationDO preview = new AiChatConversationDO();
         capturePublished(preview, role);
         return read(preview);
@@ -174,5 +187,16 @@ public class AiCapabilitySnapshotService {
         Set<Long> result = new LinkedHashSet<>();
         for (String part : normalized.split(",")) if (!part.isBlank()) result.add(Long.valueOf(part.trim()));
         return result;
+    }
+
+    private static boolean hasLegacyMcpClientConfig(AiChatRoleDO role) {
+        return role.getMcpPolicyId() == null && role.getMcpClientNames() != null
+                && role.getMcpClientNames().stream().anyMatch(name -> name != null && !name.isBlank());
+    }
+
+    private static void validateLegacyMcpConfig(AiChatRoleDO role) {
+        if (hasLegacyMcpClientConfig(role) && role.getSkillIds() != null && !role.getSkillIds().isEmpty()) {
+            throw new IllegalArgumentException("绑定 Skill 的角色必须配置 MCP 策略");
+        }
     }
 }

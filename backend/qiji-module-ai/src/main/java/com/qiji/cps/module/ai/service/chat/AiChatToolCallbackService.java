@@ -9,6 +9,8 @@ import com.qiji.cps.module.ai.dal.dataobject.model.AiToolDO;
 import com.qiji.cps.module.ai.service.model.AiChatRoleService;
 import com.qiji.cps.module.ai.service.model.AiToolService;
 import com.qiji.cps.module.ai.service.capability.AiSkillService;
+import com.qiji.cps.module.ai.service.capability.AiCapabilitySnapshot;
+import com.qiji.cps.module.ai.service.capability.AiCapabilitySnapshotService;
 import com.qiji.cps.module.ai.dal.dataobject.capability.AiSkillBindingDO;
 import com.qiji.cps.module.ai.dal.dataobject.capability.AiSkillDO;
 import com.qiji.cps.module.ai.dal.dataobject.capability.AiSkillVersionDO;
@@ -58,9 +60,11 @@ public class AiChatToolCallbackService {
                                                Map<String, AiChatToolAction> actionsByToolName,
                                                AiChatToolExecutionListener listener) {
         if (conversation.getEffectiveCapabilitySnapshot() != null && capabilityRuntime != null) {
+            Map<String, ToolSource> sources = snapshotToolSources(conversation);
             return capabilityRuntime.callbacks(conversation).stream().map(callback -> {
                 AiChatToolAction action = actionsByToolName.get(callback.getToolDefinition().name());
-                return action == null ? callback : new ObservableToolCallback(callback, action, listener);
+                ToolSource source = sources.get(callback.getToolDefinition().name());
+                return action == null ? callback : new ObservableToolCallback(callback, action, source, listener);
             }).toList();
         }
         if (conversation.getRoleId() == null) {
@@ -72,19 +76,42 @@ public class AiChatToolCallbackService {
             return Collections.emptyList();
         }
         List<ToolCallback> toolCallbacks = new ArrayList<>();
+        Map<String, ToolSource> sources = new java.util.HashMap<>();
         if ("SELF_MCP_TEST".equals(conversation.getChatMode())) {
-            addSelfMcpCallbacks(conversation, toolCallbacks);
+            addSelfMcpCallbacks(conversation, toolCallbacks, sources);
         } else {
-            addLocalCallbacks(chatRole, toolCallbacks);
-            addExternalMcpCallbacks(chatRole, toolCallbacks);
+            addLocalCallbacks(chatRole, toolCallbacks, sources);
+            addExternalMcpCallbacks(chatRole, toolCallbacks, sources);
         }
         if (CollUtil.isEmpty(actionsByToolName)) {
             return toolCallbacks;
         }
         return toolCallbacks.stream().map(callback -> {
             AiChatToolAction action = actionsByToolName.get(callback.getToolDefinition().name());
-            return action == null ? callback : new ObservableToolCallback(callback, action, listener);
+            ToolSource source = sources.get(callback.getToolDefinition().name());
+            return action == null ? callback : new ObservableToolCallback(callback, action, source, listener);
         }).toList();
+    }
+
+    private Map<String, ToolSource> snapshotToolSources(AiChatConversationDO conversation) {
+        if (conversation.getEffectiveCapabilitySnapshot() == null
+                || conversation.getEffectiveCapabilitySnapshot().isBlank()) {
+            return Collections.emptyMap();
+        }
+        try {
+            AiCapabilitySnapshot snapshot = AiCapabilitySnapshotService.read(conversation);
+            if (snapshot == null || CollUtil.isEmpty(snapshot.getTools())) {
+                return Collections.emptyMap();
+            }
+            Map<String, ToolSource> result = new java.util.HashMap<>();
+            snapshot.getTools().forEach(tool -> result.put(tool.getName(), new ToolSource(
+                    tool.getServerId() == null ? "LOCAL" : "MCP", tool.getServerCode(),
+                    tool.getSkillCode(), tool.getSkillVersion())));
+            return result;
+        } catch (RuntimeException ex) {
+            log.warn("[snapshotToolSources] 会话 [{}] 能力快照不可用", conversation.getId());
+            return Collections.emptyMap();
+        }
     }
 
     /**
@@ -131,7 +158,8 @@ public class AiChatToolCallbackService {
         }
     }
 
-    private void addLocalCallbacks(AiChatRoleDO chatRole, List<ToolCallback> toolCallbacks) {
+    private void addLocalCallbacks(AiChatRoleDO chatRole, List<ToolCallback> toolCallbacks,
+                                   Map<String, ToolSource> sources) {
         if (CollUtil.isEmpty(chatRole.getToolIds())) {
             return;
         }
@@ -139,38 +167,49 @@ public class AiChatToolCallbackService {
         toolNames.forEach(toolName -> {
             ToolCallback toolCallback = toolCallbackResolver.resolve(toolName);
             if (toolCallback != null) {
-                addCallbackIfAbsent(toolCallback, toolCallbacks);
+                if (addCallbackIfAbsent(toolCallback, toolCallbacks)) {
+                    sources.putIfAbsent(toolCallback.getToolDefinition().name(), new ToolSource("LOCAL", null, null, null));
+                }
             }
         });
     }
 
-    private void addCallbackIfAbsent(ToolCallback callback, List<ToolCallback> callbacks) {
+    private boolean addCallbackIfAbsent(ToolCallback callback, List<ToolCallback> callbacks) {
         if (callback == null || callbacks.stream().anyMatch(item ->
                 item.getToolDefinition().name().equals(callback.getToolDefinition().name()))) {
-            return;
+            return false;
         }
         callbacks.add(callback);
+        return true;
     }
 
-    private void addExternalMcpCallbacks(AiChatRoleDO chatRole, List<ToolCallback> toolCallbacks) {
+    private void addExternalMcpCallbacks(AiChatRoleDO chatRole, List<ToolCallback> toolCallbacks,
+                                         Map<String, ToolSource> sources) {
         if (CollUtil.isEmpty(chatRole.getMcpClientNames())) {
             return;
         }
-        chatRole.getMcpClientNames().forEach(code -> addDatabaseMcpCallbacks(code, toolCallbacks));
+        chatRole.getMcpClientNames().forEach(code -> addDatabaseMcpCallbacks(code, toolCallbacks, sources, "MCP"));
     }
 
-    private void addSelfMcpCallbacks(AiChatConversationDO conversation, List<ToolCallback> toolCallbacks) {
+    private void addSelfMcpCallbacks(AiChatConversationDO conversation, List<ToolCallback> toolCallbacks,
+                                     Map<String, ToolSource> sources) {
         if (conversation.getMcpClientName() == null || conversation.getMcpClientName().isBlank()) {
             log.warn("[addSelfMcpCallbacks] 自测会话 [{}] 未配置可用的 MCP Client", conversation.getId());
             return;
         }
-        addDatabaseMcpCallbacks(conversation.getMcpClientName(), toolCallbacks);
+        addDatabaseMcpCallbacks(conversation.getMcpClientName(), toolCallbacks, sources, "SELF_MCP");
     }
 
-    private void addDatabaseMcpCallbacks(String code, List<ToolCallback> toolCallbacks) {
+    private void addDatabaseMcpCallbacks(String code, List<ToolCallback> toolCallbacks,
+                                         Map<String, ToolSource> sources, String source) {
         try {
             mcpRegistryService.getToolCallbacksByCode(code)
-                    .forEach(callback -> addCallbackIfAbsent(callback, toolCallbacks));
+                    .forEach(callback -> {
+                        if (addCallbackIfAbsent(callback, toolCallbacks)) {
+                            sources.putIfAbsent(callback.getToolDefinition().name(),
+                                    new ToolSource(source, code, null, null));
+                        }
+                    });
         } catch (RuntimeException ex) {
             log.warn("[addDatabaseMcpCallbacks] MCP 服务 [{}] 暂不可用", code);
         }
@@ -180,12 +219,14 @@ public class AiChatToolCallbackService {
 
         private final ToolCallback delegate;
         private final AiChatToolAction action;
+        private final ToolSource source;
         private final AiChatToolExecutionListener listener;
 
         private ObservableToolCallback(ToolCallback delegate, AiChatToolAction action,
-                                       AiChatToolExecutionListener listener) {
+                                       ToolSource source, AiChatToolExecutionListener listener) {
             this.delegate = delegate;
             this.action = action;
+            this.source = source;
             this.listener = listener;
         }
 
@@ -239,8 +280,14 @@ public class AiChatToolCallbackService {
                                                String resultPayload) {
             return new AiChatToolExecutionEvent().setEventType(eventType).setExecutionId(executionId)
                     .setToolName(action.getToolName()).setIntent(action.getIntent()).setLabel(action.getLabel())
-                    .setStatus(status).setMessage(message).setResultPayload(resultPayload);
+                    .setStatus(status).setMessage(message).setResultPayload(resultPayload)
+                    .setSource(source == null ? null : source.source())
+                    .setMcpClientName(source == null ? null : source.mcpClientName())
+                    .setSkillCode(source == null ? null : source.skillCode())
+                    .setSkillVersion(source == null ? null : source.skillVersion());
         }
     }
+
+    private record ToolSource(String source, String mcpClientName, String skillCode, Integer skillVersion) { }
 
 }

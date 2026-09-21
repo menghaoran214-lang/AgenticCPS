@@ -134,7 +134,7 @@
     <el-drawer v-model="roleRepositoryOpen" title="角色仓库" size="754px">
       <RoleRepository />
     </el-drawer>
-    <RolePresetPicker ref="rolePresetPickerRef" @success="handleMcpTestConversationCreate" />
+    <ChatRolePicker ref="chatRolePickerRef" @success="handleMcpTestConversationCreate" />
     <McpTestConversationDialog ref="mcpTestDialogRef" @success="handleMcpTestConversationCreate" />
   </el-aside>
 </template>
@@ -142,7 +142,7 @@
 <script setup lang="ts">
 import { ChatConversationApi, ChatConversationVO } from '@/api/ai/chat/conversation'
 import RoleRepository from '../role/RoleRepository.vue'
-import RolePresetPicker from '../role/RolePresetPicker.vue'
+import ChatRolePicker from '../role/ChatRolePicker.vue'
 import { Bottom, Top } from '@element-plus/icons-vue'
 import roleAvatarDefaultImg from '@/assets/ai/gpt.svg'
 import McpTestConversationDialog from '../mcp/McpTestConversationDialog.vue'
@@ -158,7 +158,7 @@ const conversationMap = ref<any>({}) // 对话分组 (置顶、今天、三天�
 const loading = ref<boolean>(false) // 加载中
 const loadingTime = ref<any>() // 加载中定时器
 const mcpTestDialogRef = ref()
-const rolePresetPickerRef = ref<InstanceType<typeof RolePresetPicker>>()
+const chatRolePickerRef = ref<InstanceType<typeof ChatRolePicker>>()
 
 // 定义组件 props
 const props = defineProps({
@@ -279,10 +279,10 @@ const getConversationGroupByCreateTime = async (list: ChatConversationVO[]) => {
 
 /** 新建对话 */
 const createConversation = async () => {
-  await rolePresetPickerRef.value?.open()
+  await chatRolePickerRef.value?.open()
 }
 const createWithAnotherRole = async () => {
-  await rolePresetPickerRef.value?.open(props.activeId || undefined)
+  await chatRolePickerRef.value?.open(props.activeId || undefined)
 }
 const handleMcpTestConversationCreate = async (conversationId: string) => {
   await getChatConversationList()

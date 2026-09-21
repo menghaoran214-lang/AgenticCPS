@@ -15,6 +15,7 @@
             ref="markdownViewRef"
           >
             <MessageToolExecutions :executions="item.toolExecutions" />
+            <MessageDebugTrace v-if="props.debugMode" :traces="item.debugTraces" />
             <MessageBlocks :blocks="item.blocks" :message-id="item.id" />
             <MessageReasoning
               :reasoning-content="item.reasoningContent || ''"
@@ -27,6 +28,7 @@
             <MessageFiles :attachment-urls="item.attachmentUrls" />
             <MessageKnowledge v-if="item.segments" :segments="item.segments" />
             <MessageWebSearch v-if="item.webSearchPages" :web-search-pages="item.webSearchPages" />
+            <MessageUsage :usage="item.usage" />
           </div>
           <div class="flex flex-row mt-8px">
             <el-button
@@ -121,6 +123,8 @@ import MessageFiles from './MessageFiles.vue'
 import MessageWebSearch from './MessageWebSearch.vue'
 import MessageToolExecutions from './MessageToolExecutions.vue'
 import MessageBlocks from './MessageBlocks.vue'
+import MessageDebugTrace from './MessageDebugTrace.vue'
+import MessageUsage from './MessageUsage.vue'
 import { useClipboard } from '@vueuse/core'
 import { ArrowDownBold, Edit, RefreshRight } from '@element-plus/icons-vue'
 import { ChatMessageApi, ChatMessageVO } from '@/api/ai/chat/message'
@@ -149,6 +153,10 @@ const props = defineProps({
   list: {
     type: Array as PropType<ChatMessageVO[]>,
     required: true
+  },
+  debugMode: {
+    type: Boolean,
+    default: false
   }
 })
 

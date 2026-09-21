@@ -21,6 +21,7 @@ export interface ChatConversationVO {
   modelMaxContexts?: string // 模型的上下文的最大 Message 数量
   rolePresetCode?: string
   roleVersion?: number
+  mcpClientName?: string
   effectiveCapabilitySnapshot?: string
   skillSnapshot?: string
   mcpPolicySnapshot?: string

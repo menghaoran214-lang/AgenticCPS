@@ -89,9 +89,9 @@ export const ChatRoleApi = {
     return await request.get({ url: `/ai/chat-role/category-list` })
   },
 
-  // 获取已发布角色预设，用于新建会话角色选择
-  getPresetList: async (params?: Record<string, unknown>) => {
-    return await request.get({ url: `/ai/chat-role/preset-list`, params })
+  // 获取已发布聊天角色，用于新建会话角色选择
+  getPublishedList: async (params?: Record<string, unknown>) => {
+    return await request.get<ChatRoleVO[]>({ url: `/ai/chat-role/published-list`, params })
   },
 
   // 获取角色在当前租户下的有效能力摘要

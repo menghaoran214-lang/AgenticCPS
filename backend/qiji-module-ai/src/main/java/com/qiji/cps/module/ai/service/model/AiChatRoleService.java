@@ -149,9 +149,19 @@ public interface AiChatRoleService {
     List<AiChatRoleDO> getChatRoleListByName(String name);
 
     /**
-     * 获得已发布的系统角色预设。
+     * 获得可在聊天框选择的已发布公开角色。
+     *
+     * <p>角色是聊天配置的唯一入口，不再区分独立的“预设”概念。</p>
      */
-    List<AiChatRoleDO> getPresetList();
+    List<AiChatRoleDO> getPublishedChatRoleList();
+
+    /**
+     * @deprecated 使用 {@link #getPublishedChatRoleList()}。保留旧入口以兼容已发布的客户端。
+     */
+    @Deprecated
+    default List<AiChatRoleDO> getPresetList() {
+        return getPublishedChatRoleList();
+    }
 
     List<com.qiji.cps.module.ai.dal.dataobject.model.AiChatRoleVersionDO> getVersionHistory(Long roleId, Long userId);
 

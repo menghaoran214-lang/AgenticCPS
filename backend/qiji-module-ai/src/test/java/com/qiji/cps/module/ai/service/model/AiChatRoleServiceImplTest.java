@@ -31,18 +31,20 @@ class AiChatRoleServiceImplTest extends BaseMockitoUnitTest {
     private AiChatRoleMapper chatRoleMapper;
 
     @Test
-    void getMemberEnabledChatRoleList_excludesPrivateDisabledAndNotMemberEnabledRoles() {
+    void getMemberEnabledChatRoleList_includesPublishedRolesWithSkills() {
         AiChatRoleDO eligible = role(1L, true, true, CommonStatusEnum.ENABLE.getStatus());
+        AiChatRoleDO skillRole = role(6L, true, true, CommonStatusEnum.ENABLE.getStatus())
+                .setSkillIds(List.of(7L));
         AiChatRoleDO privateRole = role(2L, false, true, CommonStatusEnum.ENABLE.getStatus());
         AiChatRoleDO disabledRole = role(3L, true, true, CommonStatusEnum.DISABLE.getStatus());
         AiChatRoleDO notMemberEnabledRole = role(4L, true, false, CommonStatusEnum.ENABLE.getStatus());
         AiChatRoleDO historicalRole = role(5L, true, null, CommonStatusEnum.ENABLE.getStatus());
-        when(chatRoleMapper.selectList(any())).thenReturn(List.of(eligible, privateRole, disabledRole,
+        when(chatRoleMapper.selectList(any())).thenReturn(List.of(eligible, skillRole, privateRole, disabledRole,
                 notMemberEnabledRole, historicalRole));
 
         List<AiChatRoleDO> roles = chatRoleService.getMemberEnabledChatRoleList();
 
-        assertEquals(List.of(eligible), roles);
+        assertEquals(List.of(eligible, skillRole), roles);
     }
 
     @Test
@@ -59,6 +61,15 @@ class AiChatRoleServiceImplTest extends BaseMockitoUnitTest {
         when(chatRoleMapper.selectList(any())).thenReturn(List.of());
 
         assertServiceException(chatRoleService::getDefaultMemberChatRole, CHAT_ROLE_MEMBER_NOT_AVAILABLE);
+    }
+
+    @Test
+    void getPublishedChatRoleList_returnsPublishedCustomRolesWhenCapabilityCenterIsOff() {
+        AiChatRoleDO custom = role(9L, true, false, CommonStatusEnum.ENABLE.getStatus())
+                .setRoleType("CUSTOM").setPublishStatus("PUBLISHED");
+        when(chatRoleMapper.selectList(any())).thenReturn(List.of(custom));
+
+        assertEquals(List.of(custom), chatRoleService.getPublishedChatRoleList());
     }
 
     @ParameterizedTest
@@ -80,7 +91,7 @@ class AiChatRoleServiceImplTest extends BaseMockitoUnitTest {
 
     private static AiChatRoleDO role(Long id, Boolean publicStatus, Boolean memberEnabled, Integer status) {
         return new AiChatRoleDO().setId(id).setName("role-" + id).setPublicStatus(publicStatus)
-                .setMemberEnabled(memberEnabled).setStatus(status);
+                .setMemberEnabled(memberEnabled).setStatus(status).setPublishStatus("PUBLISHED");
     }
 
 }

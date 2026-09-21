@@ -253,7 +253,9 @@ public class AiChatRoleServiceImpl implements AiChatRoleService {
         return CommonStatusEnum.isEnable(chatRole.getStatus())
                 && Boolean.TRUE.equals(chatRole.getPublicStatus())
                 && Boolean.TRUE.equals(chatRole.getMemberEnabled())
-                && CollUtil.isEmpty(chatRole.getSkillIds());
+                && "PUBLISHED".equals(chatRole.getPublishStatus())
+                && (capabilitySnapshots == null || capabilitySnapshots.isEnabled()
+                || (CollUtil.isEmpty(chatRole.getSkillIds()) && chatRole.getMcpPolicyId() == null));
     }
 
     @Override
@@ -279,10 +281,8 @@ public class AiChatRoleServiceImpl implements AiChatRoleService {
     }
 
     @Override
-    public List<AiChatRoleDO> getPresetList() {
-        if (capabilitySnapshots != null && !capabilitySnapshots.isEnabled()) return List.of();
+    public List<AiChatRoleDO> getPublishedChatRoleList() {
         return chatRoleMapper.selectList(new LambdaQueryWrapperX<AiChatRoleDO>()
-                .eq(AiChatRoleDO::getRoleType, "PRESET")
                 .eq(AiChatRoleDO::getStatus, CommonStatusEnum.ENABLE.getStatus())
                 .eq(AiChatRoleDO::getPublicStatus, true)
                 .eq(AiChatRoleDO::getPublishStatus, "PUBLISHED")

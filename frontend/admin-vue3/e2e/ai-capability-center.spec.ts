@@ -244,7 +244,7 @@ test('新会话选择角色并从服务端确认卡片执行一次操作', async
   await page.route('**/admin-api/ai/**', async (route) => {
     const url = new URL(route.request().url())
     let data: unknown = []
-    if (url.pathname.endsWith('/preset-list'))
+    if (url.pathname.endsWith('/published-list'))
       data = [
         {
           id: 21,
@@ -280,8 +280,8 @@ test('新会话选择角色并从服务端确认卡片执行一次操作', async
     await route.fulfill({ json: { code: 200, data, msg: '' } })
   })
   await page.goto('/capability-test/chat')
-  await page.getByRole('button', { name: '新建对话', exact: true }).first().click()
-  await expect(page.getByTestId('role-preset-card')).toContainText('商家投放助手')
+  await page.getByTestId('chat-role-picker').click()
+  await expect(page.getByTestId('chat-role-card')).toContainText('商家投放助手')
   await page.getByRole('button', { name: '使用此角色 · v3', exact: true }).click()
   await expect.poll(() => createBody).toEqual({ roleId: 21 })
   await expect(page.getByTestId('conversation-capabilities')).toContainText('merchant · v3')

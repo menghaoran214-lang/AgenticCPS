@@ -48,6 +48,22 @@ class AiCapabilitySnapshotServiceTest extends BaseMockitoUnitTest {
         assertTrue(conversation.getSystemMessage().contains("original"));
     }
 
+    @Test void memberConversationCapturesPublishedRoleSkillsWhenCapabilityCenterIsEnabled() {
+        AiSkillVersionDO version = new AiSkillVersionDO().setId(20L).setVersion(2)
+                .setSystemPrompt("member skill").setConfirmationPolicy("NONE");
+        when(skillService.get(2L)).thenReturn(new AiSkillDO().setId(2L).setCode("member-skill")
+                .setRiskLevel("READ_ONLY"));
+        when(skillService.getPublishedVersion(2L)).thenReturn(version);
+        when(skillService.bindings(20L)).thenReturn(List.of());
+
+        var conversation = new AiChatConversationDO().setOwnerUserType("MEMBER");
+        service.capture(conversation, role().setSkillIds(List.of(2L)));
+
+        var snapshot = AiCapabilitySnapshotService.read(conversation);
+        assertEquals(List.of(2L), snapshot.getSkills().stream().map(AiCapabilitySnapshot.Skill::getId).toList());
+        assertTrue(conversation.getSystemMessage().contains("member skill"));
+    }
+
     @Test void skillScopedPolicyCannotGrantToolsWithoutItsSkill() {
         when(policyMapper.selectById(5L)).thenReturn(new AiMcpPolicyDO().setId(5L).setStatus(0)
                 .setSkillId(2L).setMcpServerIds("[6]").setMcpToolIds("[9]").setRiskLevel("READ_ONLY"));
@@ -57,15 +73,64 @@ class AiCapabilitySnapshotServiceTest extends BaseMockitoUnitTest {
         verifyNoInteractions(mcpToolMapper);
     }
 
+    @Test void directMcpPolicyFreezesExplicitToolGrant() {
+        var server = new AiMcpServerDO().setId(6L).setCode("catalog").setStatus(0);
+        var tool = new AiMcpToolDO().setId(9L).setServerId(6L).setName("search_catalog")
+                .setStatus(0).setRiskLevel("READ_ONLY").setInputSchema("{\"type\":\"object\"}");
+        when(policyMapper.selectById(5L)).thenReturn(new AiMcpPolicyDO().setId(5L).setStatus(0)
+                .setMcpServerIds("[6]").setMcpToolIds("[9]").setRiskLevel("READ_ONLY")
+                .setRequireConfirmation(0));
+        when(mcpToolMapper.selectById(9L)).thenReturn(tool);
+        when(mcpToolMapper.selectOne(any())).thenReturn(tool);
+        when(serverMapper.selectById(6L)).thenReturn(server);
+
+        var conversation = new AiChatConversationDO();
+        service.capture(conversation, role().setMcpPolicyId(5L));
+
+        var snapshot = AiCapabilitySnapshotService.read(conversation);
+        assertEquals(1, snapshot.getTools().size());
+        assertEquals("search_catalog", snapshot.getTools().get(0).getName());
+        assertEquals(6L, snapshot.getTools().get(0).getServerId());
+        assertEquals("catalog", snapshot.getTools().get(0).getServerCode());
+        assertEquals("{\"type\":\"object\"}", snapshot.getTools().get(0).getInputSchema());
+    }
+
+    @Test void legacyMcpClientRoleKeepsLegacyCallbackPathWhenV2IsEnabled() {
+        var conversation = new AiChatConversationDO().setOwnerUserType("ADMIN");
+
+        service.capture(conversation, role().setMcpClientNames(List.of("external")));
+
+        assertNull(conversation.getEffectiveCapabilitySnapshot());
+        verifyNoInteractions(policyMapper, mcpToolMapper, serverMapper);
+    }
+
+    @Test void legacyMcpClientCannotBeCombinedWithSkillsWithoutPolicy() {
+        var conversation = new AiChatConversationDO().setOwnerUserType("ADMIN");
+
+        assertThrows(IllegalArgumentException.class, () -> service.capture(conversation,
+                role().setMcpClientNames(List.of("external")).setSkillIds(List.of(2L))));
+        verifyNoInteractions(skillService, policyMapper, mcpToolMapper, serverMapper);
+    }
+
     @Test void unpublishedRoleCannotCreateV2Conversation() {
         assertThrows(IllegalArgumentException.class, () -> service.capture(new AiChatConversationDO(),
                 role().setPublishStatus("DRAFT")));
     }
 
-    @Test void featureOffAndMemberPhaseOneKeepLegacyConversation() {
+    @Test void featureOffKeepsMemberLegacyConversation() {
+        ReflectionTestUtils.setField(service,"enabled",false);
         var member = new AiChatConversationDO().setOwnerUserType("MEMBER");
         service.capture(member,role());
         assertNull(member.getEffectiveCapabilitySnapshot());
+    }
+
+    @Test void enabledMemberConversationUsesRoleCapabilitySnapshot() {
+        var member = new AiChatConversationDO().setOwnerUserType("MEMBER");
+        service.capture(member,role());
+        assertNotNull(member.getEffectiveCapabilitySnapshot());
+    }
+
+    @Test void featureOffAdminConversationKeepsLegacyConversation() {
         ReflectionTestUtils.setField(service,"enabled",false);
         var admin = new AiChatConversationDO().setOwnerUserType("ADMIN");
         service.capture(admin,role());

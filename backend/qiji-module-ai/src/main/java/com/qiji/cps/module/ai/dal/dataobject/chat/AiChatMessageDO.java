@@ -130,4 +130,11 @@ public class AiChatMessageDO extends BaseDO {
     @TableField(value = "content_blocks", typeHandler = JacksonTypeHandler.class)
     private List<java.util.Map<String, Object>> blocks;
 
+    /** 模型返回的 token 使用量；原始 prompt/response 调试内容不落库。 */
+    private Integer promptTokens;
+    private Integer completionTokens;
+    private Integer totalTokens;
+    private Long cacheReadInputTokens;
+    private Long cacheWriteInputTokens;
+
 }

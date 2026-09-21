@@ -13,5 +13,10 @@ public class AiChatToolExecutionEvent {
     private String status;
     private String message;
     private String resultPayload;
+    /** 工具来源：LOCAL、MCP 或 SELF_MCP。 */
+    private String source;
+    private String mcpClientName;
+    private String skillCode;
+    private Integer skillVersion;
 
 }

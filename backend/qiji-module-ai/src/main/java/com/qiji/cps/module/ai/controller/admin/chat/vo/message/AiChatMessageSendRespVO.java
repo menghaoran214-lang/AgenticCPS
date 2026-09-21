@@ -27,6 +27,12 @@ public class AiChatMessageSendRespVO {
     /** 超过长任务阈值时由后台任务实现填充。 */
     private String taskId;
 
+    /** 模型调用消耗，仅返回供应商提供的 usage 元数据。 */
+    private ModelUsage usage;
+
+    /** 调试模式下的单次模型调用轨迹，不写入聊天消息表。 */
+    private ModelDebugTrace modelTrace;
+
     @Schema(description = "工具执行状态，仅工具事件返回")
     private ToolExecution toolExecution;
 
@@ -64,6 +70,9 @@ public class AiChatMessageSendRespVO {
         @Schema(description = "结构化 UI 块")
         private List<java.util.Map<String, Object>> blocks;
 
+        /** 模型调用消耗，通常仅 assistant 消息有值。 */
+        private ModelUsage usage;
+
         @Schema(description = "创建时间", requiredMode = Schema.RequiredMode.REQUIRED)
         private LocalDateTime createTime;
 
@@ -78,6 +87,40 @@ public class AiChatMessageSendRespVO {
         private String label;
         private String status;
         private String message;
+        private String source;
+        private String mcpClientName;
+        private String skillCode;
+        private Integer skillVersion;
+    }
+
+    @Schema(description = "模型 token 使用量")
+    @Data
+    public static class ModelUsage {
+        private Integer promptTokens;
+        private Integer completionTokens;
+        private Integer totalTokens;
+        private Long cacheReadInputTokens;
+        private Long cacheWriteInputTokens;
+    }
+
+    @Schema(description = "模型调试轨迹（仅调试模式返回）")
+    @Data
+    public static class ModelDebugTrace {
+        private String traceId;
+        private Integer round;
+        private String model;
+        private String status;
+        private Long durationMs;
+        private List<ModelDebugMessage> input;
+        private String output;
+        private String reasoning;
+        private ModelUsage usage;
+    }
+
+    @Data
+    public static class ModelDebugMessage {
+        private String role;
+        private String content;
     }
 
 }

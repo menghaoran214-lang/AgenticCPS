@@ -19,6 +19,7 @@ public class AppAiChatMessageSendReqVO {
 
     private Boolean useContext;
     private Boolean useSearch;
+    private Boolean debugMode;
     @Size(max = 3, message = "最多上传 3 个附件")
     private List<String> attachmentUrls;
 

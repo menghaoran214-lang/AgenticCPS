@@ -11,6 +11,14 @@
         class="shrink-0"
       />
       <span>{{ friendly(execution.message || execution.label) }}</span>
+      <span v-if="execution.source || execution.skillCode" class="ml-auto flex shrink-0 items-center gap-4px">
+        <el-tag v-if="execution.source" size="small" effect="plain" type="info">
+          {{ sourceLabel(execution.source) }}<template v-if="execution.mcpClientName"> · {{ execution.mcpClientName }}</template>
+        </el-tag>
+        <el-tag v-if="execution.skillCode" size="small" effect="plain" type="success">
+          Skill · {{ execution.skillCode }}<template v-if="execution.skillVersion"> v{{ execution.skillVersion }}</template>
+        </el-tag>
+      </span>
     </div>
   </div>
 </template>
@@ -39,5 +47,12 @@ const statusClass = (status: string) => {
   if (status === 'SUCCEEDED' || status === 'SUCCESS') return 'text-[var(--el-color-success)]'
   if (status === 'FAILED' || status === 'FAILURE') return 'text-[var(--el-color-danger)]'
   return 'animate-spin text-[var(--el-color-primary)]'
+}
+
+const sourceLabel = (source?: string) => {
+  if (source === 'MCP') return 'MCP'
+  if (source === 'SELF_MCP') return '自测 MCP'
+  if (source === 'LOCAL') return '本地工具'
+  return source || '工具'
 }
 </script>

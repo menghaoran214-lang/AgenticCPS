@@ -18,7 +18,16 @@
           {{ activeConversation?.title ? activeConversation?.title : '对话' }}
           <span v-if="activeMessageList.length">({{ activeMessageList.length }})</span>
         </div>
-        <div class="flex w-300px flex-row justify-end" v-if="activeConversation">
+        <div class="flex w-420px flex-row items-center justify-end gap-8px" v-if="activeConversation">
+          <el-tooltip content="显示模型每次调用的输入、输出和 Token 用量" placement="bottom">
+            <el-switch
+              v-model="debugMode"
+              inline-prompt
+              active-text="调试"
+              inactive-text="普通"
+              data-testid="chat-debug-mode"
+            />
+          </el-tooltip>
           <el-button type="primary" bg plain size="small" @click="openChatConversationUpdateForm">
             <span v-html="activeConversation?.modelName"></span>
             <Icon icon="ep:setting" class="ml-10px" />
@@ -44,9 +53,12 @@
         data-testid="conversation-capabilities"
       >
         <el-tag>{{ capabilitySummary.roleCode }} · v{{ capabilitySummary.roleVersion }}</el-tag>
-        <el-tag v-for="skill in capabilitySummary.skills" :key="skill" type="success">{{
-          skill
-        }}</el-tag>
+        <el-tag v-for="skill in capabilitySummary.skills" :key="`${skill.code}-${skill.version}`" type="success">
+          Skill · {{ skill.code }} v{{ skill.version }}
+        </el-tag>
+        <el-tag v-for="mcp in capabilitySummary.mcps" :key="mcp.code" type="warning" effect="plain">
+          MCP · {{ mcp.code }} ({{ mcp.toolCount }})
+        </el-tag>
         <el-tag type="info"
           >{{ capabilitySummary.serviceCount }} 个 MCP 服务 ·
           {{ capabilitySummary.toolCount }} 项能力</el-tag
@@ -99,6 +111,7 @@
                 ref="messageRef"
                 :conversation="activeConversation"
                 :list="messageList"
+                :debug-mode="debugMode"
                 @on-delete-success="handleMessageDelete"
                 @on-edit="handleMessageEdit"
                 @on-refresh="handleMessageRefresh"
@@ -127,6 +140,17 @@
           style="border: 1px solid var(--el-border-color)"
         >
           <div class="mb-8px flex items-center gap-8px" data-testid="cps-workbench-input-mode">
+            <el-button
+              size="small"
+              plain
+              type="primary"
+              :disabled="conversationInProgress"
+              data-testid="chat-role-picker"
+              @click="chooseChatRole"
+            >
+              <Icon icon="ep:user" class="mr-4px" />
+              {{ activeConversation?.roleId ? '选择聊天角色' : '选择聊天角色后开始' }}
+            </el-button>
             <el-tag effect="plain" type="info">
               {{ workbenchMode === 'SELECTION' ? '选品分析' : '订单分析' }}
             </el-tag>
@@ -231,7 +255,12 @@ const activeConversationId = ref<string | null>(null) // 选中的对话编号
 const activeConversation = ref<ChatConversationVO | null>(null) // 选中的 Conversation
 const confirmationCardsRef = ref<InstanceType<typeof ToolConfirmationCards>>()
 const capabilitySummary = computed(() =>
-  readCapabilitySummary(activeConversation.value?.effectiveCapabilitySnapshot)
+  readCapabilitySummary(activeConversation.value?.effectiveCapabilitySnapshot, {
+    skillSnapshot: activeConversation.value?.skillSnapshot,
+    mcpClientName: activeConversation.value?.mcpClientName,
+    roleCode: activeConversation.value?.rolePresetCode,
+    roleVersion: activeConversation.value?.roleVersion
+  })
 )
 const handleConfirmationProcessed = async (conversationId: string) => {
   if (conversationId !== activeConversationId.value) return
@@ -250,6 +279,7 @@ const handleConfirmationProcessed = async (conversationId: string) => {
   if (!conversationInProgress.value) await getMessageList()
 }
 const conversationInProgress = ref(false) // 对话是否正在进行中。目前只有【发送】消息时，会更新为 true，避免切换对话、删除对话等操作
+const debugMode = ref(false)
 const toolActions = ref<ToolActionVO[]>([]) // 当前角色实际可用的业务工具入口
 const selectedToolAction = ref<ToolActionVO>() // 输入框携带的隐藏路由意图
 const selectedIntentRequestId = ref<string>() // 写操作重试所需的稳定请求编号
@@ -406,6 +436,15 @@ const handleConversationUpdateSuccess = async () => {
 const handleConversationCreate = async () => {
   // 创建对话
   await conversationListRef.value.createConversation()
+}
+/** 在聊天输入框内选择角色。角色能力按快照固定，因此选择后创建并切换到新会话。 */
+const chooseChatRole = async () => {
+  if (conversationInProgress.value) return
+  if (activeConversationId.value) {
+    await conversationListRef.value?.createWithAnotherRole()
+  } else {
+    await conversationListRef.value?.createConversation()
+  }
 }
 /** 处理聊天对话的创建成功 */
 const handleConversationCreateSuccess = async () => {
@@ -687,6 +726,29 @@ const updateToolExecution = (
   )
 }
 
+const mergeUsage = (current: ChatMessageVO['usage'], next: ChatMessageVO['usage']) => ({
+  ...(current || {}),
+  ...(next || {})
+})
+
+const upsertDebugTrace = (
+  current: NonNullable<ChatMessageVO['debugTraces']>,
+  next: NonNullable<ChatMessageStreamData['modelTrace']>
+) => {
+  const index = current.findIndex((item) => item.traceId === next.traceId)
+  if (index < 0) return [...current, next]
+  const result = [...current]
+  result[index] = { ...result[index], ...next, usage: mergeUsage(result[index].usage, next.usage) }
+  return result
+}
+
+const applyModelTrace = (data: ChatMessageStreamData) => {
+  const assistant = getCurrentAssistantMessage()
+  if (!assistant || !data.modelTrace) return
+  assistant.debugTraces = upsertDebugTrace(assistant.debugTraces || [], data.modelTrace)
+  if (data.usage) assistant.usage = mergeUsage(assistant.usage, data.usage)
+}
+
 /** Apply server task lifecycle events while keeping tool events backwards compatible. */
 const updateTaskLifecycle = (data: ChatMessageStreamData) => {
   const assistant = getCurrentAssistantMessage()
@@ -926,6 +988,7 @@ const doSendMessageStream = async (userMessage: ChatMessageVO) => {
       conversationInAbortController.value,
       enableContext.value,
       enableWebSearch.value,
+      debugMode.value,
       async (res) => {
         let payload: { code: number; data: ChatMessageStreamData; msg?: string }
         try {
@@ -941,6 +1004,11 @@ const doSendMessageStream = async (userMessage: ChatMessageVO) => {
         }
 
         const eventType = data.eventType || 'MESSAGE_DELTA'
+        if (eventType === 'MODEL_TRACE') {
+          applyModelTrace(data)
+          await scrollToBottom()
+          return
+        }
         if (eventType.startsWith('TASK_')) {
           if (eventType === 'TASK_COMPLETE') streamCompleted = true
           updateTaskLifecycle(data)
@@ -952,20 +1020,39 @@ const doSendMessageStream = async (userMessage: ChatMessageVO) => {
           if (data.send && data.receive) {
             if (isFirstChunk) {
               isFirstChunk = false
+              const pendingAssistant = getCurrentAssistantMessage()
+              const pendingDebugTraces = pendingAssistant?.debugTraces || []
+              const pendingUsage = pendingAssistant?.usage
               activeMessageList.value.pop()
               activeMessageList.value.pop()
               activeMessageList.value.push(data.send)
               data.send.attachmentUrls = userMessage.attachmentUrls
+              data.receive.debugTraces = data.modelTrace
+                ? upsertDebugTrace(pendingDebugTraces, data.modelTrace)
+                : pendingDebugTraces
+              data.receive.usage = mergeUsage(pendingUsage, data.receive.usage)
               activeMessageList.value.push(data.receive)
             } else {
               const lastMessage = getCurrentAssistantMessage()
-              if (lastMessage) Object.assign(lastMessage, data.receive)
+              if (lastMessage) {
+                Object.assign(lastMessage, data.receive)
+                if (data.modelTrace) {
+                  lastMessage.debugTraces = upsertDebugTrace(
+                    lastMessage.debugTraces || [],
+                    data.modelTrace
+                  )
+                }
+              }
             }
             const completedText = data.receive.content || ''
             if (!completedText.startsWith(receiveMessageDisplayedText.value)) {
               receiveMessageDisplayedText.value = ''
             }
             receiveMessageFullText.value = completedText
+            if (data.usage) {
+              const lastMessage = getCurrentAssistantMessage()
+              if (lastMessage) lastMessage.usage = mergeUsage(lastMessage.usage, data.usage)
+            }
           }
           await scrollToBottom()
           return
@@ -995,6 +1082,8 @@ const doSendMessageStream = async (userMessage: ChatMessageVO) => {
           const pendingAssistant = activeMessageList.value[activeMessageList.value.length - 1]
           const toolExecutions = pendingAssistant?.toolExecutions || []
           const taskProgress = pendingAssistant?.taskProgress
+          const debugTraces = pendingAssistant?.debugTraces || []
+          const usage = pendingAssistant?.usage
           // 弹出两个假数据
           activeMessageList.value.pop()
           activeMessageList.value.pop()
@@ -1003,6 +1092,8 @@ const doSendMessageStream = async (userMessage: ChatMessageVO) => {
           data.send.attachmentUrls = userMessage.attachmentUrls
           data.receive.toolExecutions = toolExecutions
           data.receive.taskProgress = taskProgress
+          data.receive.debugTraces = debugTraces
+          data.receive.usage = mergeUsage(usage, data.receive.usage)
           activeMessageList.value.push(data.receive)
         }
 
@@ -1016,6 +1107,11 @@ const doSendMessageStream = async (userMessage: ChatMessageVO) => {
         if (data.receive.blocks?.length) {
           const lastMessage = activeMessageList.value[activeMessageList.value.length - 1]
           lastMessage.blocks = data.receive.blocks
+        }
+
+        if (data.usage) {
+          const lastMessage = getCurrentAssistantMessage()
+          if (lastMessage) lastMessage.usage = mergeUsage(lastMessage.usage, data.usage)
         }
 
         // 处理正常内容

@@ -59,6 +59,12 @@ public class AiChatMessageRespVO {
     @Schema(description = "结构化 UI 块")
     private List<java.util.Map<String, Object>> blocks;
 
+    /** 模型调用消耗；原始调试输入输出不持久化。 */
+    private ModelUsage usage;
+
+    /** 历史消息不持久化原始模型调试轨迹，字段保留用于协议兼容。 */
+    private List<ModelDebugTrace> debugTraces;
+
     @Schema(description = "创建时间", requiredMode = Schema.RequiredMode.REQUIRED, example = "2024-05-12 12:51")
     private LocalDateTime createTime;
 
@@ -83,6 +89,34 @@ public class AiChatMessageRespVO {
         @Schema(description = "文档名称", requiredMode = Schema.RequiredMode.REQUIRED, example = "产品使用手册")
         private String documentName;
 
+    }
+
+    @Data
+    public static class ModelUsage {
+        private Integer promptTokens;
+        private Integer completionTokens;
+        private Integer totalTokens;
+        private Long cacheReadInputTokens;
+        private Long cacheWriteInputTokens;
+    }
+
+    @Data
+    public static class ModelDebugTrace {
+        private String traceId;
+        private Integer round;
+        private String model;
+        private String status;
+        private Long durationMs;
+        private List<ModelDebugMessage> input;
+        private String output;
+        private String reasoning;
+        private ModelUsage usage;
+    }
+
+    @Data
+    public static class ModelDebugMessage {
+        private String role;
+        private String content;
     }
 
 }

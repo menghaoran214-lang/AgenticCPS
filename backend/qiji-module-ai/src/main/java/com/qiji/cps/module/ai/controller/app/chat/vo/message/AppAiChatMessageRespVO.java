@@ -25,6 +25,7 @@ public class AppAiChatMessageRespVO {
     private List<AiWebSearchResponse.WebPage> webSearchPages;
     private List<String> attachmentUrls;
     private List<java.util.Map<String, Object>> blocks;
+    private ModelUsage usage;
     private LocalDateTime createTime;
     private String roleName;
 
@@ -34,5 +35,14 @@ public class AppAiChatMessageRespVO {
         private String content;
         private Long documentId;
         private String documentName;
+    }
+
+    @Data
+    public static class ModelUsage {
+        private Integer promptTokens;
+        private Integer completionTokens;
+        private Integer totalTokens;
+        private Long cacheReadInputTokens;
+        private Long cacheWriteInputTokens;
     }
 }

@@ -25,6 +25,9 @@ public class AiChatMessageSendReqVO {
     @Schema(description = "是否联网搜索", example = "true")
     private Boolean useSearch;
 
+    @Schema(description = "是否返回模型调试轨迹（仅当前请求，不持久化原始提示词）", example = "false")
+    private Boolean debugMode;
+
     @Schema(description = "附件 URL 数组", example = "https://www.iocoder.cn/1.png")
     @Size(max = 3, message = "最多上传 3 个附件")
     private List<String> attachmentUrls;

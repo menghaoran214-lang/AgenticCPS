@@ -37,6 +37,8 @@ import com.qiji.cps.module.ai.service.chat.tool.AiChatToolActionService;
 import com.qiji.cps.module.ai.service.chat.tool.AiChatToolExecutionEvent;
 import com.qiji.cps.module.ai.service.chat.tool.AiChatToolExecutionListener;
 import com.qiji.cps.module.ai.service.chat.tool.AiChatToolRiskLevel;
+import com.qiji.cps.module.ai.service.capability.AiCapabilitySnapshot;
+import com.qiji.cps.module.ai.service.capability.AiCapabilitySnapshotService;
 import com.qiji.cps.module.ai.util.AiUtils;
 import com.qiji.cps.module.ai.util.FileTypeUtils;
 import com.google.common.collect.Maps;
@@ -49,6 +51,8 @@ import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.StreamingChatModel;
+import org.springframework.ai.chat.metadata.EmptyUsage;
+import org.springframework.ai.chat.metadata.Usage;
 import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.tool.ToolCallback;
@@ -174,13 +178,21 @@ public class AiChatMessageServiceImpl implements AiChatMessageService {
         // 4.2 创建 chat 需要的 Prompt
         Prompt prompt = buildPrompt(conversation, historyMessages, knowledgeSegments, webSearchResponse, model, sendReqVO,
                 requestedAction, blockListener);
+        long modelStartedAt = System.nanoTime();
         ChatResponse chatResponse = chatModel.call(prompt);
+        long modelDurationMs = elapsedMs(modelStartedAt);
 
         // 4.3 更新响应内容
         String newContent = AiUtils.getChatResponseContent(chatResponse);
         String newReasoningContent = AiUtils.getChatResponseReasoningContent(chatResponse);
+        AiChatMessageSendRespVO.ModelUsage usage = toModelUsage(chatResponse);
         chatMessageMapper.updateById(new AiChatMessageDO().setId(assistantMessage.getId())
-                .setContent(newContent).setReasoningContent(newReasoningContent).setBlocks(blocks.get()));
+                .setContent(newContent).setReasoningContent(newReasoningContent).setBlocks(blocks.get())
+                .setPromptTokens(usage == null ? null : usage.getPromptTokens())
+                .setCompletionTokens(usage == null ? null : usage.getCompletionTokens())
+                .setTotalTokens(usage == null ? null : usage.getTotalTokens())
+                .setCacheReadInputTokens(usage == null ? null : usage.getCacheReadInputTokens())
+                .setCacheWriteInputTokens(usage == null ? null : usage.getCacheWriteInputTokens()));
         // 4.4 响应结果
         Map<Long, AiKnowledgeDocumentDO> documentMap = knowledgeDocumentService.getKnowledgeDocumentMap(
                 convertSet(knowledgeSegments, AiKnowledgeSegmentSearchRespBO::getDocumentId));
@@ -191,11 +203,15 @@ public class AiChatMessageServiceImpl implements AiChatMessageService {
                 });
         return new AiChatMessageSendRespVO()
                 .setEventType("MESSAGE_COMPLETE")
+                .setModelTrace(Boolean.TRUE.equals(sendReqVO.getDebugMode())
+                        ? toDebugTrace(UUID.randomUUID().toString(), model, prompt, newContent,
+                        newReasoningContent, usage, modelDurationMs, "SUCCEEDED") : null)
                 .setSend(BeanUtils.toBean(userMessage, AiChatMessageSendRespVO.Message.class))
                 .setReceive(BeanUtils.toBean(assistantMessage, AiChatMessageSendRespVO.Message.class)
                         .setContent(newContent).setSegments(segments)
                         .setWebSearchPages(webSearchResponse != null ? webSearchResponse.getLists() : null)
-                        .setBlocks(blocks.get()));
+                        .setBlocks(blocks.get()).setUsage(usage))
+                .setUsage(usage);
     }
 
     @Override
@@ -266,6 +282,7 @@ public class AiChatMessageServiceImpl implements AiChatMessageService {
         AtomicReference<List<Map<String, Object>>> blocks = new AtomicReference<>(Collections.emptyList());
         Sinks.One<CommonResult<AiChatMessageSendRespVO>> completeSink = Sinks.one();
         AiChatToolExecutionListener toolExecutionListener = event -> {
+            enrichToolEvent(conversation, event);
             collectBlocks(blocks, event);
             synchronized (toolEventLock) {
                 toolEventSink.tryEmitNext(event);
@@ -279,6 +296,7 @@ public class AiChatMessageServiceImpl implements AiChatMessageService {
         StringBuffer contentBuffer = new StringBuffer();
         StringBuffer reasoningContentBuffer = new StringBuffer();
         AtomicBoolean bodyStarted = new AtomicBoolean(false);
+        AtomicReference<AiChatMessageSendRespVO.ModelUsage> lastUsage = new AtomicReference<>();
 
         // 防止执行多次知识库和联网搜索
         AtomicBoolean firstExecuteFlag = new AtomicBoolean(true);
@@ -309,6 +327,8 @@ public class AiChatMessageServiceImpl implements AiChatMessageService {
             if (StrUtil.isNotEmpty(newReasoningContent)) {
                 reasoningContentBuffer.append(newReasoningContent);
             }
+            AiChatMessageSendRespVO.ModelUsage usage = toModelUsage(chunk);
+            if (usage != null) lastUsage.set(usage);
             return success(new AiChatMessageSendRespVO()
                     .setEventType("MESSAGE_DELTA")
                     .setRequestId(requestId).setStage("GENERATING")
@@ -318,19 +338,31 @@ public class AiChatMessageServiceImpl implements AiChatMessageService {
                             .setContent(StrUtil.nullToDefault(newContent, "")) // 避免 null 的 情况
                             .setReasoningContent(StrUtil.nullToDefault(newReasoningContent, "")) // 避免 null 的 情况
                             .setSegments(cacheSegments.get()).setWebSearchPages(cacheWebSearchPages.get())
-                            .setBlocks(blocks.get()))); // 知识库 + 联网搜索
+                            .setBlocks(blocks.get()).setUsage(usage))); // 知识库 + 联网搜索
         }).doOnComplete(() -> {
             TenantUtils.execute(tenantId, () -> chatMessageMapper.updateById(
                     new AiChatMessageDO().setId(assistantMessage.getId()).setContent(contentBuffer.toString())
-                            .setReasoningContent(reasoningContentBuffer.toString()).setBlocks(blocks.get())));
-            completeSink.tryEmitValue(success(new AiChatMessageSendRespVO().setEventType("MESSAGE_COMPLETE")
+                            .setReasoningContent(reasoningContentBuffer.toString()).setBlocks(blocks.get())
+                            .setPromptTokens(lastUsage.get() == null ? null : lastUsage.get().getPromptTokens())
+                            .setCompletionTokens(lastUsage.get() == null ? null : lastUsage.get().getCompletionTokens())
+                            .setTotalTokens(lastUsage.get() == null ? null : lastUsage.get().getTotalTokens())
+                            .setCacheReadInputTokens(lastUsage.get() == null ? null : lastUsage.get().getCacheReadInputTokens())
+                            .setCacheWriteInputTokens(lastUsage.get() == null ? null : lastUsage.get().getCacheWriteInputTokens())));
+            AiChatMessageSendRespVO.ModelUsage usage = lastUsage.get();
+            AiChatMessageSendRespVO response = new AiChatMessageSendRespVO().setEventType("MESSAGE_COMPLETE")
                     .setRequestId(requestId).setStage("COMPLETE").setElapsedMs(elapsedMs(startedAt))
+                    .setUsage(usage)
                     .setSend(BeanUtils.toBean(userMessage, AiChatMessageSendRespVO.Message.class))
                     .setReceive(BeanUtils.toBean(assistantMessage, AiChatMessageSendRespVO.Message.class)
                             .setContent(contentBuffer.toString())
                             .setReasoningContent(reasoningContentBuffer.toString())
                             .setSegments(cacheSegments.get()).setWebSearchPages(cacheWebSearchPages.get())
-                            .setBlocks(blocks.get()))));
+                            .setBlocks(blocks.get()).setUsage(usage));
+            if (Boolean.TRUE.equals(sendReqVO.getDebugMode())) {
+                response.setModelTrace(toDebugTrace(requestId, model, prompt, contentBuffer.toString(),
+                        reasoningContentBuffer.toString(), usage, elapsedMs(startedAt), "SUCCEEDED"));
+            }
+            completeSink.tryEmitValue(success(response));
         }).doOnError(throwable -> {
             log.error("[sendChatMessageStream][userId({}) sendReqVO({}) 发生异常]", userId, sendReqVO, throwable);
             TenantUtils.execute(tenantId, () -> {
@@ -367,8 +399,20 @@ public class AiChatMessageServiceImpl implements AiChatMessageService {
                 .map(event -> success(toToolExecutionResponse(event).setRequestId(requestId)
                         .setStage("TOOL_EXECUTION").setElapsedMs(elapsedMs(startedAt))));
         Flux<CommonResult<AiChatMessageSendRespVO>> completeEventFlux = completeSink.asMono().flux()
-                .flatMap(result -> Flux.just(result, success(progressEvent(requestId, "COMPLETE", 2, 2,
-                        elapsedMs(startedAt), "回答已完成").setEventType("TASK_COMPLETE"))));
+                .flatMap(result -> {
+                    List<CommonResult<AiChatMessageSendRespVO>> events = new ArrayList<>();
+                    events.add(result);
+                    AiChatMessageSendRespVO data = result.getData();
+                    if (data != null && data.getModelTrace() != null) {
+                        events.add(success(new AiChatMessageSendRespVO().setEventType("MODEL_TRACE")
+                                .setRequestId(requestId).setStage("DEBUG")
+                                .setElapsedMs(elapsedMs(startedAt))
+                                .setModelTrace(data.getModelTrace()).setUsage(data.getUsage())));
+                    }
+                    events.add(success(progressEvent(requestId, "COMPLETE", 2, 2,
+                            elapsedMs(startedAt), "回答已完成").setEventType("TASK_COMPLETE")));
+                    return Flux.fromIterable(events);
+                });
         Flux<CommonResult<AiChatMessageSendRespVO>> heartbeatFlux = Flux.interval(Duration.ofSeconds(4))
                 .takeWhile(ignored -> !bodyStarted.get())
                 .map(ignored -> success(progressEvent(requestId, "WAITING_FOR_RESPONSE", 2, 2,
@@ -564,7 +608,79 @@ public class AiChatMessageServiceImpl implements AiChatMessageService {
                 .setToolExecution(new AiChatMessageSendRespVO.ToolExecution()
                         .setExecutionId(event.getExecutionId()).setToolName(event.getToolName())
                         .setIntent(event.getIntent()).setLabel(event.getLabel())
-                        .setStatus(event.getStatus()).setMessage(event.getMessage()));
+                        .setStatus(event.getStatus()).setMessage(event.getMessage())
+                        .setSource(event.getSource()).setMcpClientName(event.getMcpClientName())
+                        .setSkillCode(event.getSkillCode()).setSkillVersion(event.getSkillVersion()));
+    }
+
+    /**
+     * Convert provider usage metadata to the public, nullable usage contract. Spring AI's
+     * EmptyUsage uses zero values as a placeholder, which must not be presented as real billing
+     * data to operators or persisted on the assistant message.
+     */
+    private AiChatMessageSendRespVO.ModelUsage toModelUsage(ChatResponse response) {
+        if (response == null || response.getMetadata() == null) {
+            return null;
+        }
+        Usage usage = response.getMetadata().getUsage();
+        if (usage == null || usage instanceof EmptyUsage) {
+            return null;
+        }
+        return new AiChatMessageSendRespVO.ModelUsage()
+                .setPromptTokens(usage.getPromptTokens())
+                .setCompletionTokens(usage.getCompletionTokens())
+                .setTotalTokens(usage.getTotalTokens())
+                .setCacheReadInputTokens(usage.getCacheReadInputTokens())
+                .setCacheWriteInputTokens(usage.getCacheWriteInputTokens());
+    }
+
+    /**
+     * Build a request-scoped debug record. The record is emitted only when explicitly requested
+     * by an admin and is intentionally never written to the chat message table or application
+     * logs, because it contains the complete prompt and model output.
+     */
+    private AiChatMessageSendRespVO.ModelDebugTrace toDebugTrace(String traceId, AiModelDO model,
+                                                                  Prompt prompt, String output,
+                                                                  String reasoning,
+                                                                  AiChatMessageSendRespVO.ModelUsage usage,
+                                                                  long durationMs, String status) {
+        List<AiChatMessageSendRespVO.ModelDebugMessage> input = prompt == null || prompt.getInstructions() == null
+                ? Collections.emptyList()
+                : prompt.getInstructions().stream().map(message ->
+                new AiChatMessageSendRespVO.ModelDebugMessage()
+                        .setRole(message.getMessageType() == null ? null : message.getMessageType().getValue())
+                        .setContent(message.getText())).toList();
+        return new AiChatMessageSendRespVO.ModelDebugTrace()
+                .setTraceId(traceId).setRound(0)
+                .setModel(model == null ? null : model.getModel())
+                .setStatus(status).setDurationMs(durationMs).setInput(input)
+                .setOutput(output).setReasoning(reasoning).setUsage(usage);
+    }
+
+    /**
+     * Fill source metadata when an older callback path did not attach it itself. Existing source
+     * values always win because they carry the exact callback registry decision.
+     */
+    private void enrichToolEvent(AiChatConversationDO conversation, AiChatToolExecutionEvent event) {
+        if (conversation == null || event == null || StrUtil.isNotBlank(event.getSource())
+                || StrUtil.isBlank(event.getToolName())) {
+            return;
+        }
+        try {
+            AiCapabilitySnapshot snapshot = AiCapabilitySnapshotService.read(conversation);
+            if (snapshot != null && CollUtil.isNotEmpty(snapshot.getTools())) {
+                snapshot.getTools().stream()
+                        .filter(tool -> event.getToolName().equals(tool.getName()))
+                        .findFirst().ifPresent(tool -> {
+                            event.setSource(tool.getServerId() == null ? "LOCAL" : "MCP")
+                                    .setMcpClientName(tool.getServerCode())
+                                    .setSkillCode(tool.getSkillCode())
+                                    .setSkillVersion(tool.getSkillVersion());
+                        });
+            }
+        } catch (RuntimeException ignored) {
+            // Source decoration is best effort and must not affect a successful tool invocation.
+        }
     }
 
     private void collectBlocks(AtomicReference<List<Map<String, Object>>> blocks,

@@ -764,16 +764,6 @@ const remainingRouter: AppRouteRecordRaw[] = [
           noCache: false
         }
       },
-      {
-        path: 'role-preset',
-        component: () => import('@/views/ai/rolePreset/index.vue'),
-        name: 'AiRolePreset',
-        meta: {
-          title: '角色中心',
-          icon: 'ep:user-filled',
-          noCache: false
-        }
-      }
     ]
   },
   {

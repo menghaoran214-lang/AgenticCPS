@@ -45,7 +45,7 @@ public class AppAiChatMessageController {
             @Valid @RequestBody AppAiChatMessageSendReqVO reqVO) {
         AiChatMessageSendRespVO result = chatMessageService.sendMessage(toAdminReq(reqVO),
                 AiChatOwnerTypeEnum.MEMBER.name(), getLoginUserId());
-        return success(BeanUtils.toBean(result, AppAiChatMessageSendRespVO.class));
+        return success(toAppResponse(result));
     }
 
     @PostMapping(value = "/send-stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
@@ -69,12 +69,19 @@ public class AppAiChatMessageController {
         // The owner-bound lookup is deliberately performed before loading message rows.
         chatConversationService.getOwnedConversation(conversationId, AiChatOwnerTypeEnum.MEMBER.name(), getLoginUserId());
         List<AiChatMessageDO> messages = chatMessageService.getChatMessageListByConversationId(conversationId);
-        return success(CollUtil.isEmpty(messages) ? Collections.emptyList()
-                : BeanUtils.toBean(messages, AppAiChatMessageRespVO.class));
+        if (CollUtil.isEmpty(messages)) {
+            return success(Collections.emptyList());
+        }
+        List<AppAiChatMessageRespVO> result = BeanUtils.toBean(messages, AppAiChatMessageRespVO.class);
+        for (int i = 0; i < messages.size(); i++) {
+            result.get(i).setUsage(toAppUsage(messages.get(i)));
+        }
+        return success(result);
     }
 
     private AiChatMessageSendReqVO toAdminReq(AppAiChatMessageSendReqVO reqVO) {
-        return BeanUtils.toBean(reqVO, AiChatMessageSendReqVO.class);
+        // 调试轨迹包含完整 Prompt/模型输出，只允许管理端显式开启；会员端请求永远关闭。
+        return BeanUtils.toBean(reqVO, AiChatMessageSendReqVO.class).setDebugMode(false);
     }
 
     private AppAiChatMessageSendRespVO toAppResponse(AiChatMessageSendRespVO response) {
@@ -94,15 +101,39 @@ public class AppAiChatMessageController {
                 .setToolExecution(response.getToolExecution() == null ? null
                         : new AppAiChatMessageSendRespVO.ToolExecution()
                         .setExecutionId(response.getToolExecution().getExecutionId())
+                        .setToolName(response.getToolExecution().getToolName())
                         .setIntent(response.getToolExecution().getIntent())
                         .setLabel(response.getToolExecution().getLabel())
                         .setStatus(response.getToolExecution().getStatus())
-                        .setMessage(response.getToolExecution().getMessage()))
+                        .setMessage(response.getToolExecution().getMessage())
+                        .setSource(response.getToolExecution().getSource())
+                        .setMcpClientName(response.getToolExecution().getMcpClientName())
+                        .setSkillCode(response.getToolExecution().getSkillCode())
+                        .setSkillVersion(response.getToolExecution().getSkillVersion()))
+                .setUsage(toAppUsage(response.getUsage()))
                 .setSend(toAppMessage(response.getSend()))
                 .setReceive(toAppMessage(response.getReceive()));
     }
 
     private AppAiChatMessageSendRespVO.Message toAppMessage(AiChatMessageSendRespVO.Message message) {
         return message == null ? null : BeanUtils.toBean(message, AppAiChatMessageSendRespVO.Message.class);
+    }
+
+    private AppAiChatMessageSendRespVO.ModelUsage toAppUsage(AiChatMessageSendRespVO.ModelUsage usage) {
+        return usage == null ? null : BeanUtils.toBean(usage, AppAiChatMessageSendRespVO.ModelUsage.class);
+    }
+
+    private AppAiChatMessageRespVO.ModelUsage toAppUsage(AiChatMessageDO message) {
+        if (message.getPromptTokens() == null && message.getCompletionTokens() == null
+                && message.getTotalTokens() == null && message.getCacheReadInputTokens() == null
+                && message.getCacheWriteInputTokens() == null) {
+            return null;
+        }
+        return new AppAiChatMessageRespVO.ModelUsage()
+                .setPromptTokens(message.getPromptTokens())
+                .setCompletionTokens(message.getCompletionTokens())
+                .setTotalTokens(message.getTotalTokens())
+                .setCacheReadInputTokens(message.getCacheReadInputTokens())
+                .setCacheWriteInputTokens(message.getCacheWriteInputTokens());
     }
 }
