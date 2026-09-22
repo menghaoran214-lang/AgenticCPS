@@ -6,7 +6,7 @@
     <div class="grid grid-cols-1 gap-12px md:grid-cols-2">
       <el-card v-for="role in roles" :key="role.id" shadow="hover" data-testid="chat-role-card">
         <div class="flex items-center gap-8px">
-          <el-avatar :src="role.avatar">{{ role.name.slice(0, 1) }}</el-avatar>
+          <AiRoleAvatar :src="role.avatar" :preset-code="role.presetCode" :name="role.name" />
           <strong>{{ role.name }}</strong>
         </div>
         <p>{{ role.description }}</p>
@@ -29,6 +29,7 @@
 <script setup lang="ts">
 import { ChatRoleApi, type ChatRoleVO } from '@/api/ai/model/chatRole'
 import { ChatConversationApi } from '@/api/ai/chat/conversation'
+import AiRoleAvatar from '@/components/AiRoleAvatar/index.vue'
 const emit = defineEmits<{ success: [id: string] }>()
 const visible = ref(false)
 const loading = ref(false)

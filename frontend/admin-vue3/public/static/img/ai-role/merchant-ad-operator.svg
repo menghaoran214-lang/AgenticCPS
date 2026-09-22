@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" role="img" aria-labelledby="title desc">
+  <title id="title">商家投放助手</title>
+  <desc id="desc">橙色投放策略助手头像</desc>
+  <rect width="160" height="160" rx="36" fill="#fff2df"/>
+  <path d="M37 61 80 35l43 26-43 26-43-26Z" fill="#f28b2e"/>
+  <path d="M49 76v24c0 12 14 22 31 22s31-10 31-22V76L80 94 49 76Z" fill="#d66a17"/>
+  <path d="M123 62v33" stroke="#f28b2e" stroke-linecap="round" stroke-width="8"/>
+  <circle cx="123" cy="104" r="7" fill="#f28b2e"/>
+  <path d="M62 113h36" stroke="#fff" stroke-linecap="round" stroke-width="7"/>
+</svg>

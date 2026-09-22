@@ -31,7 +31,12 @@
         </div>
         <!-- 角色信息 -->
         <div>
-          <img class="w-40px h-40px rounded-10px overflow-hidden" :src="role.avatar" />
+          <AiRoleAvatar
+            class="w-40px h-40px rounded-10px overflow-hidden"
+            :src="role.avatar"
+            :preset-code="role.presetCode"
+            :name="role.name"
+          />
         </div>
         <div class="ml-10px w-full">
           <div class="h-85px">
@@ -55,6 +60,7 @@
 import { ChatRoleVO } from '@/api/ai/model/chatRole'
 import { PropType, ref } from 'vue'
 import { More } from '@element-plus/icons-vue'
+import AiRoleAvatar from '@/components/AiRoleAvatar/index.vue'
 
 const tabsRef = ref<any>() // tabs ref
 

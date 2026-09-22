@@ -16,6 +16,26 @@ class McpConnectionManagerTest {
    assertDoesNotThrow(()->McpConnectionManager.validateConnection(server));
   } finally {TenantContextHolder.clear();}
  }
+ @Test void apiKeyMayBeEnteredDirectly() {
+  var server = new AiMcpServerDO().setTransportProtocol("SSE").setAuthType("API_KEY")
+    .setEndpoint("https://example.com/sse").setSecretValue("haina-key");
+  assertDoesNotThrow(() -> McpConnectionManager.validateConnection(server));
+ }
+ @Test void unsupportedAuthTypeIsRejected() {
+  var server = new AiMcpServerDO().setTransportProtocol("SSE").setAuthType("BASIC")
+    .setEndpoint("https://example.com/sse");
+  assertThrows(IllegalArgumentException.class, () -> McpConnectionManager.validateConnection(server));
+ }
+ @Test void describesUpstreamFailuresWithoutLeakingTransportDetails() {
+  var failure = new IllegalStateException(
+    "Invalid SSE response. Status code: 503 Line: upstream connect error; Authorization: secret-value");
+  assertEquals("上游服务暂时不可用（HTTP 503），请检查上游服务状态或网络",
+    McpConnectionManager.describeFailure(failure));
+  assertEquals("上游拒绝认证（HTTP 401），请检查认证方式和密钥",
+    McpConnectionManager.describeFailure(new IllegalStateException("Status code: 401")));
+  assertEquals("连接超时，请检查 Endpoint、网络和超时设置",
+    McpConnectionManager.describeFailure(new IllegalStateException("connection timeout")));
+ }
  @Test void signedLocalIdentityCannotBeRedirectedToAnExternalEndpoint() {
   AiMcpServerDO server=new AiMcpServerDO().setCode("cps").setLocation("LOCAL").setTransportProtocol("SSE")
     .setAuthType("NONE").setEndpoint("https://example.com/mcp");

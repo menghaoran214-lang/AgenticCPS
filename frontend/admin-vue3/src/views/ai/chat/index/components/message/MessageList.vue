@@ -4,7 +4,11 @@
       <!-- 靠左 message：system、assistant 类型 -->
       <div class="flex flex-row mt-50px" v-if="item.type !== 'user'">
         <div class="avatar">
-          <el-avatar :src="roleAvatar" />
+          <AiRoleAvatar
+            :src="conversation.roleAvatar"
+            :preset-code="conversation.rolePresetCode"
+            name="AI"
+          />
         </div>
         <div class="flex flex-col text-left mx-15px">
           <div>
@@ -125,13 +129,13 @@ import MessageToolExecutions from './MessageToolExecutions.vue'
 import MessageBlocks from './MessageBlocks.vue'
 import MessageDebugTrace from './MessageDebugTrace.vue'
 import MessageUsage from './MessageUsage.vue'
+import AiRoleAvatar from '@/components/AiRoleAvatar/index.vue'
 import { useClipboard } from '@vueuse/core'
 import { ArrowDownBold, Edit, RefreshRight } from '@element-plus/icons-vue'
 import { ChatMessageApi, ChatMessageVO } from '@/api/ai/chat/message'
 import { ChatConversationVO } from '@/api/ai/chat/conversation'
 import { useUserStore } from '@/store/modules/user'
 import userAvatarDefaultImg from '@/assets/imgs/avatar.gif'
-import roleAvatarDefaultImg from '@/assets/ai/gpt.svg'
 
 const message = useMessage() // 消息弹窗
 const { copy } = useClipboard({ legacy: true }) // 初始化 copy 到粘贴板
@@ -142,7 +146,6 @@ const messageContainer: any = ref(null)
 const isScrolling = ref(false) //用于判断用户是否在滚动
 
 const userAvatar = computed(() => userStore.user.avatar || userAvatarDefaultImg)
-const roleAvatar = computed(() => props.conversation.roleAvatar ?? roleAvatarDefaultImg)
 
 // 定义 props
 const props = defineProps({

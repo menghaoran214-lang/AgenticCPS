@@ -11,6 +11,9 @@ export interface McpServerVO {
   transportProtocol?: string
   authType?: string
   secretRef?: string
+  /** 仅用于保存请求，服务端不会在响应中返回明文。 */
+  secretValue?: string
+  secretConfigured?: boolean
   location?: string
   timeoutMillis?: number
   status?: number
@@ -76,7 +79,8 @@ export const McpApi = {
     request.get({ url: '/ai/mcp/server/page', params }),
   createServer: (data: McpServerVO) => request.post({ url: '/ai/mcp/server/create', data }),
   updateServer: (data: McpServerVO) => request.put({ url: '/ai/mcp/server/update', data }),
-  testServer: (id: number) => request.post({ url: '/ai/mcp/server/test', params: { id } }),
+  testServer: (id: number) =>
+    request.post({ url: '/ai/mcp/server/test', params: { id }, showErrorMessage: false }),
   syncTools: (id: number) => request.post({ url: '/ai/mcp/server/sync-tools', params: { id } }),
   updateServerStatus: (id: number, enabled: boolean) =>
     request.post({ url: '/ai/mcp/server/status', params: { id, status: enabled ? 0 : 1 } }),

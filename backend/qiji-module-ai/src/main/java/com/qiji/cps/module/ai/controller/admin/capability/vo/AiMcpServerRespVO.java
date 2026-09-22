@@ -5,4 +5,21 @@ import lombok.Data;
 
 import java.time.LocalDateTime;
 @Data
-public class AiMcpServerRespVO { private Long id; private String code; private String name; private String type; private String location; private String transportProtocol; private String endpoint; private String authType; private String secretRef; private Integer timeoutMillis; private Integer status; private String healthStatus; private LocalDateTime lastHealthCheckAt; private String lastError; private LocalDateTime createTime; }
+public class AiMcpServerRespVO {
+    private Long id;
+    private String code;
+    private String name;
+    private String type;
+    private String location;
+    private String transportProtocol;
+    private String endpoint;
+    private String authType;
+    private String secretRef;
+    private Boolean secretConfigured;
+    private Integer timeoutMillis;
+    private Integer status;
+    private String healthStatus;
+    private LocalDateTime lastHealthCheckAt;
+    private String lastError;
+    private LocalDateTime createTime;
+}

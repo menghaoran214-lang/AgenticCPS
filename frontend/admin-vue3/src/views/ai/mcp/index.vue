@@ -67,6 +67,8 @@
                 v-hasPermi="['ai:mcp:manage']"
                 link
                 type="primary"
+                :loading="testingServerId === scope.row.id"
+                :disabled="testingServerId !== undefined"
                 @click="testServer(scope.row)"
                 >测试</el-button
               >
@@ -284,11 +286,20 @@
         ><el-select v-model="form.authType"
           ><el-option label="无认证" value="NONE" /><el-option
             label="Bearer 密钥引用"
-            value="BEARER" /></el-select
+            value="BEARER" /><el-option label="API Key" value="API_KEY" /></el-select
       ></el-form-item>
       <el-form-item v-if="form.authType === 'BEARER'" label="密钥引用" prop="secretRef"
         ><el-input v-model="form.secretRef" :placeholder="secretPlaceholder"
       /></el-form-item>
+      <el-form-item v-if="form.authType === 'API_KEY'" label="API Key" prop="secretValue">
+        <el-input
+          v-model="form.secretValue"
+          type="password"
+          show-password
+          autocomplete="new-password"
+          :placeholder="form.secretConfigured ? '已配置，留空则保持不变' : '请输入 API Key'"
+        />
+      </el-form-item>
       <el-form-item label="超时(ms)"
         ><el-input-number v-model="form.timeoutMillis" :min="1000" :max="60000"
       /></el-form-item>
@@ -378,6 +389,7 @@ const loading = ref(false)
 const toolLoading = ref(false)
 const policyLoading = ref(false)
 const saving = ref(false)
+const testingServerId = ref<number>()
 const servers = ref<McpServerVO[]>([])
 const serverOptions = ref<McpServerVO[]>([])
 const tools = ref<McpToolVO[]>([])
@@ -514,6 +526,7 @@ const form = reactive<McpServerVO>({
   location: 'REMOTE',
   authType: 'NONE',
   transportProtocol: 'SSE',
+  secretValue: '',
   timeoutMillis: 10000,
   status: 1
 })
@@ -566,6 +579,8 @@ const openCreate = () => {
     endpoint: '',
     authType: 'NONE',
     secretRef: '',
+    secretValue: '',
+    secretConfigured: false,
     timeoutMillis: 10000,
     status: 1
   })
@@ -574,14 +589,19 @@ const openCreate = () => {
 }
 const openEdit = (row: McpServerVO) => {
   editing.value = true
-  Object.assign(form, row)
+  Object.assign(form, row, { secretValue: '' })
   dialogVisible.value = true
 }
 const saveServer = async () => {
   await formRef.value?.validate()
   saving.value = true
   try {
-    editing.value ? await McpApi.updateServer(form) : await McpApi.createServer(form)
+    const payload = { ...form }
+    if (payload.authType === 'API_KEY' && payload.secretValue?.trim()) {
+      payload.secretValue = payload.secretValue.trim()
+      payload.secretRef = ''
+    }
+    editing.value ? await McpApi.updateServer(payload) : await McpApi.createServer(payload)
     message.success('保存成功')
     dialogVisible.value = false
     await Promise.all([loadServers(), loadOptions()])
@@ -590,9 +610,30 @@ const saveServer = async () => {
   }
 }
 const testServer = async (row: McpServerVO) => {
-  const healthy = await McpApi.testServer(row.id as number)
-  healthy ? message.success('连接正常') : message.error('连接失败，请检查服务配置和健康状态')
-  await loadServers()
+  const id = row.id
+  if (!id || testingServerId.value !== undefined) return
+  testingServerId.value = id
+  try {
+    const healthy = await McpApi.testServer(id)
+    healthy ? message.success('连接正常') : message.error('连接失败，请检查服务配置和健康状态')
+  } catch (error) {
+    const requestError = error as {
+      message?: unknown
+      response?: { data?: { msg?: unknown } }
+    }
+    const detail = requestError.response?.data?.msg || requestError.message
+    message.error(
+      typeof detail === 'string' && detail && detail !== 'error'
+        ? detail
+        : 'MCP 服务测试失败，请检查 Endpoint、传输协议和认证配置'
+    )
+  } finally {
+    try {
+      await loadServers()
+    } finally {
+      testingServerId.value = undefined
+    }
+  }
 }
 const syncTools = async (row: McpServerVO) => {
   const count = await McpApi.syncTools(row.id as number)
@@ -613,7 +654,12 @@ watch(activeTab, (value) => {
 watch(
   () => form.authType,
   (value) => {
-    if (value === 'NONE') form.secretRef = ''
+    if (value === 'NONE') {
+      form.secretRef = ''
+      form.secretValue = ''
+    } else if (value === 'BEARER') {
+      form.secretValue = ''
+    }
   }
 )
 watch(policyServerIds, (serverIds) => {

@@ -46,7 +46,7 @@ public class AiUtils {
     public static ChatOptions buildChatOptions(AiPlatformEnum platform, String model, Double temperature, Integer maxTokens,
                                                List<ToolCallback> toolCallbacks, Map<String, Object> toolContext) {
         toolCallbacks = ObjUtil.defaultIfNull(toolCallbacks, Collections.emptyList());
-        toolContext = ObjUtil.defaultIfNull(toolContext, Collections.emptyMap());
+        toolContext = withoutNullEntries(toolContext);
         if (!toolCallbacks.isEmpty() && !supportsToolCalling(platform)) {
             throw exception(MODEL_TOOL_CALL_UNSUPPORTED, platform.getName());
         }
@@ -92,6 +92,25 @@ public class AiUtils {
             default:
                 throw new IllegalArgumentException(StrUtil.format("未知平台({})", platform));
         }
+    }
+
+    /**
+     * Spring AI 2.0.1 copies tool context with {@code Map.copyOf}, which rejects null keys and
+     * values. A missing optional identity value has the same lookup semantics as a null value for
+     * tool callbacks, so remove those entries at the options boundary without mutating the caller's
+     * map.
+     */
+    private static Map<String, Object> withoutNullEntries(Map<String, Object> toolContext) {
+        if (toolContext == null || toolContext.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        Map<String, Object> sanitized = new LinkedHashMap<>(toolContext.size());
+        for (Map.Entry<String, Object> entry : toolContext.entrySet()) {
+            if (entry.getKey() != null && entry.getValue() != null) {
+                sanitized.put(entry.getKey(), entry.getValue());
+            }
+        }
+        return sanitized.isEmpty() ? Collections.emptyMap() : Collections.unmodifiableMap(sanitized);
     }
 
     /**

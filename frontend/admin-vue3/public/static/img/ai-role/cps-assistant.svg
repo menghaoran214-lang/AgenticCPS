@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" role="img" aria-labelledby="title desc">
+  <title id="title">CPS 联盟助手</title>
+  <desc id="desc">蓝色购物联盟助手头像</desc>
+  <rect width="160" height="160" rx="36" fill="#e8f2ff"/>
+  <circle cx="80" cy="72" r="42" fill="#2878d7"/>
+  <path d="M45 73c0-25 15-43 35-43s35 18 35 43v13H45V73Z" fill="#174d98"/>
+  <circle cx="65" cy="73" r="6" fill="#fff"/>
+  <circle cx="95" cy="73" r="6" fill="#fff"/>
+  <path d="M62 93c10 9 26 9 36 0" fill="none" stroke="#fff" stroke-linecap="round" stroke-width="6"/>
+  <path d="M45 70 30 58M115 70l15-12" fill="none" stroke="#2878d7" stroke-linecap="round" stroke-width="8"/>
+  <path d="M56 119h48" stroke="#2878d7" stroke-linecap="round" stroke-width="10"/>
+</svg>

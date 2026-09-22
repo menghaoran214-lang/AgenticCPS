@@ -56,9 +56,11 @@
               "
             >
               <div class="flex flex-row items-center">
-                <img
+                <AiRoleAvatar
                   class="w-6.25 h-6.25 rounded-1.25 flex flex-row justify-center"
-                  :src="conversation.roleAvatar || roleAvatarDefaultImg"
+                  :src="conversation.roleAvatar"
+                  :preset-code="conversation.rolePresetCode"
+                  name="AI"
                 />
                 <span
                   class="py-0.5 px-2.5"
@@ -144,8 +146,8 @@ import { ChatConversationApi, ChatConversationVO } from '@/api/ai/chat/conversat
 import RoleRepository from '../role/RoleRepository.vue'
 import ChatRolePicker from '../role/ChatRolePicker.vue'
 import { Bottom, Top } from '@element-plus/icons-vue'
-import roleAvatarDefaultImg from '@/assets/ai/gpt.svg'
 import McpTestConversationDialog from '../mcp/McpTestConversationDialog.vue'
+import AiRoleAvatar from '@/components/AiRoleAvatar/index.vue'
 
 const message = useMessage() // 消息弹窗
 

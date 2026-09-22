@@ -44,6 +44,15 @@ async function bootstrap(page: Page) {
                   component: 'ai/model/chatRole/index',
                   componentName: 'AiChatRole',
                   visible: true
+                },
+                {
+                  id: 9993,
+                  name: 'MCP 管理',
+                  type: 2,
+                  path: 'mcp',
+                  component: 'ai/mcp/index',
+                  componentName: 'AiMcpCenter',
+                  visible: true
                 }
               ]
             }
@@ -187,6 +196,16 @@ test('MCP 连接失败保留失败提示，传输协议不包含任意进程执�
         total: 1
       }
     }
+    if (url.pathname.endsWith('/server/test')) {
+      await route.fulfill({
+        status: 500,
+        json: {
+          code: 1040012000,
+          msg: 'MCP 服务测试失败：上游服务暂时不可用（HTTP 503），请检查上游服务状态或网络'
+        }
+      })
+      return
+    }
     if (url.pathname.endsWith('/server/create')) {
       createdServer = route.request().postDataJSON()
       data = 88
@@ -195,7 +214,9 @@ test('MCP 连接失败保留失败提示，传输协议不包含任意进程执�
   })
   await page.goto('/ai/mcp')
   await page.getByRole('button', { name: '测试', exact: true }).click()
-  await expect(page.getByText('连接失败，请检查服务配置和健康状态')).toBeVisible()
+  await expect(
+    page.getByText('MCP 服务测试失败：上游服务暂时不可用（HTTP 503），请检查上游服务状态或网络')
+  ).toBeVisible()
   await page.getByRole('button', { name: '注册服务', exact: true }).click()
   const dialog = page.getByRole('dialog').filter({ hasText: '注册 MCP 服务' })
   await dialog.getByText('SSE', { exact: true }).click()

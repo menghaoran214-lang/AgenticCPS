@@ -30,6 +30,9 @@ public interface ErrorCodeConstants {
     ErrorCode CHAT_ROLE_MUTATION_DENIED = new ErrorCode(1_040_002_006, "不允许修改该聊天角色");
     ErrorCode CHAT_ROLE_MEMBER_NOT_AVAILABLE = new ErrorCode(1_040_002_007, "系统暂未配置可用的会员 AI 角色");
 
+    // ========== MCP 管理 1-040-012-000 ==========
+    ErrorCode MCP_SERVER_TEST_FAILED = new ErrorCode(1_040_012_000, "MCP 服务测试失败：{}");
+
     // ========== API 聊天会话 1-040-003-000 ==========
     ErrorCode CHAT_CONVERSATION_NOT_EXISTS = new ErrorCode(1_040_003_000, "对话不存在!");
     ErrorCode CHAT_CONVERSATION_MODEL_ERROR = new ErrorCode(1_040_003_001, "操作失败，该聊天模型的配置不完整");

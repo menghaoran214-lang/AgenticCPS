@@ -9,6 +9,7 @@ import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.ai.tool.ToolCallback;
 
 import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -16,6 +17,7 @@ import static com.qiji.cps.framework.test.core.util.AssertUtils.assertServiceExc
 import static com.qiji.cps.module.ai.enums.ErrorCodeConstants.MODEL_TOOL_CALL_UNSUPPORTED;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.Mockito.mock;
 
 class AiUtilsToolCapabilityTest extends BaseMockitoUnitTest {
@@ -72,6 +74,21 @@ class AiUtilsToolCapabilityTest extends BaseMockitoUnitTest {
         ChatOptions options = AiUtils.buildChatOptions(AiPlatformEnum.YI_YAN, "model", 0.5D, 100);
 
         assertInstanceOf(QianFanChatOptions.class, options);
+    }
+
+    @Test
+    void buildChatOptions_ignoresNullToolContextEntries() {
+        ToolCallback toolCallback = mock(ToolCallback.class);
+        Map<String, Object> toolContext = new HashMap<>();
+        toolContext.put(AiUtils.TOOL_CONTEXT_LOGIN_USER_ID, null);
+        toolContext.put(AiUtils.TOOL_CONTEXT_TENANT_ID, 7L);
+
+        OpenAiChatOptions options = assertInstanceOf(OpenAiChatOptions.class,
+                AiUtils.buildChatOptions(AiPlatformEnum.OPENAI, "gpt-4o", 0.5D, 100,
+                        List.of(toolCallback), toolContext));
+
+        assertEquals(Map.of(AiUtils.TOOL_CONTEXT_TENANT_ID, 7L), options.getToolContext());
+        assertNull(toolContext.get(AiUtils.TOOL_CONTEXT_LOGIN_USER_ID));
     }
 
 }

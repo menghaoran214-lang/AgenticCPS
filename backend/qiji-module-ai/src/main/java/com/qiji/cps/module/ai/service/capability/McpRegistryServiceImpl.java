@@ -27,7 +27,7 @@ public class McpRegistryServiceImpl implements McpRegistryService {
         } catch (RuntimeException ex) {
             connections.invalidate(id);
             refreshHealth(id, false, "MCP_UNAVAILABLE");
-            throw new IllegalStateException("MCP 服务不可用，请检查连接与认证配置");
+            throw new IllegalStateException(McpConnectionManager.describeFailure(ex));
         }
     }
     @Override public List<org.springframework.ai.tool.ToolCallback> getToolCallbacks(Long id) {
@@ -59,7 +59,7 @@ public class McpRegistryServiceImpl implements McpRegistryService {
         } catch (RuntimeException failure) {
             connections.invalidate(server.getId());
             refreshHealth(server.getId(), false, "MCP_UNAVAILABLE");
-            throw new IllegalStateException("MCP 服务不可用，请检查连接与认证配置");
+            throw new IllegalStateException(McpConnectionManager.describeFailure(failure));
         }
     }
     @Override public Discovery inspect(Long id) {
@@ -71,7 +71,7 @@ public class McpRegistryServiceImpl implements McpRegistryService {
             return discovery;
         } catch (RuntimeException ex) {
             refreshHealth(id, false, "MCP_UNAVAILABLE");
-            throw new IllegalStateException("MCP 服务不可用，请检查连接与认证配置");
+            throw new IllegalStateException(McpConnectionManager.describeFailure(ex));
         }
     }
     private Discovery readDiscovery(io.modelcontextprotocol.client.McpSyncClient client) {

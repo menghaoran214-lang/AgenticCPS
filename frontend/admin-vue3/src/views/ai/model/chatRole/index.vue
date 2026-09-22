@@ -65,7 +65,12 @@
       <el-table-column label="绑定模型" align="center" prop="modelName" />
       <el-table-column label="角色头像" align="center" prop="avatar">
         <template #default="scope">
-          <el-image :src="scope?.row.avatar" class="w-32px h-32px" />
+          <AiRoleAvatar
+            :src="scope?.row.avatar"
+            :preset-code="scope?.row.presetCode"
+            :name="scope?.row.name"
+            class="w-32px h-32px"
+          />
         </template>
       </el-table-column>
       <el-table-column label="角色类别" align="center" prop="category" />
@@ -167,6 +172,7 @@
 import { getBoolDictOptions, DICT_TYPE } from '@/utils/dict'
 import { ChatRoleApi, ChatRoleVO, type ChatRoleVersionVO } from '@/api/ai/model/chatRole'
 import ChatRoleForm from './ChatRoleForm.vue'
+import AiRoleAvatar from '@/components/AiRoleAvatar/index.vue'
 
 /** AI 聊天角色 列表 */
 defineOptions({ name: 'AiChatRole' })

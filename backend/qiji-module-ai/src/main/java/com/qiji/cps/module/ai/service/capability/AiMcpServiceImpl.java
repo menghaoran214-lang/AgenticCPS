@@ -12,6 +12,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.util.*;
 
+import static com.qiji.cps.framework.common.exception.util.ServiceExceptionUtil.exception;
+import static com.qiji.cps.module.ai.enums.ErrorCodeConstants.MCP_SERVER_TEST_FAILED;
+
 @Service
 public class AiMcpServiceImpl implements AiMcpService {
     @Resource private AiMcpServerMapper serverMapper;
@@ -20,6 +23,7 @@ public class AiMcpServiceImpl implements AiMcpService {
     @Resource private McpRegistryService registry;
     public Long createServer(AiMcpServerSaveReqVO req) {
         AiMcpServerDO server=BeanUtils.toBean(req,AiMcpServerDO.class).setId(null);
+        normalizeSecrets(server);
         defaults(server); validate(server);
         require(serverMapper.selectCount(new LambdaQueryWrapper<AiMcpServerDO>().eq(AiMcpServerDO::getCode,server.getCode()))==0,"服务编码已存在");
         serverMapper.insert(server); return server.getId();
@@ -27,7 +31,9 @@ public class AiMcpServiceImpl implements AiMcpService {
     public void updateServer(AiMcpServerSaveReqVO req) {
         var current=getRequiredServer(req.getId());
         require(Objects.equals(current.getCode(),req.getCode()),"服务编码创建后不可修改");
-        var server=BeanUtils.toBean(req,AiMcpServerDO.class); defaults(server); validate(server);
+        var server=BeanUtils.toBean(req,AiMcpServerDO.class);
+        preserveOrReplaceSecrets(current, server);
+        defaults(server); validate(server);
         serverMapper.updateById(server); registry.invalidate(server.getId());
     }
     public AiMcpServerDO getServer(Long id) { return getRequiredServer(id); }
@@ -36,7 +42,15 @@ public class AiMcpServiceImpl implements AiMcpService {
         getRequiredServer(id); require(status != null && (status==0 || status==1),"状态无效");
         serverMapper.updateById(new AiMcpServerDO().setId(id).setStatus(status)); registry.invalidate(id);
     }
-    public boolean testServer(Long id) { getRequiredServer(id); registry.inspect(id); return true; }
+    public boolean testServer(Long id) {
+        getRequiredServer(id);
+        try {
+            registry.inspect(id);
+            return true;
+        } catch (IllegalArgumentException | IllegalStateException ex) {
+            throw exception(MCP_SERVER_TEST_FAILED, McpConnectionManager.describeFailure(ex));
+        }
+    }
     @Transactional(rollbackFor=Exception.class)
     public int syncTools(Long id) {
         getRequiredServer(id);
@@ -99,6 +113,37 @@ public class AiMcpServiceImpl implements AiMcpService {
         if(server.getAuthType()==null) server.setAuthType("NONE");
         if(server.getLocation()==null) server.setLocation("REMOTE");
         server.setHealthStatus("UNKNOWN");
+    }
+
+    private void normalizeSecrets(AiMcpServerDO server) {
+        if ("NONE".equals(server.getAuthType())) {
+            server.setSecretRef(null).setSecretValue(null);
+        } else if ("BEARER".equals(server.getAuthType())) {
+            server.setSecretValue(null);
+        } else if ("API_KEY".equals(server.getAuthType()) && server.getSecretValue() != null) {
+            server.setSecretValue(server.getSecretValue().trim());
+            if (!server.getSecretValue().isBlank()) server.setSecretRef(null);
+        }
+    }
+
+    private void preserveOrReplaceSecrets(AiMcpServerDO current, AiMcpServerDO server) {
+        if ("NONE".equals(server.getAuthType())) {
+            server.setSecretRef(null).setSecretValue(null);
+            return;
+        }
+        if ("BEARER".equals(server.getAuthType())) {
+            server.setSecretValue(null);
+            return;
+        }
+        if ("API_KEY".equals(server.getAuthType())) {
+            if (server.getSecretValue() == null || server.getSecretValue().isBlank()) {
+                server.setSecretValue(current.getSecretValue());
+                if (server.getSecretRef() == null || server.getSecretRef().isBlank())
+                    server.setSecretRef(current.getSecretRef());
+            } else {
+                server.setSecretValue(server.getSecretValue().trim()).setSecretRef(null);
+            }
+        }
     }
     private void validate(AiMcpServerDO server) {
         require(server.getCode()!=null && server.getCode().matches("[a-zA-Z0-9_-]{1,64}"),"服务编码无效");

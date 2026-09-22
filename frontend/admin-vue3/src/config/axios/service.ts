@@ -35,6 +35,9 @@ let isRefreshToken = false
 // 请求白名单，无须 token 的接口
 const whiteList: string[] = ['/login', '/refresh-token']
 
+const shouldShowErrorMessage = (requestConfig?: { showErrorMessage?: boolean }) =>
+  requestConfig?.showErrorMessage !== false
+
 // 创建axios实例
 const service: AxiosInstance = axios.create({
   baseURL: base_url, // api 的 base_url
@@ -169,8 +172,8 @@ service.interceptors.response.use(
             cb()
           })
           requestList = []
-          if ((config!.headers || {}).isEncrypt){
-            (config!.headers || {}).isEncrypted = true
+          if ((config!.headers || {}).isEncrypt) {
+            ;(config!.headers || {}).isEncrypted = true
           }
           return service(config)
         } catch (e) {
@@ -195,21 +198,22 @@ service.interceptors.response.use(
         })
       }
     } else if (code === 500) {
-      ElMessage.error(t('sys.api.errMsg500'))
+      if (shouldShowErrorMessage(config)) ElMessage.error(msg)
       return Promise.reject(new Error(msg))
     } else if (code === 901) {
-      ElMessage.error({
-        offset: 300,
-        dangerouslyUseHTMLString: true,
-        message:
-          '<div>' +
-          t('sys.api.errMsg901') +
-          '</div>' +
-          '<div> &nbsp; </div>' +
-          '<div>参考 https://doc.iocoder.cn/ 教程</div>' +
-          '<div> &nbsp; </div>' +
-          '<div>5 分钟搭建本地环境</div>'
-      })
+      if (shouldShowErrorMessage(config))
+        ElMessage.error({
+          offset: 300,
+          dangerouslyUseHTMLString: true,
+          message:
+            '<div>' +
+            t('sys.api.errMsg901') +
+            '</div>' +
+            '<div> &nbsp; </div>' +
+            '<div>参考 https://doc.iocoder.cn/ 教程</div>' +
+            '<div> &nbsp; </div>' +
+            '<div>5 分钟搭建本地环境</div>'
+        })
       return Promise.reject(new Error(msg))
     } else if (code !== 200) {
       if (msg === '无效的刷新令牌') {
@@ -217,9 +221,9 @@ service.interceptors.response.use(
         console.log(msg)
         return handleAuthorized()
       } else {
-        ElNotification.error({ title: msg })
+        if (shouldShowErrorMessage(config)) ElNotification.error({ title: msg })
       }
-      return Promise.reject('error')
+      return Promise.reject(shouldShowErrorMessage(config) ? 'error' : new Error(msg))
     } else {
       return data
     }
@@ -235,7 +239,7 @@ service.interceptors.response.use(
     } else if (message.includes('Request failed with status code')) {
       message = t('sys.api.apiRequestFailed') + message.substr(message.length - 3)
     }
-    ElMessage.error(message)
+    if (shouldShowErrorMessage(error.config)) ElMessage.error(message)
     return Promise.reject(error)
   }
 )
