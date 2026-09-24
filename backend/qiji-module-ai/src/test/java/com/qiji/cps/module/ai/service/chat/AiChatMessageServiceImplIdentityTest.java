@@ -17,6 +17,7 @@ import org.springframework.ai.chat.model.StreamingChatModel;
 import org.springframework.ai.chat.prompt.Prompt;
 
 import java.util.List;
+import java.util.Map;
 
 import static com.qiji.cps.framework.common.exception.util.ServiceExceptionUtil.exception;
 import static com.qiji.cps.module.ai.enums.ErrorCodeConstants.CHAT_CONVERSATION_NOT_EXISTS;
@@ -195,6 +196,21 @@ class AiChatMessageServiceImplIdentityTest extends BaseMockitoUnitTest {
                 () -> AiChatMessageServiceImpl.startStreamSafely(chatModel, new Prompt("test")).blockLast());
 
         assertSame(timeout, error);
+    }
+
+    @Test
+    void fallbackContentWhenModelReturnedEmpty_keepsStructuredQueryResultVisible() {
+        String content = messageService.fallbackContentWhenModelReturnedEmpty("", List.of(
+                Map.of("type", "PRODUCT_RECOMMEND", "title", "为你找到这些商品",
+                        "items", List.of(Map.of("title", "iPhone 18 Pro"), Map.of("title", "iPhone 18")))));
+
+        assertEquals("查询完成，共找到 2 条结果，请查看下方查询结果。", content);
+    }
+
+    @Test
+    void fallbackContentWhenModelReturnedEmpty_preservesModelText() {
+        assertEquals("模型已生成摘要", messageService.fallbackContentWhenModelReturnedEmpty(
+                "模型已生成摘要", List.of(Map.of("items", List.of(Map.of("title", "商品"))))));
     }
 
 }

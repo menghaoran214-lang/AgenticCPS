@@ -1030,12 +1030,29 @@ const doSendMessageStream = async (userMessage: ChatMessageVO) => {
               data.receive.debugTraces = data.modelTrace
                 ? upsertDebugTrace(pendingDebugTraces, data.modelTrace)
                 : pendingDebugTraces
+              data.receive.toolExecutions = pendingAssistant?.toolExecutions || []
+              data.receive.taskProgress = pendingAssistant?.taskProgress
+              if (!data.receive.blocks?.length && pendingAssistant?.blocks?.length) {
+                data.receive.blocks = pendingAssistant.blocks
+              }
               data.receive.usage = mergeUsage(pendingUsage, data.receive.usage)
               activeMessageList.value.push(data.receive)
             } else {
               const lastMessage = getCurrentAssistantMessage()
               if (lastMessage) {
+                const previousBlocks = lastMessage.blocks
+                const previousToolExecutions = lastMessage.toolExecutions
+                const previousTaskProgress = lastMessage.taskProgress
                 Object.assign(lastMessage, data.receive)
+                if (!data.receive.blocks?.length && previousBlocks?.length) {
+                  lastMessage.blocks = previousBlocks
+                }
+                if (!data.receive.toolExecutions?.length && previousToolExecutions?.length) {
+                  lastMessage.toolExecutions = previousToolExecutions
+                }
+                if (!data.receive.taskProgress && previousTaskProgress) {
+                  lastMessage.taskProgress = previousTaskProgress
+                }
                 if (data.modelTrace) {
                   lastMessage.debugTraces = upsertDebugTrace(
                     lastMessage.debugTraces || [],

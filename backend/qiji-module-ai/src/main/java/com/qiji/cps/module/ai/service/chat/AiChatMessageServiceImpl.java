@@ -185,6 +185,7 @@ public class AiChatMessageServiceImpl implements AiChatMessageService {
         // 4.3 更新响应内容
         String newContent = AiUtils.getChatResponseContent(chatResponse);
         String newReasoningContent = AiUtils.getChatResponseReasoningContent(chatResponse);
+        newContent = fallbackContentWhenModelReturnedEmpty(newContent, blocks.get());
         AiChatMessageSendRespVO.ModelUsage usage = toModelUsage(chatResponse);
         chatMessageMapper.updateById(new AiChatMessageDO().setId(assistantMessage.getId())
                 .setContent(newContent).setReasoningContent(newReasoningContent).setBlocks(blocks.get())
@@ -340,8 +341,13 @@ public class AiChatMessageServiceImpl implements AiChatMessageService {
                             .setSegments(cacheSegments.get()).setWebSearchPages(cacheWebSearchPages.get())
                             .setBlocks(blocks.get()).setUsage(usage))); // 知识库 + 联网搜索
         }).doOnComplete(() -> {
+            String finalContent = fallbackContentWhenModelReturnedEmpty(contentBuffer.toString(), blocks.get());
+            if (!finalContent.equals(contentBuffer.toString())) {
+                contentBuffer.setLength(0);
+                contentBuffer.append(finalContent);
+            }
             TenantUtils.execute(tenantId, () -> chatMessageMapper.updateById(
-                    new AiChatMessageDO().setId(assistantMessage.getId()).setContent(contentBuffer.toString())
+                    new AiChatMessageDO().setId(assistantMessage.getId()).setContent(finalContent)
                             .setReasoningContent(reasoningContentBuffer.toString()).setBlocks(blocks.get())
                             .setPromptTokens(lastUsage.get() == null ? null : lastUsage.get().getPromptTokens())
                             .setCompletionTokens(lastUsage.get() == null ? null : lastUsage.get().getCompletionTokens())
@@ -354,12 +360,12 @@ public class AiChatMessageServiceImpl implements AiChatMessageService {
                     .setUsage(usage)
                     .setSend(BeanUtils.toBean(userMessage, AiChatMessageSendRespVO.Message.class))
                     .setReceive(BeanUtils.toBean(assistantMessage, AiChatMessageSendRespVO.Message.class)
-                            .setContent(contentBuffer.toString())
+                            .setContent(finalContent)
                             .setReasoningContent(reasoningContentBuffer.toString())
                             .setSegments(cacheSegments.get()).setWebSearchPages(cacheWebSearchPages.get())
                             .setBlocks(blocks.get()).setUsage(usage));
             if (Boolean.TRUE.equals(sendReqVO.getDebugMode())) {
-                response.setModelTrace(toDebugTrace(requestId, model, prompt, contentBuffer.toString(),
+                response.setModelTrace(toDebugTrace(requestId, model, prompt, finalContent,
                         reasoningContentBuffer.toString(), usage, elapsedMs(startedAt), "SUCCEEDED"));
             }
             completeSink.tryEmitValue(success(response));
@@ -705,6 +711,23 @@ public class AiChatMessageServiceImpl implements AiChatMessageService {
             }
             return;
         }
+    }
+
+    /**
+     * Some providers finish a tool call with no assistant text. Keep the structured tool result
+     * visible and persisted instead of replacing it with an empty assistant bubble.
+     */
+    String fallbackContentWhenModelReturnedEmpty(String content, List<Map<String, Object>> blocks) {
+        if (StrUtil.isNotBlank(content) || CollUtil.isEmpty(blocks)) {
+            return StrUtil.nullToDefault(content, "");
+        }
+        Map<String, Object> first = blocks.get(0);
+        Object items = first.get("items");
+        if (items instanceof Collection<?> collection) {
+            return "查询完成，共找到 " + collection.size() + " 条结果，请查看下方查询结果。";
+        }
+        Object title = first.get("title");
+        return title == null ? "查询完成，请查看下方查询结果。" : "查询完成：「" + title + "」。";
     }
 
     /**
