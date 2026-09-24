@@ -14,7 +14,7 @@
 
 ## MCP 注册与授权
 
-在管理后台“AI 能力中心 / MCP 管理”中新增、测试、同步和启停 MCP 服务。新登记默认停用，应先测试连接、同步工具、审核风险与授权策略，再显式启用。海纳种子登记同样默认为停用，认证使用 `BEARER`，数据库只保存 `env:AI_MCP_TENANT_1_HAINA_API_KEY` 引用。通过部署环境设置对应变量；首版只支持 `NONE` 和 `BEARER` 认证、SSE 和 STREAMABLE_HTTP，不支持 STDIO、执行命令或上传代码。Endpoint 不能包含用户名、密码、查询参数或 fragment。
+在管理后台“AI 能力中心 / MCP 管理”中新增、测试、同步和启停 MCP 服务。新登记默认停用，应先测试连接、同步工具、审核风险与授权策略，再显式启用。海纳种子登记同样默认为停用，使用 `STREAMABLE_HTTP` 和 `API_KEY`（`X-API-Key` 请求头）认证，数据库只保存 `env:AI_MCP_TENANT_1_HAINA_API_KEY` 引用。通过部署环境设置对应变量；首版只支持 `NONE`、`BEARER` 和 `API_KEY` 认证，以及 SSE 和 STREAMABLE_HTTP，不支持 STDIO、执行命令或上传代码。Endpoint 不能包含用户名、密码、查询参数或 fragment。
 
 本地 CPS 默认登记为停用，地址为 `http://127.0.0.1:48080/mcp/cps`，应与当前部署的 MCP 协议和端口核对。签名身份只会发送到 `LOCAL` 且编码为 `cps` 的回环服务；沿用已有 MCP 身份签名配置，未配置签名或缺少可信会员身份时拒绝执行。远程服务不接收本地可信身份上下文。
 

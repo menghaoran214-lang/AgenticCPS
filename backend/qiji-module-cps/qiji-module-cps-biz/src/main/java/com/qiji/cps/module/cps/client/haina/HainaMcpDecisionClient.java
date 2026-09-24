@@ -23,7 +23,7 @@ public class HainaMcpDecisionClient implements HainaDecisionClient {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final String SERVER_CODE = "haina";
-    private static final String CONTENT_SEARCH_TOOL = "content_search_pro";
+    private static final String CONTENT_SEARCH_TOOL = "content_search";
 
     private final HainaDecisionProperties properties;
     private final McpRegistryService mcpRegistryService;
@@ -49,12 +49,9 @@ public class HainaMcpDecisionClient implements HainaDecisionClient {
     private Map<String, Object> buildContentSearchArgs(String keyword, HainaDecisionRequest request) {
         Map<String, Object> args = new LinkedHashMap<>();
         args.put("query", keyword);
-        args.put("time_range", "TwoYear");
-        args.put("request_from", "content_search_pro_test");
-        args.put("recall_num", normalizeMaxResults(request));
-        args.put("ranker_advanced", true);
-        args.put("rewrite", false);
-        args.put("search_type", "web");
+        args.put("return_size", normalizeMaxResults(request));
+        args.put("query_rewrite", false);
+        args.put("correlate_enhance", true);
         return args;
     }
 
@@ -63,7 +60,7 @@ public class HainaMcpDecisionClient implements HainaDecisionClient {
         if (request == null || request.getMaxResults() == null) {
             return Math.min(configured, 10);
         }
-        return Math.max(1, Math.min(Math.min(request.getMaxResults(), configured), 50));
+        return Math.max(1, Math.min(Math.min(request.getMaxResults(), configured), 100));
     }
 
     private String buildKeyword(HainaDecisionRequest request) {
@@ -101,7 +98,13 @@ public class HainaMcpDecisionClient implements HainaDecisionClient {
     private List<HainaDecisionEvidence.DiscountEvidence> parseContentEvidence(String raw) {
         JsonNode root = readTree(raw);
         JsonNode data = root.path("data");
-        JsonNode items = data.path("items");
+        JsonNode items = data.path("content_list");
+        if (!items.isArray()) {
+            items = data.path("items");
+        }
+        if (!items.isArray()) {
+            items = root.path("content_list");
+        }
         if (!items.isArray()) {
             items = root.path("items");
         }
@@ -111,13 +114,13 @@ public class HainaMcpDecisionClient implements HainaDecisionClient {
         List<HainaDecisionEvidence.DiscountEvidence> evidence = new ArrayList<>();
         for (JsonNode item : items) {
             evidence.add(HainaDecisionEvidence.DiscountEvidence.builder()
-                    .title(text(item, "title"))
-                    .mallName(firstText(item, "source", "icon"))
-                    .content(limit(text(item, "context"), 160))
-                    .url(text(item, "article_link"))
+                    .title(firstText(item, "works_title", "title"))
+                    .mallName(firstText(item, "website_cname", "source", "icon"))
+                    .content(limit(firstText(item, "works_content", "context"), 160))
+                    .url(firstText(item, "works_link", "article_link"))
                     .pubdate(text(item, "publish_time"))
                     .build());
-            if (evidence.size() >= properties.getMaxResults()) {
+            if (evidence.size() >= Math.max(1, properties.getMaxResults())) {
                 break;
             }
         }
