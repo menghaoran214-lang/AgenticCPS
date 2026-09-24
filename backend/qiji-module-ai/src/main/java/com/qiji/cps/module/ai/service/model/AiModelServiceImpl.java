@@ -4,6 +4,8 @@ import com.qiji.cps.module.ai.enums.model.AiPlatformEnum;
 import com.qiji.cps.module.ai.framework.ai.core.model.AiModelFactory;
 import com.qiji.cps.module.ai.framework.ai.core.model.midjourney.api.MidjourneyApi;
 import com.qiji.cps.module.ai.framework.ai.core.model.suno.api.SunoApi;
+import com.qiji.cps.module.ai.framework.ai.core.model.jev.TypeSafeJevClient;
+import com.qiji.cps.module.ai.enums.model.AiModelTypeEnum;
 import com.qiji.cps.framework.common.enums.CommonStatusEnum;
 import com.qiji.cps.framework.common.pojo.PageResult;
 import com.qiji.cps.framework.common.util.object.BeanUtils;
@@ -53,8 +55,7 @@ public class AiModelServiceImpl implements AiModelService {
     @Override
     public Long createModel(AiModelSaveReqVO createReqVO) {
         // 1. 校验
-        AiPlatformEnum.validatePlatform(createReqVO.getPlatform());
-        apiKeyService.validateApiKey(createReqVO.getKeyId());
+        validatePlatformAndType(createReqVO.getPlatform(), createReqVO.getType(), createReqVO.getKeyId());
 
         // 2. 插入
         AiModelDO model = BeanUtils.toBean(createReqVO, AiModelDO.class);
@@ -66,8 +67,7 @@ public class AiModelServiceImpl implements AiModelService {
     public void updateModel(AiModelSaveReqVO updateReqVO) {
         // 1. 校验
         validateModelExists(updateReqVO.getId());
-        AiPlatformEnum.validatePlatform(updateReqVO.getPlatform());
-        apiKeyService.validateApiKey(updateReqVO.getKeyId());
+        validatePlatformAndType(updateReqVO.getPlatform(), updateReqVO.getType(), updateReqVO.getKeyId());
 
         // 2. 更新
         AiModelDO updateObj = BeanUtils.toBean(updateReqVO, AiModelDO.class);
@@ -131,6 +131,37 @@ public class AiModelServiceImpl implements AiModelService {
         AiApiKeyDO apiKey = apiKeyService.validateApiKey(model.getKeyId());
         AiPlatformEnum platform = AiPlatformEnum.validatePlatform(apiKey.getPlatform());
         return modelFactory.getOrCreateChatModel(platform, apiKey.getApiKey(), apiKey.getUrl());
+    }
+
+    private void validatePlatformAndType(String platform, Integer type, Long keyId) {
+        AiPlatformEnum modelPlatform = AiPlatformEnum.validatePlatform(platform);
+        if (AiPlatformEnum.JEV.getPlatform().equals(platform)
+                && !AiModelTypeEnum.EVALUATION.getType().equals(type)) {
+            throw exception(MODEL_USE_TYPE_ERROR);
+        }
+        if (modelPlatform == AiPlatformEnum.JEV) {
+            AiApiKeyDO apiKey = apiKeyService.validateApiKey(keyId);
+            if (!AiPlatformEnum.JEV.getPlatform().equals(apiKey.getPlatform())) {
+                throw exception(MODEL_USE_TYPE_ERROR);
+            }
+        } else {
+            apiKeyService.validateApiKey(keyId);
+        }
+    }
+
+    @Override
+    public TypeSafeJevClient getJevClient(Long id) {
+        AiModelDO model = validateModel(id);
+        if (!AiPlatformEnum.JEV.getPlatform().equals(model.getPlatform())
+                || !AiModelTypeEnum.EVALUATION.getType().equals(model.getType())) {
+            throw exception(MODEL_USE_TYPE_ERROR);
+        }
+        AiApiKeyDO apiKey = apiKeyService.validateApiKey(model.getKeyId());
+        AiPlatformEnum platform = AiPlatformEnum.validatePlatform(apiKey.getPlatform());
+        if (platform != AiPlatformEnum.JEV) {
+            throw exception(MODEL_USE_TYPE_ERROR);
+        }
+        return modelFactory.getOrCreateJevClient(apiKey.getApiKey(), apiKey.getUrl());
     }
 
     @Override

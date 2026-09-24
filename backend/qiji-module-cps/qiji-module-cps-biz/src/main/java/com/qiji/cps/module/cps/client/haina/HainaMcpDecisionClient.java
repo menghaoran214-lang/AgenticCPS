@@ -11,7 +11,6 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.CollectionUtils;
 import org.springframework.util.StringUtils;
 
-import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -24,6 +23,7 @@ public class HainaMcpDecisionClient implements HainaDecisionClient {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final String SERVER_CODE = "haina";
+    private static final String CONTENT_SEARCH_TOOL = "content_search_pro";
 
     private final HainaDecisionProperties properties;
     private final McpRegistryService mcpRegistryService;
@@ -37,14 +37,8 @@ public class HainaMcpDecisionClient implements HainaDecisionClient {
     public HainaDecisionEvidence collectEvidence(HainaDecisionRequest request) {
         try {
             String keyword = buildKeyword(request);
-            return HainaDecisionEvidence.builder()
-                    .available(true)
-                    .graphEvidence(parseGraphEvidence(callTool("content_graph_search", Map.of(
-                            "query", keyword,
-                            "categories", "电脑数码"
-                    ))))
-                    .discounts(parseDiscountEvidence(callTool("discount_search", buildDiscountArgs(keyword, request))))
-                    .products(parseProductEvidence(callTool("product_search_pro", buildProductArgs(keyword, request))))
+            return HainaDecisionEvidence.builder().available(true)
+                    .discounts(parseContentEvidence(callTool(CONTENT_SEARCH_TOOL, buildContentSearchArgs(keyword, request))))
                     .build();
         } catch (Exception e) {
             log.warn("[HainaMcpDecisionClient] 海纳 MCP 调用失败: {}", e.getMessage());
@@ -52,25 +46,15 @@ public class HainaMcpDecisionClient implements HainaDecisionClient {
         }
     }
 
-    private Map<String, Object> buildDiscountArgs(String keyword, HainaDecisionRequest request) {
+    private Map<String, Object> buildContentSearchArgs(String keyword, HainaDecisionRequest request) {
         Map<String, Object> args = new LinkedHashMap<>();
-        args.put("product_query", keyword);
-        args.put("fields", "title,price,mall_name,url,content,pubdate");
-        args.put("size", normalizeMaxResults(request));
-        args.put("request_from", "AgenticCPS");
-        args.put("question_id", "cps_purchase_decision");
-        args.put("query_process", 1);
-        return args;
-    }
-
-    private Map<String, Object> buildProductArgs(String keyword, HainaDecisionRequest request) {
-        Map<String, Object> args = new LinkedHashMap<>();
-        args.put("product_query", keyword);
-        args.put("fields", "product_name,price,mall_name,shop_name,product_url");
-        args.put("size", normalizeMaxResults(request));
-        args.put("request_from", "AgenticCPS");
-        args.put("question_id", "cps_purchase_decision");
-        args.put("query_process", 1);
+        args.put("query", keyword);
+        args.put("time_range", "TwoYear");
+        args.put("request_from", "content_search_pro_test");
+        args.put("recall_num", normalizeMaxResults(request));
+        args.put("ranker_advanced", true);
+        args.put("rewrite", false);
+        args.put("search_type", "web");
         return args;
     }
 
@@ -79,7 +63,7 @@ public class HainaMcpDecisionClient implements HainaDecisionClient {
         if (request == null || request.getMaxResults() == null) {
             return Math.min(configured, 10);
         }
-        return Math.max(1, Math.min(request.getMaxResults(), configured));
+        return Math.max(1, Math.min(Math.min(request.getMaxResults(), configured), 50));
     }
 
     private String buildKeyword(HainaDecisionRequest request) {
@@ -113,81 +97,25 @@ public class HainaMcpDecisionClient implements HainaDecisionClient {
         return texts.isEmpty() ? "{}" : String.join("\n", texts);
     }
 
-    private List<HainaDecisionEvidence.GraphEvidence> parseGraphEvidence(String raw) {
-        JsonNode data = readTree(raw).path("data");
-        if (!data.isArray()) {
-            return Collections.emptyList();
+    /** Maps the new content-search articles to the existing read-only evidence shape. */
+    private List<HainaDecisionEvidence.DiscountEvidence> parseContentEvidence(String raw) {
+        JsonNode root = readTree(raw);
+        JsonNode data = root.path("data");
+        JsonNode items = data.path("items");
+        if (!items.isArray()) {
+            items = root.path("items");
         }
-        List<HainaDecisionEvidence.GraphEvidence> evidence = new ArrayList<>();
-        for (JsonNode item : data) {
-            evidence.add(HainaDecisionEvidence.GraphEvidence.builder()
-                    .entityName(text(item, "entity_name"))
-                    .summary(limit(text(item, "entity_description"), 240))
-                    .pros(extractComments(item, "优点"))
-                    .cons(extractComments(item, "缺点"))
-                    .build());
-            if (evidence.size() >= 3) {
-                break;
-            }
-        }
-        return evidence;
-    }
-
-    private List<String> extractComments(JsonNode item, String attributeName) {
-        JsonNode comments = item.path("entity_comments");
-        if (!comments.isArray()) {
-            return Collections.emptyList();
-        }
-        List<String> values = new ArrayList<>();
-        for (JsonNode comment : comments) {
-            if (attributeName.equals(text(comment, "attribute_name"))) {
-                String value = text(comment, "attribute_value");
-                if (StringUtils.hasText(value) && !values.contains(value)) {
-                    values.add(value);
-                }
-            }
-            if (values.size() >= 5) {
-                break;
-            }
-        }
-        return values;
-    }
-
-    private List<HainaDecisionEvidence.DiscountEvidence> parseDiscountEvidence(String raw) {
-        JsonNode rows = readTree(raw).path("data").path("rows");
-        if (!rows.isArray()) {
+        if (!items.isArray()) {
             return Collections.emptyList();
         }
         List<HainaDecisionEvidence.DiscountEvidence> evidence = new ArrayList<>();
-        for (JsonNode row : rows) {
+        for (JsonNode item : items) {
             evidence.add(HainaDecisionEvidence.DiscountEvidence.builder()
-                    .title(text(row, "title"))
-                    .mallName(text(row, "mall_name"))
-                    .price(decimal(row, "digital_price", "price"))
-                    .content(limit(text(row, "content"), 160))
-                    .url(text(row, "url"))
-                    .pubdate(text(row, "pubdate"))
-                    .build());
-            if (evidence.size() >= properties.getMaxResults()) {
-                break;
-            }
-        }
-        return evidence;
-    }
-
-    private List<HainaDecisionEvidence.ProductEvidence> parseProductEvidence(String raw) {
-        JsonNode data = readTree(raw).path("data");
-        if (!data.isArray()) {
-            return Collections.emptyList();
-        }
-        List<HainaDecisionEvidence.ProductEvidence> evidence = new ArrayList<>();
-        for (JsonNode item : data) {
-            evidence.add(HainaDecisionEvidence.ProductEvidence.builder()
-                    .productName(firstText(item, "product_name", "product_query", "title"))
-                    .mallName(text(item, "mall_name"))
-                    .shopName(text(item, "shop_name"))
-                    .price(decimal(item, "price"))
-                    .productUrl(firstText(item, "product_url", "url"))
+                    .title(text(item, "title"))
+                    .mallName(firstText(item, "source", "icon"))
+                    .content(limit(text(item, "context"), 160))
+                    .url(text(item, "article_link"))
+                    .pubdate(text(item, "publish_time"))
                     .build());
             if (evidence.size() >= properties.getMaxResults()) {
                 break;
@@ -225,20 +153,6 @@ public class HainaMcpDecisionClient implements HainaDecisionClient {
     private String text(JsonNode node, String name) {
         JsonNode value = node.path(name);
         return value.isMissingNode() || value.isNull() ? null : value.asText();
-    }
-
-    private BigDecimal decimal(JsonNode node, String... names) {
-        for (String name : names) {
-            String value = text(node, name);
-            if (StringUtils.hasText(value)) {
-                try {
-                    return new BigDecimal(value.replace("¥", "").replace(",", "").trim());
-                } catch (NumberFormatException ignored) {
-                    return null;
-                }
-            }
-        }
-        return null;
     }
 
     private String limit(String value, int maxLength) {

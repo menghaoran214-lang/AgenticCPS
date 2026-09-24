@@ -21,7 +21,8 @@ export const AiPlatformEnum = {
   Ollama: 'Ollama',
   STABLE_DIFFUSION: 'StableDiffusion', // Stability AI
   MIDJOURNEY: 'Midjourney', // Midjourney
-  SUNO: 'Suno' // Suno AI
+  SUNO: 'Suno', // Suno AI
+  JEV: 'Jev' // TypeSafe AI Jev
 }
 
 export const AiModelTypeEnum = {
@@ -30,7 +31,8 @@ export const AiModelTypeEnum = {
   VOICE: 3, // 音频
   VIDEO: 4, // 视频
   EMBEDDING: 5, // 向量
-  RERANK: 6 // 重排
+  RERANK: 6, // 重排
+  EVALUATION: 7 // 评估
 }
 
 export const OtherPlatformEnum: ImageModelVO[] = [

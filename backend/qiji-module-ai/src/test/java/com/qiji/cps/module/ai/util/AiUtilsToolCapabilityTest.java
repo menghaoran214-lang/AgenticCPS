@@ -55,6 +55,7 @@ class AiUtilsToolCapabilityTest extends BaseMockitoUnitTest {
         expected.put(AiPlatformEnum.MIDJOURNEY, false);
         expected.put(AiPlatformEnum.SUNO, false);
         expected.put(AiPlatformEnum.GROK, true);
+        expected.put(AiPlatformEnum.JEV, false);
 
         assertEquals(expected.keySet(), java.util.EnumSet.allOf(AiPlatformEnum.class));
         expected.forEach((platform, supported) -> assertEquals(supported, AiUtils.supportsToolCalling(platform),

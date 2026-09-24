@@ -3,6 +3,7 @@ package com.qiji.cps.module.ai.framework.ai.core.model;
 import com.qiji.cps.module.ai.enums.model.AiPlatformEnum;
 import com.qiji.cps.module.ai.framework.ai.core.model.midjourney.api.MidjourneyApi;
 import com.qiji.cps.module.ai.framework.ai.core.model.suno.api.SunoApi;
+import com.qiji.cps.module.ai.framework.ai.core.model.jev.TypeSafeJevClient;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.ai.image.ImageModel;
@@ -38,6 +39,11 @@ public interface AiModelFactory {
      * @return ChatModel 对象
      */
     ChatModel getDefaultChatModel(AiPlatformEnum platform);
+
+    /**
+     * 获得 TypeSafe Jev 结构化评估客户端。Jev 不是 Spring AI ChatModel。
+     */
+    TypeSafeJevClient getOrCreateJevClient(String apiKey, String url);
 
     /**
      * 基于默认配置，获得 ImageModel 对象

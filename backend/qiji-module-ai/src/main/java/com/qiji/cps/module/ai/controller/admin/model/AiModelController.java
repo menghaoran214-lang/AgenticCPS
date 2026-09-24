@@ -7,6 +7,9 @@ import com.qiji.cps.framework.common.util.object.BeanUtils;
 import com.qiji.cps.module.ai.controller.admin.model.vo.model.AiModelPageReqVO;
 import com.qiji.cps.module.ai.controller.admin.model.vo.model.AiModelRespVO;
 import com.qiji.cps.module.ai.controller.admin.model.vo.model.AiModelSaveReqVO;
+import com.qiji.cps.module.ai.controller.admin.model.vo.jev.AiJevEvaluateReqVO;
+import com.qiji.cps.module.ai.controller.admin.model.vo.jev.AiJevEvaluateRespVO;
+import com.qiji.cps.module.ai.framework.ai.core.model.jev.TypeSafeJevClient;
 import com.qiji.cps.module.ai.dal.dataobject.model.AiModelDO;
 import com.qiji.cps.module.ai.service.model.AiModelService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -84,6 +87,17 @@ public class AiModelController {
                 CommonStatusEnum.ENABLE.getStatus(), type, platform);
         return success(convertList(list, model -> new AiModelRespVO().setId(model.getId())
                 .setName(model.getName()).setModel(model.getModel()).setPlatform(model.getPlatform())));
+    }
+
+    @PostMapping("/jev/evaluate")
+    @Operation(summary = "执行 Jev 结构化评估")
+    @PreAuthorize("@ss.hasPermission('ai:model:query')")
+    public CommonResult<AiJevEvaluateRespVO> evaluateJev(@Valid @RequestBody AiJevEvaluateReqVO reqVO) {
+        var model = modelService.validateModel(reqVO.modelId());
+        TypeSafeJevClient client = modelService.getJevClient(reqVO.modelId());
+        TypeSafeJevClient.JevRequest request = new TypeSafeJevClient.JevRequest(
+                reqVO.state(), model.getModel(), reqVO.questions());
+        return success(new AiJevEvaluateRespVO(client.evaluate(request)));
     }
 
 }

@@ -2,6 +2,7 @@ package com.qiji.cps.module.ai.service.model;
 
 import com.qiji.cps.module.ai.framework.ai.core.model.midjourney.api.MidjourneyApi;
 import com.qiji.cps.module.ai.framework.ai.core.model.suno.api.SunoApi;
+import com.qiji.cps.module.ai.framework.ai.core.model.jev.TypeSafeJevClient;
 import com.qiji.cps.framework.common.pojo.PageResult;
 import com.qiji.cps.module.ai.controller.admin.model.vo.model.AiModelPageReqVO;
 import com.qiji.cps.module.ai.controller.admin.model.vo.model.AiModelSaveReqVO;
@@ -99,6 +100,14 @@ public interface AiModelService {
      * @return ChatModel 对象
      */
     ChatModel getChatModel(Long id);
+
+    /**
+     * 获得 TypeSafe Jev 评估客户端。Jev 不实现 Spring AI ChatModel。
+     *
+     * @param id 模型编号
+     * @return Jev 客户端
+     */
+    TypeSafeJevClient getJevClient(Long id);
 
     /**
      * 获得 ImageModel 对象

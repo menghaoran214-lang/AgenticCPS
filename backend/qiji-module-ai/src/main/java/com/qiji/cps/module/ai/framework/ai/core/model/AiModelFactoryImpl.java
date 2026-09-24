@@ -23,6 +23,7 @@ import com.qiji.cps.module.ai.framework.ai.core.model.siliconflow.SiliconFlowIma
 import com.qiji.cps.module.ai.framework.ai.core.model.siliconflow.SiliconFlowImageModel;
 import com.qiji.cps.module.ai.framework.ai.core.model.suno.api.SunoApi;
 import com.qiji.cps.module.ai.framework.ai.core.model.xinghuo.XingHuoChatModel;
+import com.qiji.cps.module.ai.framework.ai.core.model.jev.TypeSafeJevClient;
 import com.alibaba.cloud.ai.dashscope.api.DashScopeApi;
 import com.alibaba.cloud.ai.dashscope.api.DashScopeImageApi;
 import com.alibaba.cloud.ai.dashscope.embedding.text.DashScopeEmbeddingModel;
@@ -151,6 +152,8 @@ public class AiModelFactoryImpl implements AiModelFactory {
                     return buildOllamaChatModel(url);
                 case GROK:
                     return buildGrokChatModel(apiKey,url);
+                case JEV:
+                    throw unsupportedJev();
                 default:
                     throw new IllegalArgumentException(StrUtil.format("未知平台({})", platform));
             }
@@ -194,6 +197,8 @@ public class AiModelFactoryImpl implements AiModelFactory {
                 return SpringUtil.getBean(GeminiChatModel.class);
             case OLLAMA:
                 return SpringUtil.getBean(OllamaChatModel.class);
+            case JEV:
+                throw unsupportedJev();
             default:
                 throw new IllegalArgumentException(StrUtil.format("未知平台({})", platform));
         }
@@ -335,6 +340,12 @@ public class AiModelFactoryImpl implements AiModelFactory {
                 .openAiClient(openAiClient(baseUrl, key))
                 .options(options)
                 .build();
+    }
+
+    @Override
+    public TypeSafeJevClient getOrCreateJevClient(String apiKey, String url) {
+        String cacheKey = buildClientCacheKey(TypeSafeJevClient.class, AiPlatformEnum.JEV, apiKey, url);
+        return Singleton.get(cacheKey, (Func0<TypeSafeJevClient>) () -> new TypeSafeJevClient(apiKey, url));
     }
 
     private static String normalizeTongYiChatBaseUrl(String url) {
@@ -594,6 +605,10 @@ public class AiModelFactoryImpl implements AiModelFactory {
 
     private static IllegalArgumentException unsupportedProvider(AiPlatformEnum platform) {
         return new IllegalArgumentException("Provider " + platform + " is not available in Spring AI 2.0.1; migrate its vendor SDK before enabling it");
+    }
+
+    private static IllegalArgumentException unsupportedJev() {
+        return new IllegalArgumentException("Jev is an evaluation model, not a Spring AI ChatModel; use the Jev evaluation API");
     }
 
     // ========== 各种创建 VectorStore 的方法 ==========

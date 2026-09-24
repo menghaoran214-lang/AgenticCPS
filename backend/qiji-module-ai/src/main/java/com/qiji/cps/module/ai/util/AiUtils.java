@@ -89,6 +89,8 @@ public class AiUtils {
             case OLLAMA:
                 return OllamaChatOptions.builder().model(model).temperature(temperature).numPredict(maxTokens)
                         .toolCallbacks(toolCallbacks).toolContext(toolContext).build();
+            case JEV:
+                throw new IllegalArgumentException("Jev is an evaluation model, not a Spring AI ChatModel");
             default:
                 throw new IllegalArgumentException(StrUtil.format("未知平台({})", platform));
         }
@@ -126,7 +128,7 @@ public class AiUtils {
             case TONG_YI, DEEP_SEEK, ZHI_PU, XING_HUO, DOU_BAO, HUN_YUAN, SILICON_FLOW,
                     MINI_MAX, MOONSHOT, BAI_CHUAN, OPENAI, AZURE_OPENAI, ANTHROPIC, GEMINI,
                     OLLAMA, GROK -> true;
-            case YI_YAN, STABLE_DIFFUSION, MIDJOURNEY, SUNO -> false;
+            case YI_YAN, STABLE_DIFFUSION, MIDJOURNEY, SUNO, JEV -> false;
         };
     }
 
