@@ -3,7 +3,7 @@ name: qiji-system
 services:
   mysql:
     container_name: qiji-mysql
-    image: mysql:8
+    image: mysql:8.0
     restart: unless-stopped
     tty: true
     ports:
@@ -26,7 +26,7 @@ services:
 
   redis:
     container_name: qiji-redis
-    image: redis:6-alpine
+    image: redis:8-alpine
     restart: unless-stopped
     ports:
       - "${REDIS_HOST_PORT:-6379}:6379"

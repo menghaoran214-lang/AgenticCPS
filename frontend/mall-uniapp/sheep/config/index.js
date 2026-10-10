@@ -7,7 +7,9 @@ export let baseUrl;
 if (process.env.NODE_ENV === 'development') {
   baseUrl = import.meta.env.SHOPRO_DEV_BASE_URL;
 } else {
-  baseUrl = import.meta.env.SHOPRO_BASE_URL;
+  baseUrl =
+    import.meta.env.SHOPRO_BASE_URL ||
+    (typeof window !== 'undefined' && window.location?.origin ? window.location.origin : '');
 }
 if (typeof baseUrl === 'undefined') {
   console.error('请检查.env配置文件是否存在');

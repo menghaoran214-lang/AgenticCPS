@@ -28,6 +28,10 @@ docker/
 
 ## 1. 在源码机器生成部署包
 
+构建脚本支持**全量打包**以及**单独/组合打包**（后端、管理前端、移动端 H5）。未指定组件参数时，默认全量打包全部组件。
+
+### 1.1 全量打包（默认）
+
 Linux、macOS 或 Git Bash：
 
 ```bash
@@ -39,17 +43,91 @@ Windows PowerShell：
 
 ```powershell
 cd backend/script/docker
-./build-package.ps1
+.\build-package.ps1
 ```
 
-脚本会完成以下工作：
+全量脚本会按序完成：
 
-1. 构建 `backend/qiji-server/target/qiji-server.jar`。
-2. 使用 Docker 专用的同源 API 配置构建管理前端。
-3. 将 JAR、管理端页面、mall-uniapp H5 页面、基础 SQL、Quartz SQL、CPS 全量 SQL 和 AI 全量 SQL 复制到当前 Docker 目录。
-4. 本机安装了 Docker Compose 时，额外校验 Compose 配置。
+1. 构建后端 `backend/qiji-server/target/qiji-server.jar`。
+2. 使用 Docker 专用的同源 API 配置构建管理前端 `frontend/admin-vue3`。
+3. 调用 HBuilderX CLI 发行 `frontend/mall-uniapp` 的 H5 页面。
+4. 将后端 JAR、管理端页面、mall-uniapp H5 页面及全量初始化 SQL 归集到当前 Docker 目录。
+5. 本机安装了 Docker Compose 时，额外校验 Compose 配置。
 
-如果 CI 已经完成后端和前端构建，可使用 `bash build-package.sh --skip-build` 或 `./build-package.ps1 -SkipBuild`，只执行制品归集和校验。
+### 1.2 单独打包指定模块
+
+日常迭代中，若只修改了某个端，无需重新打包全部组件，可针对性单独打包：
+
+#### 仅打包后端（qiji-server JAR 及初始化 SQL）
+- PowerShell：
+  ```powershell
+  .\build-package.ps1 -Backend
+  # 或别名: .\build-package.ps1 -Server
+  ```
+- Shell：
+  ```bash
+  bash build-package.sh --backend
+  ```
+
+#### 仅打包管理前端（admin-vue3）
+- PowerShell：
+  ```powershell
+  .\build-package.ps1 -Frontend
+  # 或别名: .\build-package.ps1 -Admin
+  ```
+- Shell：
+  ```bash
+  bash build-package.sh --frontend
+  ```
+
+#### 仅打包移动端 H5（mall-uniapp）
+- PowerShell：
+  ```powershell
+  .\build-package.ps1 -Mobile
+  # 或别名: .\build-package.ps1 -H5
+  ```
+- Shell：
+  ```bash
+  bash build-package.sh --mobile
+  ```
+
+### 1.3 自由组合打包
+
+支持通过开关参数任意组合需要打包的端（例如同时构建管理端和移动端，跳过耗时的后端编译）：
+
+- PowerShell：
+  ```powershell
+  .\build-package.ps1 -Frontend -Mobile
+  ```
+- Shell：
+  ```bash
+  bash build-package.sh --frontend --mobile
+  ```
+
+也可以通过 `-Target` / `-Only` 参数指定：
+```powershell
+.\build-package.ps1 -Target backend
+.\build-package.ps1 -Target frontend
+.\build-package.ps1 -Target mobile
+```
+
+### 1.4 跳过编译仅归集已有制品（`-SkipBuild`）
+
+如果流水线或本地已经完成了特定模块的构建，可使用 `-SkipBuild` 只执行产物校验与归集，不会重复触发编译：
+
+- 归集全部已有产物：
+  ```powershell
+  .\build-package.ps1 -SkipBuild
+  # Shell: bash build-package.sh --skip-build
+  ```
+- 仅归集移动端已有的 H5 发行产物：
+  ```powershell
+  .\build-package.ps1 -Mobile -SkipBuild
+  ```
+- 仅归集管理前端已有产物：
+  ```powershell
+  .\build-package.ps1 -Frontend -SkipBuild
+  ```
 
 ## 2. 上传并启动
 
@@ -157,9 +235,11 @@ $env:SHOPRO_H5_DIST = "F:\ai\AgenticCPS\frontend\mall-uniapp\unpackage\dist\buil
 
 
 
+```powershell
 $env:JAVA_HOME = 'C:\Users\zhuangpengli\.jdks\ms-21.0.11'
 $env:MAVEN_HOME = 'D:\soft\IntelliJ IDEA 2025.3.3\plugins\maven\lib\maven3'
 $env:Path = "$env:JAVA_HOME\bin;$env:MAVEN_HOME\bin;$env:Path"
 $env:HBUILDERX_CLI_PATH = "D:\soft\HBuilderX\cli.exe"
 
 .\build-package.ps1
+```

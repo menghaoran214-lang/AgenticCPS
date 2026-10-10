@@ -86,6 +86,7 @@ import { CpsStatisticsApi, type CpsDashboardVO, type CpsPlatformSummaryVO, type 
 import { useUserStore } from '@/store/modules/user'
 import { Echart } from '@/components/Echart'
 import { useRouter } from 'vue-router'
+import { getTenantId, getVisitTenantId } from '@/utils/auth'
 
 defineOptions({ name: 'Index' })
 const { t } = useI18n(); const router = useRouter(); const userStore = useUserStore(); const avatar = userStore.getUser.avatar; const username = userStore.getUser.nickname
@@ -110,7 +111,12 @@ const mobilePreviewUrl = computed(() => {
     ? configuredDomain
     : new URL(configuredDomain || '/h5/', window.location.origin).toString()
   const normalizedBase = base.endsWith('/') ? base : `${base}/`
-  return new URL('pages/cps/index', normalizedBase).toString()
+  const url = new URL('pages/cps/index', normalizedBase)
+  const currentTenantId = getVisitTenantId() || getTenantId() || 1
+  if (currentTenantId) {
+    url.searchParams.set('tenantId', String(currentTenantId))
+  }
+  return url.toString()
 })
 const money = (value: unknown) => Number(value || 0); const changeText = (today: number, yesterday: number) => !yesterday ? (today ? '新增' : '—') : `${today >= yesterday ? '+' : ''}${(((today - yesterday) / yesterday) * 100).toFixed(1)}%`
 function getRangeDates(): [string, string] {

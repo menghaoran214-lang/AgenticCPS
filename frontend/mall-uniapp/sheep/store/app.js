@@ -179,21 +179,35 @@ const adaptTenant = async () => {
       // 优先从 URL 查询参数获取 tenantId
       const urlParams = new URLSearchParams(window.location.search);
       newTenantId = urlParams.get('tenantId');
-      if (newTenantId) newTenantId = requireTenantId(newTenantId);
+      if (!newTenantId && window.location.hash?.includes('?')) {
+        const hashParams = new URLSearchParams(window.location.hash.split('?')[1]);
+        newTenantId = hashParams.get('tenantId');
+      }
+      if (newTenantId) {
+        try {
+          newTenantId = requireTenantId(newTenantId);
+        } catch (e) {
+          console.warn('URL中的 tenantId 无效:', newTenantId);
+          newTenantId = null;
+        }
+      }
 
       // 如果 URL 参数中没有，则通过 host 获取
       if (!newTenantId && window.location.host) {
-        const tenantResult = await getTenantByWebsite(window.location.host);
-        if (!tenantResult || tenantResult.code !== 0) throw new Error('租户解析失败');
-        if (tenantResult.data?.id) {
+        let tenantResult = null;
+        try {
+          tenantResult = await getTenantByWebsite(window.location.host);
+        } catch (e) {
+          console.warn('通过域名解析租户请求失败:', e);
+        }
+        if (tenantResult?.data?.id) {
           newTenantId = requireTenantId(tenantResult.data.id);
-        } else if (
-          process.env.NODE_ENV === 'development' &&
-          /^(localhost|127\.0\.0\.1)(:\d+)?$/.test(window.location.host)
-        ) {
+        } else if (oldTenantId) {
+          newTenantId = requireTenantId(oldTenantId);
+        } else if (configuredTenantId) {
           newTenantId = requireTenantId(configuredTenantId);
         } else {
-          throw new Error('租户解析结果为空');
+          newTenantId = 1;
         }
       }
     }
@@ -202,11 +216,26 @@ const adaptTenant = async () => {
     // 2.2 情况二：微信小程序：小程序环境下的处理逻辑 - 根据 appId 获取租户
     // #ifdef MP
     const appId = uni.getAccountInfoSync()?.miniProgram?.appId;
-    if (!appId) throw new Error('无法获取小程序 AppId');
-    const tenantResult = await getTenantByWebsite(appId);
-    if (!tenantResult || tenantResult.code !== 0) throw new Error('租户解析失败');
-    newTenantId = requireTenantId(tenantResult.data?.id);
+    if (appId) {
+      let tenantResult = null;
+      try {
+        tenantResult = await getTenantByWebsite(appId);
+      } catch (e) {
+        console.warn('通过小程序 appId 解析租户请求失败:', e);
+      }
+      if (tenantResult?.code === 0 && tenantResult.data?.id) {
+        newTenantId = requireTenantId(tenantResult.data.id);
+      }
+    }
+    if (!newTenantId) {
+      newTenantId = oldTenantId || requireTenantId(configuredTenantId || 1);
+    }
     // #endif
+
+    // 2.3 兜底保障：如果上述步骤未取得租户ID，使用已存租户、配置租户或默认租户 1
+    if (!newTenantId) {
+      newTenantId = oldTenantId || requireTenantId(configuredTenantId || 1);
+    }
 
     // 3. 如果是新租户（不相等），则进行切换
     // noinspection EqualityComparisonWithCoercionJS
@@ -218,6 +247,8 @@ const adaptTenant = async () => {
       // 设置新的 tenantId 到本地存储
       uni.setStorageSync('tenant-id', newTenantId);
       console.log('租户 ID 已更新:', `${oldTenantId} -> ${newTenantId}`);
+    } else if (!uni.getStorageSync('tenant-id') && newTenantId) {
+      uni.setStorageSync('tenant-id', newTenantId);
     }
     return true;
   } catch (error) {

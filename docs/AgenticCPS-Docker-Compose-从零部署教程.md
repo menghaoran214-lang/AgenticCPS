@@ -35,14 +35,32 @@ cd backend/script/docker
 ./build-package.ps1
 ```
 
-构建脚本会：
+默认情况下脚本会按序完成全部组件的构建与归集：
 
 1. 打包后端并复制为 `backend/qiji-server.jar`。
-2. 使用同源 API 配置打包前端并复制到 `frontend/dist/`。
-3. 复制基础库、Quartz 和 CPS 新库初始化 SQL 到 `mysql/init/`。
-4. 本机存在 Docker Compose 时校验 `docker-compose.yml`。
+2. 使用同源 API 配置打包管理前端并复制到 `frontend/dist/`。
+3. 调用 HBuilderX CLI 发行移动端 mall-uniapp H5 并复制到 `frontend/mall-h5/`。
+4. 复制基础库、Quartz、CPS 全量库与 AI 初始化 SQL 到 `mysql/init/`。
+5. 本机存在 Docker Compose 时校验 `docker-compose.yml`。
 
-如果流水线已经生成 JAR 和 `dist-prod`，可使用 `bash build-package.sh --skip-build` 或 `./build-package.ps1 -SkipBuild` 只归集现有制品。
+### 单独打包或组合打包
+
+日常更新中，若只修改了某个端，无需重新打包全部组件，可使用独立参数：
+
+- **仅打包后端**：
+  - PowerShell: `.\build-package.ps1 -Backend`
+  - Shell: `bash build-package.sh --backend`
+- **仅打包管理前端**：
+  - PowerShell: `.\build-package.ps1 -Frontend`
+  - Shell: `bash build-package.sh --frontend`
+- **仅打包移动端 H5**：
+  - PowerShell: `.\build-package.ps1 -Mobile`
+  - Shell: `bash build-package.sh --mobile`
+- **组合打包**（例如管理端+移动端）：
+  - PowerShell: `.\build-package.ps1 -Frontend -Mobile`
+  - Shell: `bash build-package.sh --frontend --mobile`
+
+如果流水线已经生成对应产物，可追加 `-SkipBuild` 或 `--skip-build` 跳过编译，直接校验并归集现有制品（例如：`.\build-package.ps1 -Mobile -SkipBuild`）。
 
 成功后的关键文件如下：
 
@@ -50,15 +68,17 @@ cd backend/script/docker
 backend/script/docker/
 ├── backend/qiji-server.jar
 ├── frontend/dist/index.html
+├── frontend/mall-h5/index.html
 ├── mysql/init/00-ruoyi-vue-pro.sql
 ├── mysql/init/05-quartz.sql
 ├── mysql/init/10-cps-all-in-one.sql
+├── mysql/init/15-ai-all.sql
 ├── docker-compose.yml
 ├── docker.env
 └── deploy.sh
 ```
 
-缺少上述任一文件时，不要上传部署。
+缺少上述部署文件时，不要上传部署。
 
 ## 3. 修改服务器配置
 

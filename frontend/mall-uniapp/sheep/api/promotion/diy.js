@@ -8,6 +8,7 @@ const DiyApi = {
       custom: {
         showError: false,
         showLoading: false,
+        isToken: false,
       },
     });
   },
@@ -21,6 +22,7 @@ const DiyApi = {
       custom: {
         showError: false,
         showLoading: false,
+        isToken: false,
       },
     });
   },
@@ -30,7 +32,10 @@ const DiyApi = {
       method: 'GET',
       params: {
         id
-      }
+      },
+      custom: {
+        isToken: false,
+      },
     });
   },
 };
