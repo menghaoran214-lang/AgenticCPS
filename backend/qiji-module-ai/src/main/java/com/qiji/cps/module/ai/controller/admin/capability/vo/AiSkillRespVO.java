@@ -1,8 +1,20 @@
 package com.qiji.cps.module.ai.controller.admin.capability.vo;
 
-import com.qiji.cps.framework.common.pojo.PageParam;
+import java.time.LocalDateTime;
 import lombok.Data;
 
-import java.time.LocalDateTime;
 @Data
-public class AiSkillRespVO { private Long id; private String code; private String name; private String category; private String description; private String channelScope; private String riskLevel; private Integer status; private Integer currentVersion; private LocalDateTime createTime; }
+public class AiSkillRespVO {
+    private Long id;
+    private String code;
+    private String name;
+    private String category;
+    private String description;
+    private String channelScope;
+    private String riskLevel;
+    private Integer status;
+    private Integer currentVersion;
+    private Boolean builtIn;
+    private String creatorSkillCode;
+    private LocalDateTime createTime;
+}

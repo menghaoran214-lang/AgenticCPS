@@ -6,6 +6,8 @@ import com.qiji.cps.module.ai.dal.dataobject.capability.*;
 import java.util.List;
 
 public interface AiSkillService {
+    String BUILT_IN_CREATOR_CODE = "skill-creator";
+
     Long create(AiSkillSaveReqVO req);
     void update(AiSkillSaveReqVO req);
     void delete(Long id);
@@ -22,4 +24,6 @@ public interface AiSkillService {
     List<AiSkillBindingDO> bindings(Long versionId);
     void saveBindings(Long versionId, Long expectedRevision, List<AiSkillBindingSaveReqVO> reqs);
     AiSkillTestRespVO test(AiSkillTestReqVO req);
+    AiSkillCreatorOptionsRespVO getCreatorOptions();
+    AiSkillBlueprintRespVO generateBlueprint(AiSkillBlueprintReqVO req);
 }

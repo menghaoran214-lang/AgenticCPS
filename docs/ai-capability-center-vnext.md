@@ -24,6 +24,8 @@
 
 ## Skill 与角色发布
 
+系统内置受保护的元技能 `skill-creator`（`Skill 创建器`，默认 `v1 PUBLISHED`，不可删除或停用），所有业务 Skill 均基于 `skill-creator` 创建与治理。通过 `/admin-api/ai/skill/creator/options` 获取内置创建器规范与当前租户已登记且完成风险分级的本地工具、MCP 工具及知识库下拉列表；通过 `/admin-api/ai/skill/creator/blueprint` 基于业务目标自动生成符合规范的 Skill 草案（支持规则模板与 AI 增强生成，模型不可用时自动降级到规则模板）。新建 Skill（`/admin-api/ai/skill/create`）在同一事务中一步生成 Skill 基本信息、`v1 DRAFT` 初始版本与能力绑定，并强制校验真实证据边界、可信会员身份约束、JSON Schema 输入契约以及风险等级与确认策略联动（非 `READ_ONLY` 必须使用 `REQUIRED`）。
+
 Skill 版本按 `DRAFT → REVIEWING → PUBLISHED → ARCHIVED` 管理。修改草稿或绑定时带上 `expectedRevision`，版本冲突必须重新获取。已发布版本不可原地编辑；创建新版本后重新审核和发布。回滚切换到已有已发布版本，只影响之后创建的会话。
 
 使用 `ai:skill:query` 查询，使用 `ai:skill:manage` 编辑、审核、发布、回滚和测试。绑定包括本地工具、MCP 工具和知识库。发布前校验工具、风险、服务及授权；写操作需要确认策略。测试接口默认返回 `READ_ONLY_PREVIEW`，展示提示词、输入、输出模板和只读绑定。显式选择执行并提交 `executeModel=true` 后，返回 `READ_ONLY_EXECUTION` 和模型输出；按所选或默认模型运行，只允许已登记且当前启用的只读工具，最多调用八次。沙箱不绑定会员身份，不开放写操作；MCP 工具还必须通过 Skill 白名单。真实执行会使用已配置模型并产生相应调用费用。

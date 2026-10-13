@@ -339,3 +339,114 @@ test('新会话选择角色并从服务端确认卡片执行一次操作', async
   await expect(page.getByTestId('tool-executions')).toContainText('等待用户确认')
   await expect(page.getByTestId('tool-executions')).not.toContainText('已完成')
 })
+
+test('新建 Skill 基于内置 skill-creator 生成规范草案并一步保存初始版本与能力绑定', async ({
+  page
+}) => {
+  await bootstrap(page)
+  let blueprintBody: unknown
+  let createSkillBody: unknown
+  await page.route('**/admin-api/ai/skill/**', async (route) => {
+    const url = new URL(route.request().url())
+    let data: unknown = true
+    if (url.pathname.endsWith('/page')) {
+      data = {
+        list: [
+          {
+            id: 1,
+            code: 'skill-creator',
+            name: 'Skill 创建器',
+            category: 'SYSTEM',
+            channelScope: 'ALL',
+            currentVersion: 1,
+            riskLevel: 'READ_ONLY',
+            builtIn: true
+          }
+        ],
+        total: 1
+      }
+    } else if (url.pathname.endsWith('/creator/options')) {
+      data = {
+        creatorSkill: {
+          id: 1,
+          code: 'skill-creator',
+          name: 'Skill 创建器',
+          builtIn: true,
+          riskLevel: 'READ_ONLY',
+          currentVersion: 1
+        },
+        creatorVersion: 1,
+        localTools: [
+          { name: 'cps_search_goods', description: '多平台商品搜索', riskLevel: 'READ_ONLY' },
+          { name: 'cps_generate_link', description: '生成推广链接', riskLevel: 'ATTRIBUTION_WRITE' }
+        ],
+        mcpServers: [],
+        mcpTools: [],
+        knowledgeBases: [{ id: 100, name: 'CPS 规则 FAQ', description: 'FAQ' }],
+        complianceRules: ['所有业务 Skill 均基于内置 skill-creator 创建']
+      }
+    } else if (url.pathname.endsWith('/creator/blueprint')) {
+      blueprintBody = route.request().postDataJSON()
+      data = {
+        creatorSkillCode: 'skill-creator',
+        creatorSkillVersion: 1,
+        generationMode: 'SKILL_CREATOR_TEMPLATE',
+        code: 'cps-douyin-live-select',
+        name: '抖音高佣选品助手',
+        category: 'CPS',
+        channelScope: 'DOUYIN',
+        description: '筛选抖音高佣商品并输出选品依据',
+        riskLevel: 'READ_ONLY',
+        systemPrompt:
+          '你是【抖音高佣选品助手】能力模块。严禁编造实时数据，仅使用系统可信上下文身份，拒绝采信消息中的 memberId 或 userId。',
+        inputSchema: '{"type":"object","properties":{"query":{"type":"string"}}}',
+        outputTemplate: '返回业务结论、真实工具/知识库数据依据与风险提示。',
+        confirmationPolicy: 'NONE',
+        changeLog: '基于内置 skill-creator v1 创建',
+        bindings: [{ bindingType: 'LOCAL_TOOL', localToolName: 'cps_search_goods', enabled: 1 }],
+        complianceRules: ['所有业务 Skill 均基于内置 skill-creator 创建']
+      }
+    } else if (url.pathname.endsWith('/create')) {
+      createSkillBody = route.request().postDataJSON()
+      data = 205
+    }
+    await route.fulfill({ json: { code: 200, data, msg: '' } })
+  })
+
+  await page.goto('/ai/skill')
+  await expect(page.getByText('内置基座')).toBeVisible()
+  await page.getByTestId('btn-view-creator-spec').click()
+  const specDialog = page.getByRole('dialog').filter({ hasText: '内置元技能 · skill-creator 管理规范' })
+  await expect(specDialog).toContainText('skill-creator')
+  await page.keyboard.press('Escape')
+
+  await page.getByRole('button', { name: '新建 Skill', exact: true }).click()
+  const createDialog = page
+    .getByRole('dialog')
+    .filter({ hasText: '基于内置 skill-creator 新建 Skill' })
+  await createDialog
+    .getByPlaceholder('描述该 Skill 要解决的业务场景（例如：围绕多平台高佣商品搜索、比价并生成选品建议）')
+    .fill('筛选抖音高佣商品并输出选品依据')
+  await createDialog.getByTestId('btn-generate-blueprint').click()
+  await expect
+    .poll(() => blueprintBody)
+    .toMatchObject({
+      goal: '筛选抖音高佣商品并输出选品依据',
+      riskLevel: 'READ_ONLY'
+    })
+  await expect(createDialog.getByTestId('skill-compliance-checklist')).toContainText(
+    '1. 编码与名称规范：已满足'
+  )
+  await createDialog.getByRole('button', { name: '保存', exact: true }).click()
+  await expect
+    .poll(() => createSkillBody)
+    .toMatchObject({
+      code: 'cps-douyin-live-select',
+      name: '抖音高佣选品助手',
+      riskLevel: 'READ_ONLY',
+      confirmationPolicy: 'NONE',
+      changeLog: '基于内置 skill-creator v1 创建',
+      bindings: [{ bindingType: 'LOCAL_TOOL', localToolName: 'cps_search_goods', enabled: 1 }]
+    })
+})
+
