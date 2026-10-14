@@ -1,5 +1,5 @@
 <template>
-  <div v-if="pending.length || result" class="mx-20px mt-8px" data-testid="tool-confirmations">
+  <div v-if="pending.length || result" class="mx-20px mt-8px max-h-180px overflow-y-auto" data-testid="tool-confirmations">
     <el-alert
       v-for="item in pending"
       :key="item.id"

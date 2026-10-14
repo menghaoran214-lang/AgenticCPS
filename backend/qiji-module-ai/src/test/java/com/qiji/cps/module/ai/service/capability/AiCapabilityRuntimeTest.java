@@ -44,12 +44,26 @@ class AiCapabilityRuntimeTest extends BaseMockitoUnitTest {
     @AfterEach void clearTenant() { TenantContextHolder.clear(); }
 
     @Test void writeNeverRunsBeforeServerConfirmation() {
-        var conversation = conversation("ATTRIBUTION_WRITE", true, 9L);
+        var conversation = conversation("ASSET_WRITE", true, 9L);
         when(resolver.resolve("test_tool")).thenReturn(delegate);
         doAnswer(call -> { call.<AiToolConfirmationDO>getArgument(0).setId(10L); return 1; })
                 .when(confirmations).insert(any(AiToolConfirmationDO.class));
         assertTrue(runtime.callbacks(conversation).get(0).call("{}").contains("CONFIRM_REQUIRED"));
         verify(delegate, never()).call(anyString(), any(ToolContext.class));
+    }
+
+    @Test void attributionWriteRunsDirectlyWithoutConfirmation() {
+        var conversation = conversation("ATTRIBUTION_WRITE", true, 9L);
+        when(resolver.resolve("test_tool")).thenReturn(delegate);
+        when(delegate.call(anyString(), any(ToolContext.class))).thenAnswer(call -> {
+            ToolContext context = call.getArgument(1);
+            assertEquals(true, context.getContext().get(AiUtils.TOOL_CONTEXT_ALLOW_MUTATION));
+            assertEquals(9L, context.getContext().get(AiUtils.TOOL_CONTEXT_LOGIN_USER_ID));
+            return "link_result";
+        });
+        assertEquals("link_result", runtime.callbacks(conversation).get(0).call("{}"));
+        verifyNoInteractions(confirmations);
+        verify(delegate, times(1)).call(anyString(), any(ToolContext.class));
     }
 
     @Test void suppliedIdentityIsIgnoredAndCapturedTenantIsRestored() {
@@ -90,7 +104,7 @@ class AiCapabilityRuntimeTest extends BaseMockitoUnitTest {
     }
 
     @Test void consumedOrExpiredConfirmationNeverExecutes() {
-        var conversation = conversation("ATTRIBUTION_WRITE",true,9L);
+        var conversation = conversation("ASSET_WRITE",true,9L);
         when(confirmations.selectById(5L)).thenReturn(new AiToolConfirmationDO().setOwnerId(42L)
                 .setConversationId(1L).setToolName("test_tool").setArguments("{}"));
         when(conversations.getOwnedConversation(1L,"ADMIN",42L)).thenReturn(conversation);
@@ -100,7 +114,7 @@ class AiCapabilityRuntimeTest extends BaseMockitoUnitTest {
     }
 
     @Test void confirmedWriteUsesTrustedMutationFlagAndCannotBeReplayed() {
-        var conversation = conversation("ATTRIBUTION_WRITE",true,9L);
+        var conversation = conversation("ASSET_WRITE",true,9L);
         when(confirmations.selectById(5L)).thenReturn(new AiToolConfirmationDO().setId(5L).setOwnerId(42L)
                 .setConversationId(1L).setToolName("test_tool").setArguments("{}"));
         when(conversations.getOwnedConversation(1L,"ADMIN",42L)).thenReturn(conversation);

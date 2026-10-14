@@ -2,158 +2,151 @@
 <template>
   <el-aside
     width="260px"
-    class="h-100% relative flex flex-col justify-between px-2.5 pt-2.5 pb-0 overflow-hidden"
+    class="conversation-aside h-100% relative flex flex-col justify-between px-2.5 pt-2.5 pb-0 overflow-hidden bg-[var(--el-bg-color)] border-r border-[var(--el-border-color-light)]"
   >
-    <!-- 左顶部：对话 -->
-    <div class="h-100%">
-      <el-button class="w-1/1 py-4.5" type="primary" @click="createConversation">
+    <!-- 左顶部：操作与搜索区 -->
+    <div class="shrink-0">
+      <el-button class="w-full !py-4.5" type="primary" @click="createConversation()">
         <Icon icon="ep:plus" class="mr-5px" />
         新建对话
       </el-button>
-      <!-- 会员选择下拉框：默认当前登录用户，管理员可选择其他会员来运行本会话 -->
-      <div class="mt-2.5">
-        <div class="mb-1 flex items-center justify-between px-0.5">
-          <span class="text-12px font-500 text-[var(--el-text-color-secondary)]">运行会员</span>
-          <el-tag size="small" :type="isAdmin ? 'success' : 'info'" effect="plain">
-            {{ isAdmin ? '管理员可切换' : '当前用户' }}
-          </el-tag>
-        </div>
-        <el-select
-          v-model="selectedMemberId"
-          filterable
-          :remote="isAdmin"
-          reserve-keyword
-          :disabled="!isAdmin"
-          :remote-method="searchMembers"
-          :loading="memberLoading"
-          class="w-full"
-          placeholder="选择运行会员"
-          data-testid="cps-member-select"
-          @change="handleMemberChange"
-        >
-          <el-option
-            v-for="item in memberOptions"
-            :key="item.id"
-            :label="formatMemberOptionLabel(item)"
-            :value="item.id"
-          />
-        </el-select>
-      </div>
 
-      <!-- 左顶部：搜索对话 -->
+      <!-- 搜索历史记录 -->
       <el-input
         v-model="searchName"
-        size="large"
-        class="mt-5"
+        size="default"
+        class="mt-2.5"
         placeholder="搜索历史记录"
+        clearable
+        @clear="searchConversation"
         @keyup="searchConversation"
       >
         <template #prefix>
           <Icon icon="ep:search" />
         </template>
       </el-input>
+    </div>
 
-      <!-- 左中间：对话列表 -->
-      <div class="overflow-auto h-full">
+    <!-- 左中间：对话列表（使用 el-scrollbar 优化滚动体验，杜绝原生滚动条遮挡按钮） -->
+    <div class="flex-1 min-h-0 mt-2 relative">
+      <el-scrollbar class="h-full" wrap-class="overflow-x-hidden pr-1.5" view-class="pb-2">
         <!-- 情况一：加载中 -->
-        <el-empty v-if="loading" description="." :v-loading="loading" />
+        <el-empty v-if="loading" description="加载中..." :image-size="60" />
         <!-- 情况二：按照 group 分组，展示聊天会话 list 列表 -->
-        <div v-for="conversationKey in Object.keys(conversationMap)" :key="conversationKey">
-          <div class="mt-1.25 pt-2.5" v-if="conversationMap[conversationKey].length">
-            <el-text class="mx-1" size="small" tag="b">
-              {{ conversationKey }}
-            </el-text>
-          </div>
-          <div
-            class="mt-1.25"
-            v-for="conversation in conversationMap[conversationKey]"
-            :key="conversation.id"
-            @click="handleConversationClick(conversation.id)"
-            @mouseover="hoverConversationId = conversation.id"
-            @mouseout="hoverConversationId = ''"
-          >
+        <template v-else>
+          <div v-for="conversationKey in Object.keys(conversationMap)" :key="conversationKey">
+            <div class="pt-2 pb-1" v-if="conversationMap[conversationKey]?.length">
+              <el-text class="px-1 text-12px font-bold text-[var(--el-text-color-secondary)]">
+                {{ conversationKey }}
+              </el-text>
+            </div>
             <div
-              class="flex flex-row justify-between flex-1 px-1.25 cursor-pointer rounded-1.25 items-center leading-7.5"
-              :style="
-                conversation.id === activeConversationId
-                  ? 'background-color: var(--el-color-primary-light-9); border: 1px solid var(--el-color-primary-light-7);'
-                  : ''
-              "
+              class="mb-1"
+              v-for="conversation in conversationMap[conversationKey]"
+              :key="conversation.id"
+              @click="handleConversationClick(conversation.id)"
+              @mouseenter="hoverConversationId = conversation.id"
+              @mouseleave="hoverConversationId = ''"
             >
-              <div class="flex flex-row items-center">
-                <AiRoleAvatar
-                  class="w-6.25 h-6.25 rounded-1.25 flex flex-row justify-center"
-                  :src="conversation.roleAvatar"
-                  :preset-code="conversation.rolePresetCode"
-                  name="AI"
-                />
-                <span
-                  class="py-0.5 px-2.5"
-                  style="
-                    max-width: 220px;
-                    font-size: 14px;
-                    font-weight: 400;
-                    color: var(--el-text-color-regular);
-                    overflow: hidden;
-                    white-space: nowrap;
-                    text-overflow: ellipsis;
-                  "
-                >
-                  {{ conversation.title }}
-                </span>
-              </div>
               <div
-                class="right-0.5 flex flex-row justify-center"
-                style="color: var(--el-text-color-regular)"
-                v-show="hoverConversationId === conversation.id"
+                class="conversation-item flex flex-row items-center justify-between px-2 py-1.5 cursor-pointer rounded-lg border leading-6 transition-all"
+                :class="[
+                  conversation.id === activeConversationId
+                    ? 'is-active bg-[var(--el-color-primary-light-9)] border-[var(--el-color-primary-light-7)]'
+                    : 'border-transparent hover:bg-[var(--el-fill-color-light)]'
+                ]"
               >
-                <el-button class="m-0" link @click.stop="handleTop(conversation)">
-                  <el-icon title="置顶" v-if="!conversation.pinned"><Top /></el-icon>
-                  <el-icon title="置顶" v-if="conversation.pinned"><Bottom /></el-icon>
-                </el-button>
-                <el-button class="m-0" link @click.stop="updateConversationTitle(conversation)">
-                  <el-icon title="编辑">
-                    <Icon icon="ep:edit" />
-                  </el-icon>
-                </el-button>
-                <el-button class="m-0" link @click.stop="deleteChatConversation(conversation)">
-                  <el-icon title="删除对话">
-                    <Icon icon="ep:delete" />
-                  </el-icon>
-                </el-button>
+                <!-- 会话角色头像与标题（flex-1 + min-w-0 + truncate 保证超出时优雅省略，绝不挤压按钮） -->
+                <div class="flex flex-row items-center flex-1 min-w-0 mr-1.5">
+                  <AiRoleAvatar
+                    class="w-6.5 h-6.5 rounded flex-shrink-0"
+                    :src="conversation.roleAvatar"
+                    :preset-code="conversation.rolePresetCode"
+                    name="AI"
+                  />
+                  <span
+                    class="ml-2 truncate text-13px"
+                    :class="[
+                      conversation.id === activeConversationId
+                        ? 'text-[var(--el-color-primary)] font-medium'
+                        : 'text-[var(--el-text-color-regular)]'
+                    ]"
+                    :title="conversation.title"
+                  >
+                    {{ conversation.title }}
+                  </span>
+                </div>
+
+                <!-- 悬浮操作按钮组：紧凑且具有独立悬浮态与防遮挡边距 -->
+                <div
+                  class="conversation-actions flex-shrink-0 flex items-center gap-1"
+                  v-show="hoverConversationId === conversation.id"
+                >
+                  <el-tooltip
+                    :content="conversation.pinned ? '取消置顶' : '置顶对话'"
+                    placement="top"
+                    :show-after="300"
+                  >
+                    <button
+                      type="button"
+                      class="action-btn"
+                      @click.stop="handleTop(conversation)"
+                    >
+                      <el-icon :size="13">
+                        <Top v-if="!conversation.pinned" />
+                        <Bottom v-else />
+                      </el-icon>
+                    </button>
+                  </el-tooltip>
+
+                  <el-tooltip content="重命名" placement="top" :show-after="300">
+                    <button
+                      type="button"
+                      class="action-btn"
+                      @click.stop="updateConversationTitle(conversation)"
+                    >
+                      <el-icon :size="13">
+                        <Icon icon="ep:edit" />
+                      </el-icon>
+                    </button>
+                  </el-tooltip>
+
+                  <el-tooltip content="删除对话" placement="top" :show-after="300">
+                    <button
+                      type="button"
+                      class="action-btn action-btn-danger"
+                      @click.stop="deleteChatConversation(conversation)"
+                    >
+                      <el-icon :size="13">
+                        <Icon icon="ep:delete" />
+                      </el-icon>
+                    </button>
+                  </el-tooltip>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-        <!-- 底部占位  -->
-        <div class="h-160px w-100%"></div>
-      </div>
+        </template>
+      </el-scrollbar>
     </div>
 
-    <!-- 左底部：工具栏 -->
+    <!-- 左底部：工具栏（自然位于 flex 底部，避免 absolute 定位导致底部会话与滚动条重叠） -->
     <div
-      class="absolute bottom-0 left-0 right-0 px-5 leading-8.75 flex justify-between items-center"
-      style="
-        background-color: var(--el-fill-color-extra-light);
-        box-shadow: 0 0 1px 1px var(--el-border-color-lighter);
-        color: var(--el-text-color);
-      "
+      class="shrink-0 h-9 px-4 flex justify-between items-center border-t border-[var(--el-border-color-lighter)] bg-[var(--el-fill-color-extra-light)] -mx-2.5 text-[var(--el-text-color-regular)]"
     >
       <div
-        class="flex items-center p-0 m-0 cursor-pointer"
-        style="color: var(--el-text-color-regular)"
+        class="flex items-center cursor-pointer hover:text-[var(--el-color-primary)] transition-colors"
         @click="handleRoleRepository"
       >
         <Icon icon="ep:user" />
-        <el-text class="ml-1.25" size="small">角色仓库</el-text>
+        <span class="ml-1 text-xs">角色仓库</span>
       </div>
       <div
-        class="flex items-center p-0 m-0 cursor-pointer"
-        style="color: var(--el-text-color-regular)"
+        class="flex items-center cursor-pointer hover:text-[var(--el-color-danger)] transition-colors"
         @click="handleClearConversation"
       >
         <Icon icon="ep:delete" />
-        <el-text class="ml-1.25" size="small">清空未置顶对话</el-text>
+        <span class="ml-1 text-xs">清空未置顶对话</span>
       </div>
     </div>
 
@@ -171,91 +164,10 @@ import RoleRepository from '../role/RoleRepository.vue'
 import ChatRolePicker from '../role/ChatRolePicker.vue'
 import { Bottom, Top } from '@element-plus/icons-vue'
 import AiRoleAvatar from '@/components/AiRoleAvatar/index.vue'
-import { getUser, getUserPage, type UserVO } from '@/api/member/user'
 import { useUserStore } from '@/store/modules/user'
-import { checkRole, checkPermi } from '@/utils/permission'
 
 const message = useMessage() // 消息弹窗
 const userStore = useUserStore()
-const currentUser = computed(() => userStore.getUser)
-const isAdmin = computed(() => checkRole(['super_admin', 'admin']) || checkPermi(['ai:chat:mcp-test']))
-
-// 运行会员选择状态
-const selectedMemberId = ref<number>()
-const memberLoading = ref(false)
-const memberOptions = ref<Array<{ id: number; nickname?: string; name?: string; mobile?: string }>>([])
-
-// 构建当前登录用户默认选项
-const buildCurrentUserOption = () => {
-  const user = currentUser.value
-  return {
-    id: user.id || 1,
-    nickname: user.nickname || '当前用户',
-    mobile: ''
-  }
-}
-
-// 格式化会员选项文案
-const formatMemberOptionLabel = (item: { id: number; nickname?: string; name?: string; mobile?: string }) => {
-  const isSelf = item.id === (currentUser.value.id || 1)
-  const name = item.nickname || item.name || `会员${item.id}`
-  if (isSelf) {
-    return `${name}（当前登录用户 · ID: ${item.id}）`
-  }
-  return `${name}（${item.mobile ? item.mobile + ' · ' : ''}ID: ${item.id}）`
-}
-
-// 搜索会员
-const searchMembers = async (keyword = '') => {
-  if (!isAdmin.value) return
-  memberLoading.value = true
-  try {
-    const query = keyword.trim()
-    const page: any = await getUserPage({
-      pageNo: 1,
-      pageSize: 20,
-      mobile: /^\d+$/.test(query) ? query : undefined,
-      nickname: query && !/^\d+$/.test(query) ? query : undefined
-    })
-    const list = page?.list || []
-    const selfOption = buildCurrentUserOption()
-    const nextOptions = [selfOption, ...list.filter((m: any) => m.id !== selfOption.id)]
-
-    if (selectedMemberId.value != null && !nextOptions.some((m) => m.id === selectedMemberId.value)) {
-      try {
-        const extra = await getUser(selectedMemberId.value)
-        if (extra) {
-          nextOptions.splice(1, 0, extra)
-        }
-      } catch {
-        // ignore
-      }
-    }
-    memberOptions.value = nextOptions
-  } catch (e) {
-    console.error('加载会员列表失败', e)
-  } finally {
-    memberLoading.value = false
-  }
-}
-
-// 确保特定会员在选项中
-const ensureMemberInOptions = async (memberId: number) => {
-  if (memberOptions.value.some((m) => m.id === memberId)) return
-  try {
-    const member = await getUser(memberId)
-    if (member && !memberOptions.value.some((m) => m.id === member.id)) {
-      memberOptions.value.unshift(member)
-    }
-  } catch {
-    // ignore
-  }
-}
-
-// 会员切换回调
-const handleMemberChange = (newMemberId: number) => {
-  emits('onMemberChange', newMemberId)
-}
 
 // 定义属性
 const searchName = ref<string>('') // 对话搜索
@@ -284,23 +196,9 @@ const emits = defineEmits([
   'onConversationCreate',
   'onConversationClick',
   'onConversationClear',
-  'onConversationDelete',
-  'onMemberChange'
+  'onConversationDelete'
 ])
 
-// 监听活跃会话绑定的会员变更
-watch(
-  () => props.activeMemberId,
-  async (newMemberId) => {
-    if (newMemberId != null) {
-      selectedMemberId.value = newMemberId
-      await ensureMemberInOptions(newMemberId)
-    } else {
-      selectedMemberId.value = currentUser.value.id || 1
-    }
-  },
-  { immediate: true }
-)
 
 /** 搜索对话 */
 const searchConversation = async () => {
@@ -403,12 +301,29 @@ const getConversationGroupByCreateTime = async (list: ChatConversationVO[]) => {
   return groupMap
 }
 
-/** 新建对话 */
-const createConversation = async () => {
-  await chatRolePickerRef.value?.open(undefined, selectedMemberId.value)
+/** 解析目标会员 ID，防止传入原生 DOM 事件等非数值类型 */
+const resolveTargetMemberId = (memberId?: unknown): number | undefined => {
+  if (typeof memberId === 'number' && !Number.isNaN(memberId)) {
+    return memberId
+  }
+  if (typeof props.activeMemberId === 'number' && !Number.isNaN(props.activeMemberId)) {
+    return props.activeMemberId
+  }
+  const currentUserId = userStore.getUser?.id
+  if (typeof currentUserId === 'number' && !Number.isNaN(currentUserId)) {
+    return currentUserId
+  }
+  return 1
 }
-const createWithAnotherRole = async () => {
-  await chatRolePickerRef.value?.open(props.activeId || undefined, selectedMemberId.value)
+
+/** 新建对话 */
+const createConversation = async (memberId?: unknown) => {
+  const targetMember = resolveTargetMemberId(memberId)
+  await chatRolePickerRef.value?.open(undefined, targetMember)
+}
+const createWithAnotherRole = async (memberId?: unknown) => {
+  const targetMember = resolveTargetMemberId(memberId)
+  await chatRolePickerRef.value?.open(props.activeId || undefined, targetMember)
 }
 const handleMcpTestConversationCreate = async (conversationId: string) => {
   await getChatConversationList()
@@ -505,12 +420,6 @@ defineExpose({ createConversation, createWithAnotherRole, getChatConversationLis
 
 /** 初始化 */
 onMounted(async () => {
-  const selfOption = buildCurrentUserOption()
-  memberOptions.value = [selfOption]
-  selectedMemberId.value = props.activeMemberId || selfOption.id
-  if (isAdmin.value) {
-    searchMembers()
-  }
   // 获取 对话列表
   await getChatConversationList()
   // 默认选中
@@ -526,3 +435,32 @@ onMounted(async () => {
   }
 })
 </script>
+
+<style scoped>
+.action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  margin: 0;
+  border: none;
+  background: transparent;
+  border-radius: 4px;
+  color: var(--el-text-color-secondary);
+  cursor: pointer;
+  outline: none;
+  transition: all 0.15s ease-in-out;
+}
+
+.action-btn:hover {
+  background-color: var(--el-fill-color);
+  color: var(--el-color-primary);
+}
+
+.action-btn-danger:hover {
+  background-color: var(--el-color-danger-light-9);
+  color: var(--el-color-danger);
+}
+</style>

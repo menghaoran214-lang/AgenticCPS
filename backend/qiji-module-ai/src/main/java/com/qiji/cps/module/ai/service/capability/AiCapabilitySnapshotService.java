@@ -156,16 +156,16 @@ public class AiCapabilitySnapshotService {
     private void add(AiCapabilitySnapshot snapshot, String name, Long serverId, String risk, AiCapabilitySnapshot.Skill skill) {
         if (rank(risk) < 0 || rank(risk) > rank(snapshot.getRiskLevel())) return;
         if (skill != null && (rank(risk) > rank(skill.getRiskLevel())
-                || (rank(risk) > 0 && !"REQUIRED".equals(skill.getConfirmationPolicy())))) return;
+                || (rank(risk) > 1 && !"REQUIRED".equals(skill.getConfirmationPolicy())))) return;
         if (!"READ_ONLY".equals(risk) && !Boolean.TRUE.equals(snapshot.getAllowMutation())) return;
         var existing = snapshot.getTools().stream().filter(tool -> name.equals(tool.getName())).findFirst();
         if (existing.isPresent()) {
             if (!Objects.equals(existing.get().getServerId(), serverId)) throw new IllegalArgumentException("工具名称冲突");
-            if (skill != null && "REQUIRED".equals(skill.getConfirmationPolicy())) existing.get().setRequireConfirmation(true);
+            if (skill != null && "REQUIRED".equals(skill.getConfirmationPolicy()) && rank(risk) > 1) existing.get().setRequireConfirmation(true);
             return;
         }
         snapshot.getTools().add(new AiCapabilitySnapshot.Tool().setName(name).setServerId(serverId).setRiskLevel(risk)
-                .setRequireConfirmation(rank(risk) > 0 || (skill != null && "REQUIRED".equals(skill.getConfirmationPolicy())))
+                .setRequireConfirmation(rank(risk) > 1 || (skill != null && "REQUIRED".equals(skill.getConfirmationPolicy()) && rank(risk) > 1))
                 .setSkillCode(skill == null ? null : skill.getCode()).setSkillVersion(skill == null ? null : skill.getVersion()));
     }
 

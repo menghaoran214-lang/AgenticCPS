@@ -56,7 +56,11 @@ export const ChatConversationApi = {
     sourceConversationId?: string
     memberId?: number
   }) => {
-    return await request.post<string>({ url: `/ai/chat/conversation/create-my`, data })
+    const payload = data ? { ...data } : {}
+    if (payload.memberId !== undefined && (typeof payload.memberId !== 'number' || Number.isNaN(payload.memberId))) {
+      delete payload.memberId
+    }
+    return await request.post<string>({ url: `/ai/chat/conversation/create-my`, data: payload })
   },
 
   // 更新【我的】聊天对话

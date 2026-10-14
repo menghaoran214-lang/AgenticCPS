@@ -3,16 +3,15 @@
     <!-- 左侧：对话列表 -->
     <ConversationList
       :active-id="activeConversationId?.toString() || ''"
-      :active-member-id="activeConversation?.memberId"
+      :active-member-id="selectedMemberId"
       ref="conversationListRef"
       @on-conversation-create="handleConversationCreateSuccess"
       @on-conversation-click="handleConversationClick"
       @on-conversation-clear="handleConversationClear"
       @on-conversation-delete="handlerConversationDelete"
-      @on-member-change="handleActiveMemberChange"
     />
     <!-- 右侧：对话详情 -->
-    <el-container class="bg-[var(--el-bg-color)]">
+    <el-container class="h-full flex-1 flex flex-col min-h-0 overflow-hidden bg-[var(--el-bg-color)]">
       <el-header
         class="flex flex-row items-center justify-between bg-[var(--el-bg-color-page)] shadow-[0_0_0_0_var(--el-border-color-light)]"
       >
@@ -20,7 +19,7 @@
           {{ activeConversation?.title ? activeConversation?.title : '对话' }}
           <span v-if="activeMessageList.length">({{ activeMessageList.length }})</span>
         </div>
-        <div class="flex w-420px flex-row items-center justify-end gap-8px" v-if="activeConversation">
+        <div class="flex flex-row items-center justify-end gap-8px shrink-0" v-if="activeConversation">
           <el-tooltip content="显示模型每次调用的输入、输出和 Token 用量" placement="bottom">
             <el-switch
               v-model="debugMode"
@@ -29,6 +28,37 @@
               inactive-text="普通"
               data-testid="chat-debug-mode"
             />
+          </el-tooltip>
+          <!-- 调试开关右边：会员切换 -->
+          <el-tooltip
+            :content="isAdmin ? '管理员可切换当前会话运行会员' : '当前运行会员（管理员可切换其他会员）'"
+            placement="bottom"
+          >
+            <el-select
+              v-model="selectedMemberId"
+              size="small"
+              filterable
+              :remote="isAdmin"
+              reserve-keyword
+              :disabled="!isAdmin || conversationInProgress"
+              :remote-method="searchMembers"
+              :loading="memberLoading"
+              class="w-210px"
+              style="width: 210px"
+              placeholder="选择运行会员"
+              data-testid="cps-member-select"
+              @change="handleActiveMemberChange"
+            >
+              <template #prefix>
+                <span class="text-11px text-[var(--el-text-color-secondary)] whitespace-nowrap mr-1">会员:</span>
+              </template>
+              <el-option
+                v-for="item in memberOptions"
+                :key="item.id"
+                :label="formatMemberOptionLabel(item)"
+                :value="item.id"
+              />
+            </el-select>
           </el-tooltip>
           <el-button type="primary" bg plain size="small" @click="openChatConversationUpdateForm">
             <span v-html="activeConversation?.modelName"></span>
@@ -96,7 +126,7 @@
       />
 
       <!-- main：消息列表 -->
-      <el-main class="m-0 p-0 relative h-full w-full">
+      <el-main class="m-0 p-0 relative flex-1 min-h-0 w-full overflow-hidden">
         <div>
           <div class="absolute top-0 bottom-0 left-0 right-0 overflow-y-hidden p-0 m-0">
             <!-- 情况一：消息加载中 -->
@@ -132,7 +162,7 @@
       </el-main>
 
       <!-- 底部 -->
-      <el-footer class="flex flex-col !h-auto !p-0">
+      <el-footer class="flex flex-col !h-auto !p-0 shrink-0">
         <ToolConfirmationCards
           ref="confirmationCardsRef"
           :conversation-id="activeConversationId || undefined"
@@ -239,8 +269,9 @@ import {
   type ToolExecutionVO
 } from '@/api/ai/chat/message'
 import { ChatConversationApi, ChatConversationVO } from '@/api/ai/chat/conversation'
-import { getUser } from '@/api/member/user'
+import { getUser, getUserPage } from '@/api/member/user'
 import { useUserStore } from '@/store/modules/user'
+import { checkRole, checkPermi } from '@/utils/permission'
 import { ChatToolActionApi, type ToolActionVO } from '@/api/ai/chat/toolAction'
 import ConversationList from './components/conversation/ConversationList.vue'
 import ConversationUpdateForm from './components/conversation/ConversationUpdateForm.vue'
@@ -481,17 +512,94 @@ const handleConversationCreateSuccess = async () => {
 
 // =========== 【会员身份】相关 ===========
 const userStore = useUserStore()
+const currentUser = computed(() => userStore.getUser)
+const isAdmin = computed(() => checkRole(['super_admin', 'admin']) || checkPermi(['ai:chat:mcp-test']))
+
+const selectedMemberId = ref<number>()
+const memberLoading = ref(false)
+const memberOptions = ref<Array<{ id: number; nickname?: string; name?: string; mobile?: string }>>([])
 const activeMemberName = ref<string>('')
+
+// 构建当前登录用户默认选项
+const buildCurrentUserOption = () => {
+  const user = currentUser.value
+  return {
+    id: user?.id || 1,
+    nickname: user?.nickname || '当前用户',
+    mobile: ''
+  }
+}
+
+// 格式化会员选项文案
+const formatMemberOptionLabel = (item: { id: number; nickname?: string; name?: string; mobile?: string }) => {
+  const isSelf = item.id === (currentUser.value?.id || 1)
+  const name = item.nickname || item.name || `会员${item.id}`
+  if (isSelf) {
+    return `${name} (当前用户 · ID: ${item.id})`
+  }
+  return `${name} (${item.mobile ? item.mobile + ' · ' : ''}ID: ${item.id})`
+}
+
+// 搜索会员
+const searchMembers = async (keyword = '') => {
+  if (!isAdmin.value) return
+  memberLoading.value = true
+  try {
+    const query = keyword.trim()
+    const page: any = await getUserPage({
+      pageNo: 1,
+      pageSize: 20,
+      mobile: /^\d+$/.test(query) ? query : undefined,
+      nickname: query && !/^\d+$/.test(query) ? query : undefined
+    })
+    const list = page?.list || []
+    const selfOption = buildCurrentUserOption()
+    const nextOptions = [selfOption, ...list.filter((m: any) => m.id !== selfOption.id)]
+
+    if (selectedMemberId.value != null && !nextOptions.some((m) => m.id === selectedMemberId.value)) {
+      try {
+        const extra = await getUser(selectedMemberId.value)
+        if (extra) {
+          nextOptions.splice(1, 0, extra)
+        }
+      } catch {
+        // ignore
+      }
+    }
+    memberOptions.value = nextOptions
+  } catch (e) {
+    console.error('加载会员列表失败', e)
+  } finally {
+    memberLoading.value = false
+  }
+}
+
+// 确保特定会员在选项中
+const ensureMemberInOptions = async (memberId: number) => {
+  if (memberOptions.value.some((m) => m.id === memberId)) return
+  try {
+    const member = await getUser(memberId)
+    if (member && !memberOptions.value.some((m) => m.id === member.id)) {
+      memberOptions.value.unshift(member)
+    }
+  } catch {
+    // ignore
+  }
+}
 
 watch(
   () => activeConversation.value?.memberId,
   async (memberId) => {
+    const targetId = memberId || currentUser.value?.id || 1
+    selectedMemberId.value = targetId
+    await ensureMemberInOptions(targetId)
+
     if (!memberId) {
       activeMemberName.value = ''
       return
     }
-    if (memberId === userStore.getUser.id) {
-      activeMemberName.value = `${userStore.getUser.nickname || '当前用户'} (ID: ${memberId})`
+    if (memberId === currentUser.value?.id) {
+      activeMemberName.value = `${currentUser.value?.nickname || '当前用户'} (ID: ${memberId})`
       return
     }
     try {
@@ -513,10 +621,12 @@ const handleActiveMemberChange = async (memberId: number) => {
       memberId
     })
     activeConversation.value.memberId = memberId
+    selectedMemberId.value = memberId
     message.success('已切换本会话的运行会员')
     await conversationListRef.value?.getChatConversationList()
   } catch (error) {
     message.error('切换运行会员失败')
+    selectedMemberId.value = activeConversation.value.memberId || currentUser.value?.id || 1
   }
 }
 
@@ -1378,6 +1488,13 @@ onBeforeUnmount(() => {
 
 /** 初始化 **/
 onMounted(async () => {
+  const selfOption = buildCurrentUserOption()
+  memberOptions.value = [selfOption]
+  selectedMemberId.value = selfOption.id
+  if (isAdmin.value) {
+    searchMembers()
+  }
+
   // 如果有 conversationId 参数，则默认选中
   if (route.query.conversationId) {
     const id = Array.isArray(route.query.conversationId)

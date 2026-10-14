@@ -37,9 +37,9 @@ const creating = ref<number>()
 const sourceId = ref<string>()
 const targetMemberId = ref<number>()
 const roles = ref<ChatRoleVO[]>([])
-const open = async (sourceConversationId?: string, memberId?: number) => {
-  sourceId.value = sourceConversationId
-  targetMemberId.value = memberId
+const open = async (sourceConversationId?: string, memberId?: unknown) => {
+  sourceId.value = typeof sourceConversationId === 'string' ? sourceConversationId : undefined
+  targetMemberId.value = typeof memberId === 'number' && !Number.isNaN(memberId) ? memberId : undefined
   visible.value = true
   loading.value = true
   try {
@@ -52,11 +52,20 @@ const select = async (role: ChatRoleVO) => {
   if (!role.id || creating.value !== undefined) return
   creating.value = role.id
   try {
-    const id = await ChatConversationApi.createChatConversationMy({
-      roleId: role.id,
-      sourceConversationId: sourceId.value,
-      memberId: targetMemberId.value
-    })
+    const payload: {
+      roleId: number
+      sourceConversationId?: string
+      memberId?: number
+    } = {
+      roleId: role.id
+    }
+    if (sourceId.value) {
+      payload.sourceConversationId = sourceId.value
+    }
+    if (typeof targetMemberId.value === 'number' && !Number.isNaN(targetMemberId.value)) {
+      payload.memberId = targetMemberId.value
+    }
+    const id = await ChatConversationApi.createChatConversationMy(payload)
     visible.value = false
     emit('success', id)
   } finally {

@@ -106,7 +106,8 @@ public class AiCapabilityRuntime {
             audit.record(conversation, snapshot, tool, "DENY", "MEMBER_IDENTITY_REQUIRED", 0);
             return rejection("DENIED", "请先绑定可信会员身份后再执行此操作");
         }
-        if ((risk > 0 || Boolean.TRUE.equals(tool.getRequireConfirmation())) && !confirmed) {
+        boolean requiresConfirmation = (risk > 1 || (Boolean.TRUE.equals(tool.getRequireConfirmation()) && risk > 1)) && !confirmed;
+        if (requiresConfirmation) {
             AiToolConfirmationDO pending = new AiToolConfirmationDO().setConversationId(conversation.getId())
                     .setOwnerId(conversation.getUserId()).setToolName(tool.getName()).setArguments(input)
                     .setStatus("PENDING").setExpiresAt(now().plusMinutes(10));
@@ -120,7 +121,8 @@ public class AiCapabilityRuntime {
         audit.record(conversation, snapshot, tool, "ALLOW", null, 0);
         try {
             Map<String,Object> context = identities.buildToolContext(conversation);
-            context.put(com.qiji.cps.module.ai.util.AiUtils.TOOL_CONTEXT_ALLOW_MUTATION, confirmed && risk > 0);
+            context.put(com.qiji.cps.module.ai.util.AiUtils.TOOL_CONTEXT_ALLOW_MUTATION,
+                    Boolean.TRUE.equals(snapshot.getAllowMutation()) && (risk <= 1 || confirmed));
             String result = callback.call(input, new ToolContext(context));
             audit.record(conversation, snapshot, tool, "SUCCEEDED", null, elapsed(start));
             return result;
@@ -131,11 +133,19 @@ public class AiCapabilityRuntime {
     }
 
     public List<Map<String,Object>> pending(Long conversationId, Long ownerId) {
-        conversations.getOwnedConversation(conversationId, "ADMIN", ownerId);
+        var conversation = conversations.getOwnedConversation(conversationId, "ADMIN", ownerId);
+        var snapshot = AiCapabilitySnapshotService.read(conversation);
         return confirmations.selectList(new LambdaQueryWrapper<AiToolConfirmationDO>()
                 .eq(AiToolConfirmationDO::getConversationId, conversationId).eq(AiToolConfirmationDO::getOwnerId, ownerId)
                 .eq(AiToolConfirmationDO::getStatus,"PENDING").gt(AiToolConfirmationDO::getExpiresAt,now())
-                .orderByDesc(AiToolConfirmationDO::getId)).stream().map(item -> {
+                .orderByDesc(AiToolConfirmationDO::getId)).stream()
+                .filter(item -> {
+                    if (snapshot == null) return false;
+                    return snapshot.getTools().stream()
+                            .filter(t -> t.getName().equals(item.getToolName()))
+                            .anyMatch(t -> AiCapabilitySnapshotService.rank(t.getRiskLevel()) > 1);
+                })
+                .map(item -> {
                     Map<String,Object> view = new LinkedHashMap<>();
                     view.put("id", item.getId().toString()); view.put("toolLabel", businessLabel(item.getToolName()));
                     view.put("summary", confirmationSummary(item.getArguments()));
