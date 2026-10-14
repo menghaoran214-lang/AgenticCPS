@@ -92,6 +92,7 @@ public class CpsAiChatMessageBlockResolver implements AiChatMessageBlockResolver
                 aliasJson(product, "evidence", "reasons");
                 aliasJson(product, "riskNotes", "riskWarnings");
                 aliasJson(product, "riskNotes", "risks");
+                enrichProductMetadata(product);
                 if (!product.isEmpty()) {
                     product.put("actions", Collections.singletonList(action("OPEN_DETAIL", "查看详情", "READ_ONLY", product)));
                     products.add(product);
@@ -104,6 +105,46 @@ public class CpsAiChatMessageBlockResolver implements AiChatMessageBlockResolver
         Map<String, Object> block = base(type, title);
         block.put("items", products);
         return Collections.singletonList(block);
+    }
+
+    private void enrichProductMetadata(Map<String, Object> product) {
+        Object platformCodeObj = product.get("platformCode");
+        String platformCode = platformCodeObj == null ? null : platformCodeObj.toString();
+        if (product.get("platformName") == null && platformCode != null) {
+            product.put("platformName", resolvePlatformName(platformCode));
+        }
+        if (product.get("netPrice") == null && product.get("actualPrice") != null && product.get("commissionAmount") != null) {
+            try {
+                java.math.BigDecimal actual = new java.math.BigDecimal(product.get("actualPrice").toString());
+                java.math.BigDecimal comm = new java.math.BigDecimal(product.get("commissionAmount").toString());
+                product.put("netPrice", actual.subtract(comm));
+            } catch (Exception ignored) {
+            }
+        }
+        if (product.get("commissionRate") == null && product.get("actualPrice") != null && product.get("commissionAmount") != null) {
+            try {
+                java.math.BigDecimal actual = new java.math.BigDecimal(product.get("actualPrice").toString());
+                java.math.BigDecimal comm = new java.math.BigDecimal(product.get("commissionAmount").toString());
+                if (actual.compareTo(java.math.BigDecimal.ZERO) > 0) {
+                    java.math.BigDecimal rate = comm.multiply(java.math.BigDecimal.valueOf(100)).divide(actual, 1, java.math.RoundingMode.HALF_UP);
+                    product.put("commissionRate", rate);
+                }
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    private static String resolvePlatformName(String platformCode) {
+        if (platformCode == null) return "其他平台";
+        return switch (platformCode.toLowerCase(java.util.Locale.ROOT)) {
+            case "taobao", "tb" -> "淘宝";
+            case "jd" -> "京东";
+            case "pdd" -> "拼多多";
+            case "douyin", "dy" -> "抖音";
+            case "vip", "wph" -> "唯品会";
+            case "kaola" -> "考拉";
+            default -> platformCode;
+        };
     }
 
     private Map<String, Object> rebateBlock(JsonNode root) {

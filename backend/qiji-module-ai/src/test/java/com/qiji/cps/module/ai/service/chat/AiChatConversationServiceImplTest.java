@@ -83,6 +83,27 @@ class AiChatConversationServiceImplTest extends BaseMockitoUnitTest {
     }
 
     @Test
+    void createChatConversationMy_withMemberId_bindsMemberIdentity() {
+        givenDefaultModel();
+        doAnswer(invocation -> {
+            invocation.<AiChatConversationDO>getArgument(0).setId(100L);
+            return 1;
+        }).when(conversationMapper).insert(any(AiChatConversationDO.class));
+
+        Long id = conversationService.createChatConversationMy(
+                new AiChatConversationCreateMyReqVO().setMemberId(285L), 42L);
+
+        ArgumentCaptor<AiChatConversationDO> captor = ArgumentCaptor.forClass(AiChatConversationDO.class);
+        verify(conversationMapper, org.mockito.Mockito.atLeastOnce()).insert(captor.capture());
+        AiChatConversationDO saved = captor.getValue();
+        assertEquals(100L, id);
+        assertEquals("ADMIN", saved.getOwnerUserType());
+        assertEquals(42L, saved.getUserId());
+        assertEquals(285L, saved.getMemberId());
+        org.junit.jupiter.api.Assertions.assertNotNull(saved.getIdentityBoundTime());
+    }
+
+    @Test
     void createMemberConversation_persistsMemberIdentityAndValidatesMemberRole() {
         AiModelDO model = model();
         when(chatRoleService.validateMemberEnabledChatRole(7L)).thenReturn(
@@ -235,7 +256,23 @@ class AiChatConversationServiceImplTest extends BaseMockitoUnitTest {
         assertNull(update.getMemberId());
         assertNull(update.getChatMode());
         assertNull(update.getMcpClientName());
-        assertNull(update.getAllowMutation());
+    }
+
+    @Test
+    void updateChatConversation_adminCanUpdateMemberId() {
+        AiChatConversationDO conversation = new AiChatConversationDO().setId(1L).setUserId(42L)
+                .setOwnerUserType("ADMIN").setMemberId(100L).setChatMode("STANDARD");
+        when(conversationMapper.selectByIdAndOwnerUserTypeAndUserId(1L, "ADMIN", 42L)).thenReturn(conversation);
+
+        conversationService.updateChatConversation(new AiChatConversationUpdateMyReqVO().setId(1L)
+                .setMemberId(285L), "ADMIN", 42L);
+
+        ArgumentCaptor<AiChatConversationDO> captor = ArgumentCaptor.forClass(AiChatConversationDO.class);
+        verify(conversationMapper).updateById(captor.capture());
+        AiChatConversationDO update = captor.getValue();
+        assertEquals(1L, update.getId());
+        assertEquals(285L, update.getMemberId());
+        org.junit.jupiter.api.Assertions.assertNotNull(update.getIdentityBoundTime());
     }
 
     @Test

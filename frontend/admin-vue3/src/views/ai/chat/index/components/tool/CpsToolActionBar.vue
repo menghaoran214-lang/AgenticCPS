@@ -1,41 +1,45 @@
 <template>
   <div v-if="sortedActions.length" class="mx-20px pt-8px" data-testid="cps-tool-actions">
     <div class="flex items-center gap-8px overflow-x-auto pb-2px">
-      <span class="shrink-0 text-13px text-[var(--el-text-color-secondary)]">快捷操作</span>
+      <span class="shrink-0 text-12px font-medium text-[var(--el-text-color-secondary)]">快捷场景：</span>
       <el-button
-        v-for="action in commonActions"
+        v-for="action in primaryActions"
         :key="action.intent"
         round
-        plain
         size="small"
+        class="!px-12px"
         :disabled="disabled"
         @click="handleActionClick(action)"
       >
+        <Icon :icon="actionIcon(action.intent)" class="mr-4px text-[var(--el-color-primary)]" />
         {{ friendly(action.label, '业务操作') }}
       </el-button>
+
       <el-popover v-if="moreActions.length" v-model:visible="moreVisible" width="460" trigger="click">
         <template #reference>
           <el-button round plain size="small" :disabled="disabled">
-            更多
-            <Icon icon="ep:arrow-down" class="ml-3px" />
+            <Icon icon="ep:grid" class="mr-3px" />
+            更多能力
+            <Icon icon="ep:arrow-down" class="ml-3px text-11px" />
           </el-button>
         </template>
-        <div class="max-h-420px overflow-y-auto" data-testid="cps-tool-actions-more">
+        <div class="max-h-420px overflow-y-auto p-4px" data-testid="cps-tool-actions-more">
           <section v-for="group in groupedMoreActions" :key="group.name" class="mb-12px last:mb-0">
-            <div class="mb-6px text-12px text-[var(--el-text-color-secondary)]">
+            <div class="mb-6px text-12px font-medium text-[var(--el-text-color-secondary)]">
               {{ friendly(group.name, '其他能力') }}
             </div>
-            <div class="grid grid-cols-3 gap-6px">
+            <div class="grid grid-cols-2 gap-6px">
               <el-button
                 v-for="action in group.actions"
                 :key="action.intent"
-                class="!ml-0"
+                class="!ml-0 !justify-start"
                 plain
                 size="small"
                 :disabled="disabled"
                 @click="handleActionClick(action)"
               >
-                {{ friendly(action.label, '业务操作') }}
+                <Icon :icon="actionIcon(action.intent)" class="mr-4px shrink-0 text-[var(--el-color-primary)]" />
+                <span class="truncate">{{ friendly(action.label, '业务操作') }}</span>
               </el-button>
             </div>
           </section>
@@ -47,7 +51,7 @@
   <el-dialog
     v-model="formVisible"
     :title="friendly(activeAction?.label, '完善请求信息')"
-    width="520px"
+    width="500px"
     append-to-body
     destroy-on-close
   >
@@ -120,8 +124,12 @@
     </el-form>
     <template #footer>
       <el-button @click="formVisible = false">取消</el-button>
-      <el-button type="primary" @click="submitForm">
-        {{ activeAction?.riskLevel === 'READ_ONLY' ? '生成到输入框' : '确认并发送' }}
+      <template v-if="activeAction?.riskLevel === 'READ_ONLY'">
+        <el-button @click="submitForm(false)">生成到输入框</el-button>
+        <el-button type="primary" @click="submitForm(true)">立即发送</el-button>
+      </template>
+      <el-button v-else type="primary" @click="submitForm(true)">
+        确认并发送
       </el-button>
     </template>
   </el-dialog>
@@ -132,7 +140,7 @@ import { ElMessageBox } from 'element-plus'
 import type { ToolActionFieldVO, ToolActionVO } from '@/api/ai/chat/toolAction'
 import {
   buildToolPrompt,
-  COMMON_TOOL_INTENTS,
+  PRIMARY_TOOL_INTENTS,
   createIntentRequestId,
   getDefaultFieldValues,
   sortToolActions,
@@ -160,21 +168,63 @@ const activeAction = ref<ToolActionVO>()
 const formValues = reactive<Record<string, any>>({})
 
 const sortedActions = computed(() => sortToolActions(props.actions || []))
-const commonIntentSet = new Set<string>(COMMON_TOOL_INTENTS)
-const commonActions = computed(() =>
-  sortedActions.value.filter((action) => commonIntentSet.has(action.intent))
-)
-const moreActions = computed(() =>
-  sortedActions.value.filter((action) => !commonIntentSet.has(action.intent))
-)
+const primaryIntentSet = new Set<string>(PRIMARY_TOOL_INTENTS)
+
+const primaryActions = computed(() => {
+  const matches = sortedActions.value.filter((action) => primaryIntentSet.has(action.intent))
+  // 如果当前可用列表中缺少主场景意图，退回到前 3 个常用意图
+  return matches.length ? matches : sortedActions.value.slice(0, 3)
+})
+
+const moreActions = computed(() => {
+  const primarySet = new Set(primaryActions.value.map((a) => a.intent))
+  return sortedActions.value.filter((action) => !primarySet.has(action.intent))
+})
+
 const groupedMoreActions = computed(() => {
   const groups = new Map<string, ToolActionVO[]>()
   moreActions.value.forEach((action) => {
-    const name = action.group || '其他能力'
+    let name = action.group || '其他能力'
+    if (action.intent.includes('RESONANCE') || action.intent.includes('ALTERNATIVE') || action.intent.includes('THEME')) {
+      name = '选品推荐'
+    } else if (action.intent.includes('ORDER') || action.intent.includes('REBATE')) {
+      name = '订单与资产'
+    }
     groups.set(name, [...(groups.get(name) || []), action])
   })
   return [...groups.entries()].map(([name, actions]) => ({ name, actions }))
 })
+
+const actionIcon = (intent?: string) => {
+  switch (intent) {
+    case 'COMPARE_PRICES':
+      return 'ep:scale-to-original'
+    case 'SEARCH_GOODS':
+      return 'ep:search'
+    case 'GET_REBATE_SUMMARY':
+      return 'ep:wallet'
+    case 'QUERY_ORDERS':
+      return 'ep:list'
+    case 'GET_REBATE_BALANCE':
+      return 'ep:coin'
+    case 'FIND_RESONANCE_GOODS':
+      return 'ep:histogram'
+    case 'FIND_ALTERNATIVES':
+      return 'ep:switch'
+    case 'ANALYZE_GOODS_DETAIL':
+      return 'ep:data-analysis'
+    case 'ANALYZE_ORDER_PROFILE':
+      return 'ep:user'
+    case 'ANALYZE_ORDER_TREND':
+      return 'ep:trend-charts'
+    case 'GENERATE_LINK':
+      return 'ep:link'
+    case 'LIST_SELECTION_THEMES':
+      return 'ep:collection'
+    default:
+      return 'ep:operation'
+  }
+}
 
 const friendly = (value?: string, fallback?: string) => toFriendlyToolText(value, fallback)
 const fieldType = (type?: string) => (type || 'TEXT').toUpperCase().replace('-', '_')
@@ -207,7 +257,7 @@ const confirmRisk = async (action: ToolActionVO, intentRequestId: string, prompt
   }
 }
 
-const emitAction = async (action: ToolActionVO, values: Record<string, unknown>) => {
+const emitAction = async (action: ToolActionVO, values: Record<string, unknown>, autoSendFlag?: boolean) => {
   const prompt = buildToolPrompt(action, values)
   if (!prompt) {
     message.error('无法生成请求，请补充必要信息')
@@ -219,7 +269,7 @@ const emitAction = async (action: ToolActionVO, values: Record<string, unknown>)
     action,
     prompt,
     intentRequestId,
-    autoSend: action.interactionType === 'DIRECT' || action.riskLevel !== 'READ_ONLY'
+    autoSend: autoSendFlag ?? (action.interactionType === 'DIRECT' || action.riskLevel !== 'READ_ONLY')
   })
 }
 
@@ -238,7 +288,7 @@ const handleActionClick = async (action: ToolActionVO) => {
   formVisible.value = true
 }
 
-const submitForm = async () => {
+const submitForm = async (autoSend = false) => {
   const action = activeAction.value
   if (!action) return
   const missingField = (action.fields || []).find((field) => {
@@ -250,7 +300,7 @@ const submitForm = async () => {
     return
   }
   try {
-    await emitAction(action, { ...formValues })
+    await emitAction(action, { ...formValues }, autoSend)
     formVisible.value = false
   } catch {
     // 用户取消风险确认

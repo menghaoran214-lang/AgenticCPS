@@ -400,6 +400,6 @@ qiji:
 
 ai:
   capability-center:
-    v2: ${AI_CAPABILITY_CENTER_V2:false}
+    v2: ${AI_CAPABILITY_CENTER_V2:true}
 
 debug: false

@@ -48,6 +48,7 @@ import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.MessageType;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.StreamingChatModel;
@@ -179,7 +180,12 @@ public class AiChatMessageServiceImpl implements AiChatMessageService {
         Prompt prompt = buildPrompt(conversation, historyMessages, knowledgeSegments, webSearchResponse, model, sendReqVO,
                 requestedAction, blockListener);
         long modelStartedAt = System.nanoTime();
-        ChatResponse chatResponse = chatModel.call(prompt);
+        ChatResponse chatResponse;
+        try {
+            chatResponse = ChatClient.builder(chatModel).build().prompt(prompt).call().chatResponse();
+        } catch (Exception ex) {
+            chatResponse = chatModel.call(prompt);
+        }
         long modelDurationMs = elapsedMs(modelStartedAt);
 
         // 4.3 更新响应内容
@@ -476,10 +482,16 @@ public class AiChatMessageServiceImpl implements AiChatMessageService {
     static Flux<ChatResponse> startStreamSafely(StreamingChatModel chatModel, Prompt prompt) {
         return Flux.defer(() -> {
             try {
+                if (chatModel instanceof ChatModel cm) {
+                    ChatClient chatClient = ChatClient.builder(cm).build();
+                    return chatClient.prompt(prompt).stream().chatResponse();
+                }
                 return chatModel.stream(prompt);
             } catch (LinkageError error) {
                 return Flux.error(new IllegalStateException(
                         "AI model provider is binary-incompatible with the current Spring AI runtime", error));
+            } catch (Exception error) {
+                return Flux.error(error);
             }
         });
     }

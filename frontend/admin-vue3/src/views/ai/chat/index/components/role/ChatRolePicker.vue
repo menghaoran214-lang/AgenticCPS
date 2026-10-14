@@ -35,9 +35,11 @@ const visible = ref(false)
 const loading = ref(false)
 const creating = ref<number>()
 const sourceId = ref<string>()
+const targetMemberId = ref<number>()
 const roles = ref<ChatRoleVO[]>([])
-const open = async (sourceConversationId?: string) => {
+const open = async (sourceConversationId?: string, memberId?: number) => {
   sourceId.value = sourceConversationId
+  targetMemberId.value = memberId
   visible.value = true
   loading.value = true
   try {
@@ -52,7 +54,8 @@ const select = async (role: ChatRoleVO) => {
   try {
     const id = await ChatConversationApi.createChatConversationMy({
       roleId: role.id,
-      sourceConversationId: sourceId.value
+      sourceConversationId: sourceId.value,
+      memberId: targetMemberId.value
     })
     visible.value = false
     emit('success', id)

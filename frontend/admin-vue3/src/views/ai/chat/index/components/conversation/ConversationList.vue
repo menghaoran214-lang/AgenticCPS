@@ -10,10 +10,35 @@
         <Icon icon="ep:plus" class="mr-5px" />
         新建对话
       </el-button>
-      <el-button class="w-1/1 mt-2" plain type="success" @click="mcpTestDialogRef.open()">
-        <Icon icon="ep:connection" class="mr-5px" />
-        CPS 自测会话
-      </el-button>
+      <!-- 会员选择下拉框：默认当前登录用户，管理员可选择其他会员来运行本会话 -->
+      <div class="mt-2.5">
+        <div class="mb-1 flex items-center justify-between px-0.5">
+          <span class="text-12px font-500 text-[var(--el-text-color-secondary)]">运行会员</span>
+          <el-tag size="small" :type="isAdmin ? 'success' : 'info'" effect="plain">
+            {{ isAdmin ? '管理员可切换' : '当前用户' }}
+          </el-tag>
+        </div>
+        <el-select
+          v-model="selectedMemberId"
+          filterable
+          :remote="isAdmin"
+          reserve-keyword
+          :disabled="!isAdmin"
+          :remote-method="searchMembers"
+          :loading="memberLoading"
+          class="w-full"
+          placeholder="选择运行会员"
+          data-testid="cps-member-select"
+          @change="handleMemberChange"
+        >
+          <el-option
+            v-for="item in memberOptions"
+            :key="item.id"
+            :label="formatMemberOptionLabel(item)"
+            :value="item.id"
+          />
+        </el-select>
+      </div>
 
       <!-- 左顶部：搜索对话 -->
       <el-input
@@ -137,7 +162,6 @@
       <RoleRepository />
     </el-drawer>
     <ChatRolePicker ref="chatRolePickerRef" @success="handleMcpTestConversationCreate" />
-    <McpTestConversationDialog ref="mcpTestDialogRef" @success="handleMcpTestConversationCreate" />
   </el-aside>
 </template>
 
@@ -146,10 +170,92 @@ import { ChatConversationApi, ChatConversationVO } from '@/api/ai/chat/conversat
 import RoleRepository from '../role/RoleRepository.vue'
 import ChatRolePicker from '../role/ChatRolePicker.vue'
 import { Bottom, Top } from '@element-plus/icons-vue'
-import McpTestConversationDialog from '../mcp/McpTestConversationDialog.vue'
 import AiRoleAvatar from '@/components/AiRoleAvatar/index.vue'
+import { getUser, getUserPage, type UserVO } from '@/api/member/user'
+import { useUserStore } from '@/store/modules/user'
+import { checkRole, checkPermi } from '@/utils/permission'
 
 const message = useMessage() // 消息弹窗
+const userStore = useUserStore()
+const currentUser = computed(() => userStore.getUser)
+const isAdmin = computed(() => checkRole(['super_admin', 'admin']) || checkPermi(['ai:chat:mcp-test']))
+
+// 运行会员选择状态
+const selectedMemberId = ref<number>()
+const memberLoading = ref(false)
+const memberOptions = ref<Array<{ id: number; nickname?: string; name?: string; mobile?: string }>>([])
+
+// 构建当前登录用户默认选项
+const buildCurrentUserOption = () => {
+  const user = currentUser.value
+  return {
+    id: user.id || 1,
+    nickname: user.nickname || '当前用户',
+    mobile: ''
+  }
+}
+
+// 格式化会员选项文案
+const formatMemberOptionLabel = (item: { id: number; nickname?: string; name?: string; mobile?: string }) => {
+  const isSelf = item.id === (currentUser.value.id || 1)
+  const name = item.nickname || item.name || `会员${item.id}`
+  if (isSelf) {
+    return `${name}（当前登录用户 · ID: ${item.id}）`
+  }
+  return `${name}（${item.mobile ? item.mobile + ' · ' : ''}ID: ${item.id}）`
+}
+
+// 搜索会员
+const searchMembers = async (keyword = '') => {
+  if (!isAdmin.value) return
+  memberLoading.value = true
+  try {
+    const query = keyword.trim()
+    const page: any = await getUserPage({
+      pageNo: 1,
+      pageSize: 20,
+      mobile: /^\d+$/.test(query) ? query : undefined,
+      nickname: query && !/^\d+$/.test(query) ? query : undefined
+    })
+    const list = page?.list || []
+    const selfOption = buildCurrentUserOption()
+    const nextOptions = [selfOption, ...list.filter((m: any) => m.id !== selfOption.id)]
+
+    if (selectedMemberId.value != null && !nextOptions.some((m) => m.id === selectedMemberId.value)) {
+      try {
+        const extra = await getUser(selectedMemberId.value)
+        if (extra) {
+          nextOptions.splice(1, 0, extra)
+        }
+      } catch {
+        // ignore
+      }
+    }
+    memberOptions.value = nextOptions
+  } catch (e) {
+    console.error('加载会员列表失败', e)
+  } finally {
+    memberLoading.value = false
+  }
+}
+
+// 确保特定会员在选项中
+const ensureMemberInOptions = async (memberId: number) => {
+  if (memberOptions.value.some((m) => m.id === memberId)) return
+  try {
+    const member = await getUser(memberId)
+    if (member && !memberOptions.value.some((m) => m.id === member.id)) {
+      memberOptions.value.unshift(member)
+    }
+  } catch {
+    // ignore
+  }
+}
+
+// 会员切换回调
+const handleMemberChange = (newMemberId: number) => {
+  emits('onMemberChange', newMemberId)
+}
 
 // 定义属性
 const searchName = ref<string>('') // 对话搜索
@@ -159,7 +265,6 @@ const conversationList = ref([] as ChatConversationVO[]) // 对话列表
 const conversationMap = ref<any>({}) // 对话分组 (置顶、今天、三天前、一星期前、一个月前)
 const loading = ref<boolean>(false) // 加载中
 const loadingTime = ref<any>() // 加载中定时器
-const mcpTestDialogRef = ref()
 const chatRolePickerRef = ref<InstanceType<typeof ChatRolePicker>>()
 
 // 定义组件 props
@@ -167,6 +272,10 @@ const props = defineProps({
   activeId: {
     type: String || null,
     required: true
+  },
+  activeMemberId: {
+    type: Number,
+    default: undefined
   }
 })
 
@@ -175,8 +284,23 @@ const emits = defineEmits([
   'onConversationCreate',
   'onConversationClick',
   'onConversationClear',
-  'onConversationDelete'
+  'onConversationDelete',
+  'onMemberChange'
 ])
+
+// 监听活跃会话绑定的会员变更
+watch(
+  () => props.activeMemberId,
+  async (newMemberId) => {
+    if (newMemberId != null) {
+      selectedMemberId.value = newMemberId
+      await ensureMemberInOptions(newMemberId)
+    } else {
+      selectedMemberId.value = currentUser.value.id || 1
+    }
+  },
+  { immediate: true }
+)
 
 /** 搜索对话 */
 const searchConversation = async () => {
@@ -281,10 +405,10 @@ const getConversationGroupByCreateTime = async (list: ChatConversationVO[]) => {
 
 /** 新建对话 */
 const createConversation = async () => {
-  await chatRolePickerRef.value?.open()
+  await chatRolePickerRef.value?.open(undefined, selectedMemberId.value)
 }
 const createWithAnotherRole = async () => {
-  await chatRolePickerRef.value?.open(props.activeId || undefined)
+  await chatRolePickerRef.value?.open(props.activeId || undefined, selectedMemberId.value)
 }
 const handleMcpTestConversationCreate = async (conversationId: string) => {
   await getChatConversationList()
@@ -377,10 +501,16 @@ watch(activeId, async (newValue) => {
 })
 
 // 定义 public 方法
-defineExpose({ createConversation, createWithAnotherRole })
+defineExpose({ createConversation, createWithAnotherRole, getChatConversationList })
 
 /** 初始化 */
 onMounted(async () => {
+  const selfOption = buildCurrentUserOption()
+  memberOptions.value = [selfOption]
+  selectedMemberId.value = props.activeMemberId || selfOption.id
+  if (isAdmin.value) {
+    searchMembers()
+  }
   // 获取 对话列表
   await getChatConversationList()
   // 默认选中

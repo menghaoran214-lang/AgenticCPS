@@ -13,6 +13,7 @@ export interface ChatConversationVO {
   maxTokens: number // 单条回复的最大 Token 数量
   maxContexts: number // 上下文的最大 Message 数量
   createTime?: Date // 创建时间
+  memberId?: number // 会员编号
   // 额外字段
   systemMessage?: string // 角色设定
   modelName?: string // 模型名字
@@ -50,12 +51,16 @@ export const ChatConversationApi = {
   },
 
   // 新增【我的】聊天对话
-  createChatConversationMy: async (data?: { roleId?: number; sourceConversationId?: string }) => {
+  createChatConversationMy: async (data?: {
+    roleId?: number
+    sourceConversationId?: string
+    memberId?: number
+  }) => {
     return await request.post<string>({ url: `/ai/chat/conversation/create-my`, data })
   },
 
   // 更新【我的】聊天对话
-  updateChatConversationMy: async (data: ChatConversationVO) => {
+  updateChatConversationMy: async (data: Partial<ChatConversationVO> & { id: string | number }) => {
     return await request.put({ url: `/ai/chat/conversation/update-my`, data })
   },
 

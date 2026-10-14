@@ -18,6 +18,12 @@ export const COMMON_TOOL_INTENTS = [
   'ANALYZE_ORDER_TREND'
 ] as const
 
+export const PRIMARY_TOOL_INTENTS = [
+  'COMPARE_PRICES',
+  'SEARCH_GOODS',
+  'GET_REBATE_SUMMARY'
+] as const
+
 export interface RecommendedPrompt {
   prompt: string
   toolIntent: (typeof COMMON_TOOL_INTENTS)[number]

@@ -16,4 +16,7 @@ public class AiChatConversationCreateMyReqVO {
     @Schema(description = "知识库编号", example = "1204")
     private Long knowledgeId;
 
+    @Schema(description = "会员编号（仅管理员可指定其他会员）", example = "2048")
+    private Long memberId;
+
 }

@@ -1,18 +1,27 @@
 <template>
   <section
-    class="mx-20px mt-12px rounded-14px border border-solid border-[var(--el-border-color-light)] bg-[linear-gradient(120deg,var(--el-color-primary-light-9),var(--el-bg-color)_62%)]"
-    :class="hasResults ? 'px-16px py-10px' : 'px-24px py-20px'"
+    class="mx-20px mt-12px rounded-14px border border-solid border-[var(--el-border-color-light)] bg-[linear-gradient(120deg,var(--el-color-primary-light-9),var(--el-bg-color)_62%)] transition-all duration-200"
+    :class="hasResults ? (isCollapsed ? 'px-16px py-6px' : 'px-16px py-10px') : (isCollapsed ? 'px-20px py-8px' : 'px-24px py-18px')"
     data-testid="cps-selection-workbench"
   >
     <div class="flex items-center justify-between gap-16px">
       <div class="min-w-0">
         <div class="flex items-center gap-8px">
-          <span class="text-18px font-700">CPS AI 选品工作台</span>
+          <span class="text-16px font-700">CPS AI 选品工作台</span>
           <el-tag size="small" effect="plain">数据驱动</el-tag>
+          <el-button
+            link
+            size="small"
+            class="ml-6px text-[var(--el-text-color-secondary)] hover:text-[var(--el-color-primary)]"
+            @click="isCollapsed = !isCollapsed"
+          >
+            <Icon :icon="isCollapsed ? 'ep:arrow-down' : 'ep:arrow-up'" class="mr-2px text-12px" />
+            {{ isCollapsed ? '展开工作台' : '收起' }}
+          </el-button>
         </div>
         <p
-          v-if="!hasResults"
-          class="mb-0 mt-7px text-13px leading-20px text-[var(--el-text-color-secondary)]"
+          v-if="!hasResults && !isCollapsed"
+          class="mb-0 mt-6px text-13px leading-20px text-[var(--el-text-color-secondary)]"
         >
           用自然语言组合商品、榜单与成交数据，输出带来源、理由和风险提示的分析结果。
         </p>
@@ -46,7 +55,9 @@
       </div>
     </div>
 
-    <div class="mt-10px flex flex-wrap items-center justify-end gap-8px">
+    <!-- 可折叠主体内容 -->
+    <div v-show="!isCollapsed">
+      <div class="mt-10px flex flex-wrap items-center justify-end gap-8px">
       <el-button
         size="small"
         plain
@@ -172,6 +183,7 @@
       <span class="font-600 text-[var(--el-text-color-regular)]">分析结果工作区</span>
       <span class="min-w-0 truncate">{{ resultSummary || '已呈现执行步骤、数据证据、推荐理由与风险提示。' }}</span>
     </div>
+  </div>
 
     <el-dialog v-model="saveDialogVisible" title="保存 AI 筛选条件" width="420px" append-to-body>
       <el-form label-position="top">
@@ -296,6 +308,17 @@ const emits = defineEmits<{
   (e: 'prompt', value: RecommendedPrompt): void
   (e: 'retry'): void
 }>()
+
+const isCollapsed = ref(Boolean(props.hasResults))
+
+watch(
+  () => props.taskProgress?.status,
+  (status) => {
+    if (status === 'RUNNING') {
+      isCollapsed.value = false
+    }
+  }
+)
 
 const selectionCases: WorkbenchCase[] = [
   {

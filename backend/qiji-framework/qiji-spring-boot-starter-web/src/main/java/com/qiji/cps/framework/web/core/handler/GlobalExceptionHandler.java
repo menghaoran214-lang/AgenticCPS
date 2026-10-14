@@ -115,6 +115,9 @@ public class GlobalExceptionHandler {
         if (ex instanceof AccessDeniedException) {
             return accessDeniedExceptionHandler(request, (AccessDeniedException) ex);
         }
+        if (ex instanceof IllegalArgumentException) {
+            return illegalArgumentExceptionHandler((IllegalArgumentException) ex);
+        }
         return defaultExceptionHandler(request, ex);
     }
 
@@ -287,6 +290,15 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(value = UncheckedExecutionException.class)
     public CommonResult<?> uncheckedExecutionExceptionHandler(HttpServletRequest req, UncheckedExecutionException ex) {
         return allExceptionHandler(req, ex.getCause());
+    }
+
+    /**
+     * 处理 IllegalArgumentException 业务或参数非法异常
+     */
+    @ExceptionHandler(value = IllegalArgumentException.class)
+    public CommonResult<?> illegalArgumentExceptionHandler(IllegalArgumentException ex) {
+        log.warn("[illegalArgumentExceptionHandler]", ex);
+        return CommonResult.error(BAD_REQUEST.getCode(), ex.getMessage());
     }
 
     /**

@@ -36,4 +36,7 @@ public class AiChatConversationUpdateMyReqVO {
     @Schema(description = "上下文的最大 Message 数量", example = "10")
     private Integer maxContexts;
 
+    @Schema(description = "会员编号（仅管理员可切换运行会员）", example = "2048")
+    private Long memberId;
+
 }

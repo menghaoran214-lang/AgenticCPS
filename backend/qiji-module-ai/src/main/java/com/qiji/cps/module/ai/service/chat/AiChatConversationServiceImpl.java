@@ -66,7 +66,8 @@ public class AiChatConversationServiceImpl implements AiChatConversationService 
 
     @Override
     public Long createChatConversationMy(AiChatConversationCreateMyReqVO createReqVO, Long userId) {
-        return createConversation(createReqVO, userId, AiChatOwnerTypeEnum.ADMIN, null);
+        Long memberId = createReqVO != null ? createReqVO.getMemberId() : null;
+        return createConversation(createReqVO, userId, AiChatOwnerTypeEnum.ADMIN, memberId);
     }
 
     @Override
@@ -137,6 +138,9 @@ public class AiChatConversationServiceImpl implements AiChatConversationService 
                 .setChatMode(AiChatModeEnum.STANDARD.name()).setAllowMutation(false).setPinned(false)
                 .setModelId(model.getId()).setModel(model.getModel())
                 .setTemperature(model.getTemperature()).setMaxTokens(model.getMaxTokens()).setMaxContexts(model.getMaxContexts());
+        if (memberId != null) {
+            conversation.setIdentityBoundTime(LocalDateTime.now());
+        }
         if (role != null) {
             conversation.setTitle(role.getName()).setRoleId(role.getId()).setSystemMessage(role.getSystemMessage());
             applyCapabilitySnapshot(conversation, role);
@@ -206,6 +210,10 @@ public class AiChatConversationServiceImpl implements AiChatConversationService 
         }
         if (model != null) {
             updateObj.setModel(model.getModel());
+        }
+        if (AiChatOwnerTypeEnum.ADMIN.name().equals(ownerUserType) && updateReqVO.getMemberId() != null) {
+            updateObj.setMemberId(updateReqVO.getMemberId());
+            updateObj.setIdentityBoundTime(LocalDateTime.now());
         }
         chatConversationMapper.updateById(updateObj);
     }

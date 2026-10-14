@@ -3,11 +3,13 @@
     <!-- 左侧：对话列表 -->
     <ConversationList
       :active-id="activeConversationId?.toString() || ''"
+      :active-member-id="activeConversation?.memberId"
       ref="conversationListRef"
       @on-conversation-create="handleConversationCreateSuccess"
       @on-conversation-click="handleConversationClick"
       @on-conversation-clear="handleConversationClear"
       @on-conversation-delete="handlerConversationDelete"
+      @on-member-change="handleActiveMemberChange"
     />
     <!-- 右侧：对话详情 -->
     <el-container class="bg-[var(--el-bg-color)]">
@@ -64,6 +66,14 @@
           {{ capabilitySummary.toolCount }} 项能力</el-tag
         >
         <el-tag type="warning">{{ capabilitySummary.riskLevel }}</el-tag>
+        <el-tag
+          type="success"
+          effect="light"
+          v-if="activeConversation?.memberId"
+          data-testid="active-member-tag"
+        >
+          运行会员 · {{ activeMemberName }}
+        </el-tag>
         <el-button
           link
           type="primary"
@@ -136,36 +146,40 @@
         />
         <!-- TODO @芋艿：这块要想办法迁移下！ -->
         <form
-          class="mt-10px mx-20px mb-20px py-9px px-10px flex flex-col h-auto rounded-10px"
-          style="border: 1px solid var(--el-border-color)"
+          class="mt-10px mx-20px mb-16px py-10px px-12px flex flex-col h-auto rounded-12px bg-[var(--el-bg-color)] border border-solid border-[var(--el-border-color)] shadow-sm focus-within:border-[var(--el-color-primary)] transition-all"
         >
-          <div class="mb-8px flex items-center gap-8px" data-testid="cps-workbench-input-mode">
-            <el-button
-              size="small"
-              plain
-              type="primary"
-              :disabled="conversationInProgress"
-              data-testid="chat-role-picker"
-              @click="chooseChatRole"
-            >
-              <Icon icon="ep:user" class="mr-4px" />
-              {{ activeConversation?.roleId ? '选择聊天角色' : '选择聊天角色后开始' }}
-            </el-button>
-            <el-tag effect="plain" type="info">
-              {{ workbenchMode === 'SELECTION' ? '选品分析' : '订单分析' }}
-            </el-tag>
-            <el-tag
-              v-if="selectedToolAction"
-              closable
-              type="primary"
-              @close="clearSelectedToolAction"
-            >
-              优先使用：{{ friendlyToolText(selectedToolAction.label, '已选业务能力') }}
-            </el-tag>
-            <el-tag v-else type="primary" effect="plain">自动选择业务能力</el-tag>
+          <div class="mb-8px flex items-center justify-between" data-testid="cps-workbench-input-mode">
+            <div class="flex items-center gap-8px">
+              <el-button
+                size="small"
+                plain
+                type="primary"
+                :disabled="conversationInProgress"
+                data-testid="chat-role-picker"
+                @click="chooseChatRole"
+              >
+                <Icon icon="ep:user" class="mr-4px" />
+                {{ activeConversation?.roleId ? '选择聊天角色' : '选择聊天角色后开始' }}
+              </el-button>
+              <el-tag effect="plain" type="info" size="small">
+                {{ workbenchMode === 'SELECTION' ? '选品分析' : '订单分析' }}
+              </el-tag>
+              <el-tag
+                v-if="selectedToolAction"
+                closable
+                size="small"
+                type="primary"
+                @close="clearSelectedToolAction"
+              >
+                优先使用：{{ friendlyToolText(selectedToolAction.label, '已选业务能力') }}
+              </el-tag>
+            </div>
+            <span v-if="!selectedToolAction" class="text-11px text-[var(--el-text-color-placeholder)]">
+              自动识别业务意图
+            </span>
           </div>
           <textarea
-            class="h-80px border-none box-border resize-none py-0 px-2px overflow-auto focus:outline-none"
+            class="h-80px border-none box-border resize-none py-4px px-4px text-14px leading-22px overflow-auto focus:outline-none bg-transparent"
             v-model="prompt"
             @keydown="handleSendByKeydown"
             @input="handlePromptInput"
@@ -174,31 +188,34 @@
             :placeholder="workbenchPlaceholder"
           >
           </textarea>
-          <div class="flex justify-between pb-0 pt-5px">
+          <div class="flex items-center justify-between pb-0 pt-6px border-t border-[var(--el-border-color-lighter)] mt-4px">
             <div class="flex items-center">
-              <MessageFileUpload v-model="uploadFiles" :limit="5" :max-size="10" class="mr-10px" />
-              <el-switch v-model="enableContext" />
-              <span class="ml-5px mr-15px text-14px text-#8f8f8f">上下文</span>
-              <el-switch v-model="enableWebSearch" />
-              <span class="ml-5px text-14px text-#8f8f8f">联网搜索</span>
+              <MessageFileUpload v-model="uploadFiles" :limit="5" :max-size="10" class="mr-12px" />
+              <el-switch v-model="enableContext" size="small" />
+              <span class="ml-4px mr-14px text-12px text-[var(--el-text-color-secondary)]">上下文</span>
+              <el-switch v-model="enableWebSearch" size="small" />
+              <span class="ml-4px text-12px text-[var(--el-text-color-secondary)]">联网搜索</span>
             </div>
-            <el-button
-              type="primary"
-              size="default"
-              @click="handleSendByButton"
-              :loading="conversationInProgress"
-              v-if="conversationInProgress == false"
-            >
-              {{ conversationInProgress ? '进行中' : '发送' }}
-            </el-button>
-            <el-button
-              type="danger"
-              size="default"
-              @click="stopStream()"
-              v-if="conversationInProgress == true"
-            >
-              停止
-            </el-button>
+            <div class="flex items-center gap-8px">
+              <span class="text-11px text-[var(--el-text-color-placeholder)]">Enter 发送 / Shift+Enter 换行</span>
+              <el-button
+                type="primary"
+                size="default"
+                @click="handleSendByButton"
+                :loading="conversationInProgress"
+                v-if="conversationInProgress == false"
+              >
+                {{ conversationInProgress ? '进行中' : '发送' }}
+              </el-button>
+              <el-button
+                type="danger"
+                size="default"
+                @click="stopStream()"
+                v-if="conversationInProgress == true"
+              >
+                停止
+              </el-button>
+            </div>
           </div>
         </form>
       </el-footer>
@@ -222,6 +239,8 @@ import {
   type ToolExecutionVO
 } from '@/api/ai/chat/message'
 import { ChatConversationApi, ChatConversationVO } from '@/api/ai/chat/conversation'
+import { getUser } from '@/api/member/user'
+import { useUserStore } from '@/store/modules/user'
 import { ChatToolActionApi, type ToolActionVO } from '@/api/ai/chat/toolAction'
 import ConversationList from './components/conversation/ConversationList.vue'
 import ConversationUpdateForm from './components/conversation/ConversationUpdateForm.vue'
@@ -328,7 +347,10 @@ const workbenchResultSummary = computed(() => {
       item.type === 'ALTERNATIVES_REPORT' ||
       item.type === 'GOODS_ANALYSIS' ||
       item.type === 'ORDER_PROFILE' ||
-      item.type === 'ORDER_TREND'
+      item.type === 'ORDER_TREND' ||
+      item.type === 'PRODUCT_RECOMMEND' ||
+      item.type === 'PRODUCT_COMPARE' ||
+      item.type === 'REBATE_SUMMARY'
   )
   return block?.summary || latestAssistant?.taskProgress?.summary || ''
 })
@@ -455,6 +477,47 @@ const handleConversationCreateSuccess = async () => {
   selectedToolAction.value = undefined
   selectedIntentRequestId.value = undefined
   lastWorkbenchRequest.value = undefined
+}
+
+// =========== 【会员身份】相关 ===========
+const userStore = useUserStore()
+const activeMemberName = ref<string>('')
+
+watch(
+  () => activeConversation.value?.memberId,
+  async (memberId) => {
+    if (!memberId) {
+      activeMemberName.value = ''
+      return
+    }
+    if (memberId === userStore.getUser.id) {
+      activeMemberName.value = `${userStore.getUser.nickname || '当前用户'} (ID: ${memberId})`
+      return
+    }
+    try {
+      const user = await getUser(memberId)
+      activeMemberName.value = `${user?.nickname || user?.name || '会员'} (ID: ${memberId})`
+    } catch {
+      activeMemberName.value = `会员 (ID: ${memberId})`
+    }
+  },
+  { immediate: true }
+)
+
+const handleActiveMemberChange = async (memberId: number) => {
+  if (!activeConversation.value) return
+  if (activeConversation.value.memberId === memberId) return
+  try {
+    await ChatConversationApi.updateChatConversationMy({
+      id: activeConversation.value.id,
+      memberId
+    })
+    activeConversation.value.memberId = memberId
+    message.success('已切换本会话的运行会员')
+    await conversationListRef.value?.getChatConversationList()
+  } catch (error) {
+    message.error('切换运行会员失败')
+  }
 }
 
 // =========== 【消息列表】相关 ===========
@@ -901,20 +964,34 @@ const completeTaskProgress = (assistantMessage?: ChatMessageVO) => {
     assistantMessage.toolExecutions?.some((item) => item.status === 'WAITING_CONFIRMATION')
   )
     return
+
+  const hasBlocks = Boolean(assistantMessage.blocks?.length)
+  const hasToolExecutions = Boolean(assistantMessage.toolExecutions?.length)
+
+  // 如果既没有工具执行，也没有生成任何结果块，说明是普通文字回复，不需要展示结构化任务卡片
+  if (!hasBlocks && !hasToolExecutions) {
+    assistantMessage.taskProgress = undefined
+    return
+  }
+
+  const structuredSummary = assistantMessage.blocks?.find(
+    (block) =>
+      block.type === 'SELECTION_REPORT' ||
+      block.type === 'ALTERNATIVES_REPORT' ||
+      block.type === 'GOODS_ANALYSIS' ||
+      block.type === 'ORDER_PROFILE' ||
+      block.type === 'ORDER_TREND' ||
+      block.type === 'PRODUCT_RECOMMEND' ||
+      block.type === 'PRODUCT_COMPARE' ||
+      block.type === 'REBATE_SUMMARY'
+  )?.summary
+
   assistantMessage.taskProgress = {
     ...assistantMessage.taskProgress,
     status: 'SUCCEEDED',
     percent: 100,
     currentStep: '结构化结果已生成',
-    summary:
-      assistantMessage.blocks?.find(
-        (block) =>
-          block.type === 'SELECTION_REPORT' ||
-          block.type === 'ALTERNATIVES_REPORT' ||
-          block.type === 'GOODS_ANALYSIS' ||
-          block.type === 'ORDER_PROFILE' ||
-          block.type === 'ORDER_TREND'
-      )?.summary || '分析已完成，可查看数据证据、推荐理由和风险提示。',
+    summary: structuredSummary || '分析已完成，可查看数据证据、推荐理由和风险提示。',
     retryable: false,
     steps: assistantMessage.taskProgress.steps.map((step) => ({
       ...step,
