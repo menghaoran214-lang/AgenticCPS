@@ -48,7 +48,13 @@ public class HdkJdVendorClient extends AbstractHdkVendorClient {
     @Override
     protected Map<String, Object> buildSearchParams(CpsGoodsSearchRequest request, CpsVendorConfig config) {
         Map<String, Object> params = new LinkedHashMap<>();
-        params.put("jd_user_id", firstNonBlank(config.getAuthToken(), getExtraConfig(config, "jd_user_id")));
+        // 好单库京东搜索接口(/jd_goods_search)的 jd_user_id 是在好单库后台授权绑定的京东用户ID。
+        // config.authToken 用于转链时的 union_id，不可直接注入搜索接口，否则未在好单库授权会导致 500。
+        // 仅当用户在 extra_config 显式指定 jd_user_id 时才传递，默认使用好单库公共池。
+        String jdUserId = getExtraConfig(config, "jd_user_id");
+        if (jdUserId != null && !jdUserId.isBlank()) {
+            params.put("jd_user_id", jdUserId);
+        }
         params.put("keyword", encodeKeywordOnce(request.getKeyword()));
         params.put("min_id", request.getPageNo());
         params.put("back", request.getPageSize());

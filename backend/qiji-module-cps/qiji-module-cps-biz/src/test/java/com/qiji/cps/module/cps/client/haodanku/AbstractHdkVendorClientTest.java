@@ -187,7 +187,7 @@ class AbstractHdkVendorClientTest {
     }
 
     @Test
-    @DisplayName("京东搜索参数应匹配好单库 jd_goods_search")
+    @DisplayName("京东搜索参数应匹配好单库 jd_goods_search 且不把 authToken 误当 jd_user_id")
     void testJdSearchParams() {
         HdkJdVendorClient jdClient = new HdkJdVendorClient();
         CpsGoodsSearchRequest request = new CpsGoodsSearchRequest();
@@ -196,16 +196,34 @@ class AbstractHdkVendorClientTest {
         request.setPageSize(10);
         request.setSortType(4);
         request.setHasCoupon(1);
-        CpsVendorConfig config = CpsVendorConfig.builder().authToken("jd-user").build();
+        CpsVendorConfig config = CpsVendorConfig.builder().authToken("2018437167").build();
 
         Map<String, Object> params = jdClient.buildSearchParams(request, config);
 
-        assertEquals("jd-user", params.get("jd_user_id"));
+        assertNull(params.get("jd_user_id"), "authToken 是转链用的 unionId，搜索不应注入未授权的 jd_user_id");
         assertEquals("%E6%89%8B%E6%9C%BA", params.get("keyword"));
         assertEquals(2, params.get("min_id"));
         assertEquals(10, params.get("back"));
         assertEquals(1, params.get("has_coupon"));
         assertEquals(6, params.get("sort"));
+    }
+
+    @Test
+    @DisplayName("京东搜索在显式配置 jd_user_id 时应透传")
+    void testJdSearchParamsWithExplicitJdUserId() {
+        HdkJdVendorClient jdClient = new HdkJdVendorClient();
+        CpsGoodsSearchRequest request = new CpsGoodsSearchRequest();
+        request.setKeyword("手机");
+        request.setPageNo(1);
+        request.setPageSize(10);
+        CpsVendorConfig config = CpsVendorConfig.builder()
+                .authToken("2018437167")
+                .extraConfig(Map.of("jd_user_id", "custom-jd-user"))
+                .build();
+
+        Map<String, Object> params = jdClient.buildSearchParams(request, config);
+
+        assertEquals("custom-jd-user", params.get("jd_user_id"));
     }
 
     @Test

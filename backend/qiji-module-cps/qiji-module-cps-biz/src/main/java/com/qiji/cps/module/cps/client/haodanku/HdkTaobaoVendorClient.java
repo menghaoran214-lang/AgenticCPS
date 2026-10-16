@@ -86,7 +86,7 @@ public class HdkTaobaoVendorClient extends AbstractHdkVendorClient implements Cp
                 goodsList.add(parseGoodsItem(item));
             }
         }
-        long total = response.path("total").asLong(-1);
+        long total = response.path("total").asLong(goodsList.size());
         return CpsGoodsSearchResult.builder()
                 .list(goodsList)
                 .total(total)

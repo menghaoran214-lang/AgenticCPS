@@ -56,6 +56,20 @@ Service-to-service calls use shared OpenAPI headers:
 - Selection item snapshots, activity cards, and search results are for operations/recommendation only. They must not drive rebate settlement, order attribution, freeze/deduct, withdrawal, or Token exchange.
 - Orders without `specialId`, `relationId`, or verified external mapping may be stored for reconciliation, but must not mutate member rebate assets automatically.
 
+## AI Conversation Security & Mutation Boundaries
+
+- **Zero Asset Mutation via AI Chat**: Asset, fund, rebate, and Token balance mutations (e.g., rebate deduction/freeze/unfreeze, withdrawal, Token exchange order submission, balance adjustments) MUST NOT be executed via AI conversation or conversational tool calling.
+- **AI Chat Asset Domain is Strictly Read-Only**: In AI conversations, asset scenarios are restricted to read-only queries (`cps_get_rebate_balance`, `cps_query_exchange_status`), rule explanations, and deep-link navigation to dedicated UI. Real asset mutations must only occur through dedicated, deterministic UI pages with explicit user authentication (password/SMS/MFA) and idempotent saga orchestration.
+- **Prohibit Asset Mutation Tools in AI Chat Roles**: Asset-modifying tools (such as `cps_create_token_exchange`) must never be bound to AI chat roles or exposed in conversational toolsets.
+- **Strictly Scoped Write Permissions (`allowMutation = true`)**: When a role is explicitly granted write permissions, operations are strictly limited to controlled attribution and operational draft actions:
+  - Permitted: Promotion link generation and attribution logging (`cps_generate_link`, `cpx_generate_tracking_link`), selection theme recommendation cards (`cps_recommend_from_selection_theme`), and conversational preference tagging.
+  - Prohibited: Direct SQL/DML/DDL execution, generic table updates, order status tampering, commission rate overrides, and platform credential modifications.
+- **Strict Database Mutation Defense**:
+  - Never expose generic database execution, arbitrary SQL, or generic CRUD tools to models or MCP servers.
+  - All database writes must go through strongly typed, parameterized, and pre-compiled business services.
+  - Model input must never be trusted for identity or authority. Request-body parameters containing `memberId`, `userId`, `tenantId`, `allowMutation`, etc., must be rejected (`UNTRUSTED_IDENTITY`). Identity context must only be injected from verified server session/JWT into `ToolContext`.
+  - All tool executions must record immutable audit logs with traceId, conversationId, actorUserId, toolName, arguments snapshot, and execution latency.
+
 ## Development Workflow
 
 - Default to solo execution for scoped work.

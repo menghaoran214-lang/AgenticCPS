@@ -31,7 +31,7 @@ AgenticCPS 把“电商平台”和“API 供应商”分开配置：
 | 大淘客 | `dataoke` | `jd` | 支持 | 支持 | 支持 | 不作为活动源 | `appKey` + `appSecret`，京东转链/订单还要补 `authToken` |
 | 大淘客 | `dataoke` | `pdd` | 支持 | 支持 | 支持 | 不作为活动源 | `appKey` + `appSecret`，建议补默认推广位 |
 | 好单库 | `haodanku` | `taobao` | 支持 | 支持 | 支持 | 支持活动中心 | `appKey` 填好单库 `apikey` |
-| 好单库 | `haodanku` | `jd` | 支持 | 支持 | 支持 | 活动拉取不走这个 platformCode | `appKey` 填 `apikey`，京东通常还要补 `authToken` 或 `extraConfig.jd_user_id` |
+| 好单库 | `haodanku` | `jd` | 支持 | 支持 | 支持 | 活动拉取不走这个 platformCode | `appKey` 填 `apikey`；转链必填 `authToken`（京东 unionId）与三段式推广位 PID；搜索默认走公共池，无需填 `jd_user_id` |
 | 好单库 | `haodanku` | `pdd` | 支持 | 支持 | 支持 | 活动拉取不走这个 platformCode | `appKey` 填 `apikey`，拼多多权限需在好单库侧开通 |
 | 聚推客 | `jutuike` | `union` | 活动列表兼作搜索 | 活动转链 | 统一订单 | 支持 | `appKey` 填聚推客 `apikey` |
 
@@ -59,10 +59,24 @@ AgenticCPS 把“电商平台”和“API 供应商”分开配置：
 
 | 字段 | 填到 AgenticCPS 哪里 | 说明 |
 | --- | --- | --- |
-| apikey | `cps_api_vendor.app_key` | 普通接口鉴权参数 |
-| API Base URL | `cps_api_vendor.api_base_url` | 推荐填 `https://v2.api.haodanku.com` |
-| JD 用户/授权标识 | `cps_api_vendor.auth_token` 或 `extra_config.jd_user_id` | 京东搜索、转链、订单常需要 |
+| apikey | `cps_api_vendor.app_key` | 普通接口鉴权参数（必填） |
+| API Base URL | `cps_api_vendor.api_base_url` | 推荐填 `https://v2.api.haodanku.com`（京东搜索代码会自动路由到 v3） |
+| 京东 unionId | `cps_api_vendor.auth_token` 或 `extra_config.union_id` | **京东转链必填**。京东联盟账号 ID（如 `2018437167`），必须与推广位 PID 前缀一致 |
+| 京东推广位 PID | `cps_api_vendor.default_adzone_id` 或 `cps_platform.default_adzone_id` | **京东转链必填**。京东联盟三段式 PID（格式：`unionId_siteId_adzoneId`，如 `2018437167_4100531328_3107726628`） |
+| 好单库授权账号 ID | `extra_config.jd_user_id` | **选填，常规搜索无需配置**。仅当已在好单库后台完成官方京东账号授权且需用自有账号搜索时填写；**切勿将 unionId 填入此字段** |
 | PDD PID | `cps_api_vendor.default_adzone_id` | 拼多多搜索、转链、订单建议配置 |
+
+#### 好单库京东配置特别说明（unionId 与 jd_user_id 区分）
+
+很多开发者容易混淆 `unionId` 和 `jd_user_id`，务必注意两者的用途与配置位置：
+
+1. **`unionId`（京东联盟用户ID，例如 `2018437167`）**：
+   - **配置位置**：填在 API 供应商的 **`auth_token`（授权 Token）** 输入框，或填在扩展配置 `extra_config` 中：`{"union_id": "2018437167"}`。两者二选一即可，系统优先读取 `auth_token`。
+   - **作用**：好单库京东转链接口（`/get_jditems_link`）必须传递 `union_id` 和对应三段式 `pid`。生成推广短链（`https://u.jd.com/...`）以及后续订单归因结算均依赖此 ID。
+2. **`jd_user_id`（好单库后台授权账号ID）**：
+   - **配置位置**：若需要，填在扩展配置 `extra_config` 中：`{"jd_user_id": "你的已授权账号ID"}`。
+   - **作用**：好单库针对部分接口（如私有池搜索）提供了账号授权机制。**常规商品搜索直接使用好单库公共池，无需传 `jd_user_id`**。
+   - **避坑提示**：**不要把京东联盟的 `unionId` 填在 `jd_user_id`**！若传递了未在好单库开放平台后台授权的账号 ID，好单库接口会直接拦截并返回 HTTP 500（`应京东联盟官方接口安全加固措施响应，该接口需授权京东账号后使用`），导致商品搜索返回 0 件。
 
 好单库必须按具体接口选择版本，不能按“搜索 v2、转链 v3”整体替换：淘宝超级搜索、淘宝转链、京东搜索和各平台订单接口使用官方标注的 v3；淘宝频道、拼多多搜索、唯品会搜索以及京东/拼多多/唯品会普通账号转链使用 v2。代码会按接口路径修正域名，数据库基础地址推荐保留 `https://v2.api.haodanku.com`。
 
@@ -128,6 +142,22 @@ CPS -> API 供应商配置
 | API Secret | 空 |
 | API Base URL | `https://v2.api.haodanku.com` |
 | 状态 | 启用 |
+
+好单库京东示例：
+
+| 字段 | 值 | 说明 |
+| --- | --- | --- |
+| 供应商编码 | `haodanku` | 保持为 haodanku |
+| 供应商名称 | `好单库-京东` | 自定义名称标识 |
+| 供应商类型 | `aggregator` | 聚合供应商 |
+| 所属平台 | `jd` | 京东平台 |
+| API Key | 你的好单库 apikey | 开放平台应用 apikey |
+| API Secret | 空 | 好单库不需要 |
+| API Base URL | `https://v2.api.haodanku.com` | 基础网关地址（代码中搜索会自动路由到 v3） |
+| 授权 Token (`auth_token`) | 京东联盟 `unionId`（如 `2018437167`） | **转链必填**。用于转链接口获取京东优惠券与二合一短链 |
+| 默认推广位 | 京东联盟三段式 PID（如 `2018437167_4100531328_3107726628`） | **转链必填**。前缀必须与 unionId 一致 |
+| 扩展配置 (`extra_config`) | 空（留空即可） | 留空即可，常规搜索走好单库公共池。仅在好单库后台授权了特定账号时可选填 `{"jd_user_id": "..."}` |
+| 状态 | 启用 | 必须启用 |
 
 聚推客示例：
 
@@ -406,8 +436,8 @@ VALUES
  '淘宝商品搜索、返利查询、转链、订单', 'local', 'local', @tenant_id),
 (990721010021, 'haodanku', '好单库-京东', 'aggregator', 'jd',
  'YOUR_HAODANKU_APIKEY', '', 'https://v2.api.haodanku.com',
- 'YOUR_JD_USER_ID', NULL, JSON_OBJECT('jd_user_id', 'YOUR_JD_USER_ID'), 90, 1,
- '京东商品搜索、转链、订单', 'local', 'local', @tenant_id),
+ 'YOUR_JD_UNION_ID', 'YOUR_JD_PID', NULL, 90, 1,
+ '京东商品搜索、转链、订单；auth_token 填京东联盟 unionId，默认推广位填 unionId_siteId_adzoneId；搜索默认走公共池无需配置 jd_user_id', 'local', 'local', @tenant_id),
 (990721010022, 'haodanku', '好单库-拼多多', 'aggregator', 'pdd',
  'YOUR_HAODANKU_APIKEY', '', 'https://v2.api.haodanku.com',
  NULL, 'YOUR_PDD_PID', NULL, 90, 1,
@@ -658,7 +688,7 @@ CPS -> 订单管理
 - 查询时间范围内没有订单。
 - 淘宝/JD/PDD 订单需要专属推广位、渠道 ID 或会员运营 ID 才能可靠归因。
 - 大淘客 JD 没有配置 `auth_token`。
-- 好单库 JD 没有配置 `auth_token` 或 `extra_config.jd_user_id`。
+- 好单库 JD 没有配置 `auth_token`（京东 unionId）或默认推广位 PID。
 - 拼多多没有配置 PID，转链时无法带上推广位。
 
 ## 11. 常见错误排查
@@ -669,7 +699,8 @@ CPS -> 订单管理
 | 未找到供应商客户端 | `vendorCode + platformCode` 是否匹配，例如聚推客必须是 `jutuike + union` |
 | 大淘客返回签名错误 | `app_key`、`app_secret` 是否正确，`api_base_url` 是否是 `https://openapi.dataoke.com/api` |
 | 好单库返回鉴权失败 | `app_key` 是否填了好单库 `apikey`，不是 `appkey/appsecret` |
-| 京东转链失败 | 大淘客看 `auth_token`，好单库看 `auth_token` 或 `extra_config.jd_user_id` |
+| 京东转链失败 | 大淘客看 `auth_token`；好单库看 `auth_token`（或 `extra_config.union_id`）及三段式 `default_adzone_id`（PID）是否已配置且 unionId 一致 |
+| 京东商品搜索报 500 或无返回 | 检查 `extra_config` 是否误配了未在好单库后台授权的 `jd_user_id`（切勿将 unionId 当作 jd_user_id 传入，默认留空即可走公共池） |
 | 拼多多转链失败 | `default_adzone_id` 是否填 PID，供应商侧是否开通多多进宝权限 |
 | 聚推客活动转链失败 | 是否传了正确 `act_id` 和 `sid`；在 AgenticCPS 中 `goodsId=act_id`、`channelId=sid` |
 | 活动同步为空 | 先把 `maxPages` 调小做测试，再检查供应商活动权限、关键词筛选和接口返回 |
