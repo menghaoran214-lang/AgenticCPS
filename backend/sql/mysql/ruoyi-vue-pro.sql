@@ -3588,4 +3588,73 @@ INSERT INTO `qiji_demo03_student` (`id`, `name`, `sex`, `birthday`, `description
 
 COMMIT;
 
+-- ----------------------------
+-- ----------------------------
+-- Table structure for system_schema_version
+-- ----------------------------
+DROP TABLE IF EXISTS `system_schema_version`;
+CREATE TABLE `system_schema_version` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `module` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'system' COMMENT '模块标识（system/ai/member/mall/pay/mp/jimureport/cps等）',
+  `version` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '结构版本号，如 v2.1.0',
+  `schema_update_time` datetime NOT NULL COMMENT '数据库结构版本更新时间（明确结构对应时间点）',
+  `applied_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '本环境执行应用时间',
+  `script_source` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '来源脚本文件',
+  `description` varchar(512) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '数据库结构变更目的与主要内容说明',
+  `status` varchar(16) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'SUCCESS' COMMENT '状态（SUCCESS/EXECUTING/FAILED）',
+  `tenant_id` bigint NOT NULL DEFAULT 0 COMMENT '租户编号（0为全局）',
+  `deleted` bit(1) NOT NULL DEFAULT b'0' COMMENT '是否删除',
+  `creator` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT 'system' COMMENT '创建者',
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `updater` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT 'system' COMMENT '更新者',
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`id`) USING BTREE,
+  INDEX `idx_module_schema_time`(`module` ASC, `schema_update_time` DESC) USING BTREE,
+  INDEX `idx_create_time`(`create_time` ASC) USING BTREE
+) ENGINE = InnoDB AUTO_INCREMENT = 1 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '全系统数据库结构版本与更新时间追踪表';
+
+-- ----------------------------
+-- Compatibility view for cps_schema_version
+-- ----------------------------
+CREATE OR REPLACE VIEW `cps_schema_version` AS
+SELECT * FROM `system_schema_version` WHERE `module` = 'cps';
+
+-- ----------------------------
+-- Records of system_schema_version (全系统各模块数据库结构基准与更新时间)
+-- ----------------------------
+BEGIN;
+INSERT INTO `system_schema_version` (`module`, `version`, `schema_update_time`, `script_source`, `description`, `status`, `tenant_id`, `deleted`, `creator`, `updater`)
+SELECT 'system', 'v2.0.0', '2026-08-04 16:11:00', 'ruoyi-vue-pro.sql', '系统管理与基础设施表基线结构（system_*/infra_*）', 'SUCCESS', 0, b'0', 'system', 'system'
+WHERE NOT EXISTS (SELECT 1 FROM `system_schema_version` WHERE `module` = 'system' AND `version` = 'v2.0.0');
+
+INSERT INTO `system_schema_version` (`module`, `version`, `schema_update_time`, `script_source`, `description`, `status`, `tenant_id`, `deleted`, `creator`, `updater`)
+SELECT 'member', 'v2.0.0', '2026-05-25 19:05:00', 'member-all.sql', '会员中心用户、积分、等级与签到全量表结构', 'SUCCESS', 0, b'0', 'system', 'system'
+WHERE NOT EXISTS (SELECT 1 FROM `system_schema_version` WHERE `module` = 'member' AND `version` = 'v2.0.0');
+
+INSERT INTO `system_schema_version` (`module`, `version`, `schema_update_time`, `script_source`, `description`, `status`, `tenant_id`, `deleted`, `creator`, `updater`)
+SELECT 'mall', 'v2.1.0', '2026-08-18 00:00:00', 'mall-update.sql', '商城中心商品、交易与返利 DIY 模板全量表结构', 'SUCCESS', 0, b'0', 'system', 'system'
+WHERE NOT EXISTS (SELECT 1 FROM `system_schema_version` WHERE `module` = 'mall' AND `version` = 'v2.1.0');
+
+INSERT INTO `system_schema_version` (`module`, `version`, `schema_update_time`, `script_source`, `description`, `status`, `tenant_id`, `deleted`, `creator`, `updater`)
+SELECT 'pay', 'v2.0.0', '2026-07-27 19:15:31', 'pay-all.sql', '支付中心应用、渠道与钱包全量表结构', 'SUCCESS', 0, b'0', 'system', 'system'
+WHERE NOT EXISTS (SELECT 1 FROM `system_schema_version` WHERE `module` = 'pay' AND `version` = 'v2.0.0');
+
+INSERT INTO `system_schema_version` (`module`, `version`, `schema_update_time`, `script_source`, `description`, `status`, `tenant_id`, `deleted`, `creator`, `updater`)
+SELECT 'mp', 'v2.0.0', '2025-12-07 11:11:27', 'mp-all.sql', '微信公众号多账号与消息全量表结构', 'SUCCESS', 0, b'0', 'system', 'system'
+WHERE NOT EXISTS (SELECT 1 FROM `system_schema_version` WHERE `module` = 'mp' AND `version` = 'v2.0.0');
+
+INSERT INTO `system_schema_version` (`module`, `version`, `schema_update_time`, `script_source`, `description`, `status`, `tenant_id`, `deleted`, `creator`, `updater`)
+SELECT 'jimureport', 'v2.0.0', '2025-04-25 14:02:42', 'jimureport-all.sql', '积木报表大屏与打印设计器全量表结构', 'SUCCESS', 0, b'0', 'system', 'system'
+WHERE NOT EXISTS (SELECT 1 FROM `system_schema_version` WHERE `module` = 'jimureport' AND `version` = 'v2.0.0');
+
+INSERT INTO `system_schema_version` (`module`, `version`, `schema_update_time`, `script_source`, `description`, `status`, `tenant_id`, `deleted`, `creator`, `updater`)
+SELECT 'ai', 'v2.2.0', '2026-10-12 11:48:30', 'ai-update.sql', 'AI对话助手、大模型密钥、知识库与工具全量表结构', 'SUCCESS', 0, b'0', 'system', 'system'
+WHERE NOT EXISTS (SELECT 1 FROM `system_schema_version` WHERE `module` = 'ai' AND `version` = 'v2.2.0');
+
+INSERT INTO `system_schema_version` (`module`, `version`, `schema_update_time`, `script_source`, `description`, `status`, `tenant_id`, `deleted`, `creator`, `updater`)
+SELECT 'cps', 'v2.1.0', '2026-10-16 14:50:00', 'cps-update.sql', 'CPS联盟返利、转链、活动与分销全量表结构', 'SUCCESS', 0, b'0', 'system', 'system'
+WHERE NOT EXISTS (SELECT 1 FROM `system_schema_version` WHERE `module` = 'cps' AND `version` = 'v2.1.0');
+COMMIT;
+
+
 SET FOREIGN_KEY_CHECKS = 1;

@@ -73,18 +73,59 @@
           >{{ state.parsing ? '解析中...' : '解析内容' }}</button
         >
         <view v-if="state.parseResult" class="parse-result">
-          <text :class="{ success: state.parseResult.supported }">{{
-            state.parseResult.supported
-              ? '解析成功，可领券购买'
-              : state.parseResult.failureReason || '暂不支持该内容'
-          }}</text>
-          <button
-            v-if="state.parseResult.supported"
-            class="ss-reset-button mini-button"
-            :disabled="state.linkLoading"
-            @tap="generateLink(state.parseResult, state.originalContent)"
-            >领券购买</button
-          >
+          <view v-if="state.parseResult.supported" class="parsed-goods-card">
+            <image
+              class="parsed-goods-image"
+              :src="imageUrl(state.parseResult)"
+              mode="aspectFill"
+              @error="state.parseResult.imageFailed = true"
+            />
+            <view class="parsed-goods-info">
+              <view class="parsed-title-row">
+                <text class="parsed-platform-tag">{{ platformText(state.parseResult.platformCode) }}</text>
+                <text class="parsed-goods-title ss-line-2">{{ state.parseResult.title || '已解析商品' }}</text>
+              </view>
+              <view v-if="state.parseResult.shopName" class="parsed-shop-name">{{ state.parseResult.shopName }}</view>
+              <view class="parsed-price-row">
+                <text class="parsed-actual-price">券后 ¥{{ formatMoney(state.parseResult.actualPrice) }}</text>
+                <text
+                  v-if="toNumber(state.parseResult.originalPrice) > toNumber(state.parseResult.actualPrice)"
+                  class="parsed-original-price"
+                  >¥{{ formatMoney(state.parseResult.originalPrice) }}</text
+                >
+              </view>
+              <view class="parsed-benefit-row">
+                <text v-if="toNumber(state.parseResult.couponPrice) > 0" class="parsed-coupon-badge"
+                  >券 ¥{{ formatMoney(state.parseResult.couponPrice) }}</text
+                >
+                <text v-else-if="state.parseResult.couponInfo" class="parsed-coupon-badge"
+                  >{{ state.parseResult.couponInfo }}</text
+                >
+                <text
+                  v-if="toNumber(state.parseResult.estimateRebateAmount) > 0"
+                  class="parsed-rebate-badge"
+                  >预估返 ¥{{ formatMoney(state.parseResult.estimateRebateAmount) }}</text
+                >
+              </view>
+              <view class="parsed-actions">
+                <button
+                  v-if="state.parseResult.goodsId || state.parseResult.goodsSign"
+                  class="ss-reset-button parsed-detail-btn"
+                  @tap="goDetail(state.parseResult)"
+                  >查看详情</button
+                >
+                <button
+                  class="ss-reset-button mini-button parsed-buy-btn"
+                  :disabled="state.linkLoading"
+                  @tap="generateLink(state.parseResult, state.originalContent)"
+                  >领券购买</button
+                >
+              </view>
+            </view>
+          </view>
+          <view v-else class="parse-fail-box">
+            <text class="parse-fail-text">{{ state.parseResult.failureReason || '暂不支持该内容' }}</text>
+          </view>
         </view>
       </view>
     </view>
@@ -191,6 +232,37 @@
     >
       <view class="action-panel">
         <view class="action-title">领券购买</view>
+        <view v-if="state.actionGoods" class="action-goods-preview">
+          <image
+            class="action-goods-image"
+            :src="imageUrl(state.actionGoods)"
+            mode="aspectFill"
+            @error="state.actionGoods.imageFailed = true"
+          />
+          <view class="action-goods-info">
+            <view class="action-goods-title ss-line-2">{{ state.actionGoods.title || '已选商品' }}</view>
+            <view class="action-goods-tags">
+              <text class="action-platform-tag">{{ platformText(state.actionGoods.platformCode) }}</text>
+              <text v-if="state.actionGoods.shopName" class="action-shop-name">{{ state.actionGoods.shopName }}</text>
+            </view>
+            <view class="action-goods-pricing">
+              <text class="action-actual-price">券后 ¥{{ formatMoney(state.actionGoods.actualPrice) }}</text>
+              <text
+                v-if="toNumber(state.actionGoods.originalPrice) > toNumber(state.actionGoods.actualPrice)"
+                class="action-origin-price"
+                >¥{{ formatMoney(state.actionGoods.originalPrice) }}</text
+              >
+              <text v-if="toNumber(state.actionGoods.couponPrice) > 0" class="action-coupon-badge"
+                >券 ¥{{ formatMoney(state.actionGoods.couponPrice) }}</text
+              >
+              <text
+                v-if="toNumber(state.actionGoods.estimateRebateAmount) > 0"
+                class="action-rebate-badge"
+                >预估返 ¥{{ formatMoney(state.actionGoods.estimateRebateAmount) }}</text
+              >
+            </view>
+          </view>
+        </view>
         <view class="action-tip">{{
           state.promotionAction?.type === 'tpwd'
             ? '复制口令后打开淘宝'
@@ -259,6 +331,7 @@
     linkLoading: false,
     loadStatus: '',
     errorMessage: '',
+    actionGoods: null,
     showActionPopup: false,
     promotionAction: null,
     actionExecuting: false,
@@ -310,7 +383,32 @@
         platformCode: state.platformCode || 'taobao',
         originalContent,
       });
-      if (code === 0) state.parseResult = data;
+      if (code === 0 && data) {
+        state.parseResult = data;
+        if (data.supported && (!data.actualPrice || !data.mainPic) && (data.goodsId || data.goodsSign)) {
+          try {
+            const detailRes = await CpsGoodsApi.getDetail({
+              platformCode: data.platformCode || state.platformCode || 'taobao',
+              goodsId: data.goodsId,
+              goodsSign: data.goodsSign,
+            });
+            if (detailRes?.code === 0 && detailRes.data) {
+              state.parseResult = {
+                ...detailRes.data,
+                ...state.parseResult,
+                actualPrice: state.parseResult.actualPrice || detailRes.data.actualPrice,
+                originalPrice: state.parseResult.originalPrice || detailRes.data.originalPrice,
+                couponPrice: state.parseResult.couponPrice || detailRes.data.couponPrice,
+                estimateRebateAmount:
+                  state.parseResult.estimateRebateAmount || detailRes.data.estimateRebateAmount,
+                mainPic: state.parseResult.mainPic || detailRes.data.mainPic,
+                title: state.parseResult.title || detailRes.data.title,
+                shopName: state.parseResult.shopName || detailRes.data.shopName,
+              };
+            }
+          } catch (_) {}
+        }
+      }
     } finally {
       state.parsing = false;
     }
@@ -440,6 +538,7 @@
         sheep.$helper.toast('暂未获取到可用购买链接');
         return;
       }
+      state.actionGoods = { ...item, ...data };
       state.promotionAction = action;
       state.actionError = false;
       state.showActionPopup = true;
@@ -600,16 +699,124 @@
     font-size: 24rpx;
   }
   .parse-result {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16rpx;
-    margin-top: 16rpx;
-    color: #fa3534;
-    font-size: 23rpx;
+    margin-top: 18rpx;
   }
-  .parse-result .success {
-    color: #3b8d5b;
+  .parsed-goods-card {
+    display: flex;
+    gap: 16rpx;
+    padding: 18rpx;
+    border-radius: 14rpx;
+    background: #fff;
+    box-shadow: 0 4rpx 14rpx rgba(0, 0, 0, 0.04);
+  }
+  .parsed-goods-image {
+    flex: 0 0 160rpx;
+    width: 160rpx;
+    height: 160rpx;
+    border-radius: 10rpx;
+    background: #f4f4f4;
+  }
+  .parsed-goods-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+  .parsed-title-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 8rpx;
+  }
+  .parsed-platform-tag {
+    flex: 0 0 auto;
+    margin-top: 4rpx;
+    padding: 2rpx 8rpx;
+    border-radius: 6rpx;
+    background: #e6f7ff;
+    color: #1890ff;
+    font-size: 19rpx;
+    font-weight: 600;
+  }
+  .parsed-goods-title {
+    font-size: 25rpx;
+    font-weight: 600;
+    line-height: 34rpx;
+    color: #222;
+  }
+  .parsed-shop-name {
+    margin-top: 4rpx;
+    font-size: 20rpx;
+    color: #999;
+  }
+  .parsed-price-row {
+    display: flex;
+    align-items: baseline;
+    gap: 10rpx;
+    margin-top: 8rpx;
+  }
+  .parsed-actual-price {
+    color: #fa3534;
+    font-size: 28rpx;
+    font-weight: 700;
+  }
+  .parsed-original-price {
+    color: #bbb;
+    font-size: 20rpx;
+    text-decoration: line-through;
+  }
+  .parsed-benefit-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8rpx;
+    margin-top: 6rpx;
+  }
+  .parsed-coupon-badge {
+    padding: 2rpx 8rpx;
+    border: 1rpx solid #fa3534;
+    border-radius: 6rpx;
+    color: #fa3534;
+    font-size: 18rpx;
+  }
+  .parsed-rebate-badge {
+    padding: 2rpx 8rpx;
+    border-radius: 6rpx;
+    background: #fff0e6;
+    color: #ff6600;
+    font-size: 18rpx;
+    font-weight: 600;
+  }
+  .parsed-actions {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 12rpx;
+    margin-top: 10rpx;
+  }
+  .parsed-detail-btn {
+    padding: 0 16rpx;
+    height: 48rpx;
+    line-height: 48rpx;
+    border: 1rpx solid #d9d9d9;
+    border-radius: 24rpx;
+    color: #666;
+    font-size: 21rpx;
+  }
+  .parsed-buy-btn {
+    padding: 0 20rpx;
+    height: 48rpx;
+    line-height: 48rpx;
+    border-radius: 24rpx;
+    color: #fff;
+    font-size: 22rpx;
+    font-weight: 600;
+  }
+  .parse-fail-box {
+    padding: 12rpx 16rpx;
+    border-radius: 8rpx;
+    background: #fff2f0;
+    color: #fa3534;
+    font-size: 22rpx;
   }
   .mini-button {
     flex: 0 0 106rpx;
@@ -739,6 +946,82 @@
     font-size: 34rpx;
     font-weight: 600;
     color: #222;
+  }
+  .action-goods-preview {
+    display: flex;
+    gap: 16rpx;
+    margin-top: 20rpx;
+    padding: 16rpx;
+    border-radius: 12rpx;
+    background: #f9f9f9;
+  }
+  .action-goods-image {
+    flex: 0 0 130rpx;
+    width: 130rpx;
+    height: 130rpx;
+    border-radius: 8rpx;
+    background: #eee;
+  }
+  .action-goods-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+  .action-goods-title {
+    font-size: 24rpx;
+    font-weight: 600;
+    line-height: 32rpx;
+    color: #333;
+  }
+  .action-goods-tags {
+    display: flex;
+    gap: 8rpx;
+    margin-top: 4rpx;
+  }
+  .action-platform-tag {
+    padding: 2rpx 6rpx;
+    border-radius: 4rpx;
+    background: #e6f7ff;
+    color: #1890ff;
+    font-size: 18rpx;
+  }
+  .action-shop-name {
+    font-size: 19rpx;
+    color: #999;
+  }
+  .action-goods-pricing {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 8rpx;
+    margin-top: 6rpx;
+  }
+  .action-actual-price {
+    color: #fa3534;
+    font-size: 27rpx;
+    font-weight: 700;
+  }
+  .action-origin-price {
+    color: #bbb;
+    font-size: 19rpx;
+    text-decoration: line-through;
+  }
+  .action-coupon-badge {
+    padding: 2rpx 6rpx;
+    border: 1rpx solid #fa3534;
+    border-radius: 4rpx;
+    color: #fa3534;
+    font-size: 17rpx;
+  }
+  .action-rebate-badge {
+    padding: 2rpx 6rpx;
+    border-radius: 4rpx;
+    background: #fff0e6;
+    color: #ff6600;
+    font-size: 17rpx;
+    font-weight: 600;
   }
   .action-tip {
     margin-top: 18rpx;

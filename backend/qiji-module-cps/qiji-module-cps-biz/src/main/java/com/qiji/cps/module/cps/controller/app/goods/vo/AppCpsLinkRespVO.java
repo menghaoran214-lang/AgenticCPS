@@ -47,4 +47,25 @@ public class AppCpsLinkRespVO {
     @Schema(description = "优惠券信息")
     private String couponInfo;
 
+    @Schema(description = "平台编码")
+    private String platformCode;
+
+    @Schema(description = "商品ID")
+    private String goodsId;
+
+    @Schema(description = "商品goodsSign")
+    private String goodsSign;
+
+    @Schema(description = "商品标题")
+    private String title;
+
+    @Schema(description = "商品主图")
+    private String mainPic;
+
+    @Schema(description = "商品原价（元）")
+    private BigDecimal originalPrice;
+
+    @Schema(description = "优惠券金额（元）")
+    private BigDecimal couponPrice;
+
 }

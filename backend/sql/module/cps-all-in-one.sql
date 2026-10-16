@@ -1,8 +1,8 @@
 -- ============================================================
 -- CPS联盟返利系统 - 完整数据库建表脚本（All-in-One）
--- Version: 2.0
--- Date: 2026-07-24
--- Description: 新库全量初始化脚本，整合 CPS 核心表、P0 返利兑换、活动中心、选品库、CPX 扩展表、菜单与权限。
+-- Version: 2.1.0
+-- Date: 2026-10-16 14:50:00
+-- Description: 新库全量初始化脚本，整合 CPS 核心表、P0 返利兑换、活动中心、选品库、CPX 扩展表、结构版本与更新时间追踪表、菜单与权限。
 -- Maintenance:
 --   1. 本文件只保存新库全量脚本。
 --   2. 现有数据库增量更新维护在 backend/sql/module/cps-update.sql。
@@ -15,49 +15,57 @@
 --   5.  cps_order_sync_failure           订单同步失败恢复队列表
 --   6.  cps_platform_bill_row            平台账单导入行表
 --   7.  cps_platform_bill_diff           平台账单对账差异表
---   8.  cps_rebate_config                返利配置表
---   9.  cps_rebate_record                返利记录表（含冻结关联字段）
---   10. cps_rebate_account               会员返利账户表
---   11. cps_withdraw                     提现申请表
---   12. cps_mcp_api_key                  MCP API Key管理表
---   13. cps_mcp_access_log               MCP访问日志表
---   14. cps_openapi_access_log           OpenAPI访问审计日志表
---   15. cps_transfer_record              CPS转链记录表
---   16. cps_freeze_config                冻结解冻配置表
---   17. cps_freeze_record                冻结解冻记录表
---   18. cps_rebate_asset_ledger          返利资产流水表
---   19. cps_rebate_asset_migration_check 返利资产迁移核对表
---   20. cps_rebate_debt                  返利债务表
---   21. cps_order_attribution_log        订单归因日志表
---   22. cps_order_sync_checkpoint        订单同步检查点表
---   23. cps_rebate_asset_policy          返利资产策略表
---   24. cps_rebate_token_exchange_order  CPS返利兑换Token订单表
---   25. cps_order_sync_log               订单同步日志表
---   26. cps_statistics                   统计数据表
---   27. cps_risk_rule                    风控规则表
---   28. cps_api_vendor                   CPS API供应商配置表
---   29. cps_didi_callback_event          滴滴订单/领券回调审计与幂等表
---   29. cps_platform_onboarding_draft    CPS平台接入草稿表
---   30. cps_rebate_activity              CPS返利活动表
---   31. cps_selection_theme              选品主题表
---   32. cps_selection_theme_item         选品主题商品快照表
---   33. cps_selection_ai_review          AI选品人工复核审计表
---   34. cps_goods_master                 CPS商品主档表
---   35. cps_goods_source_mapping         CPS商品来源映射表
---   36. cps_goods_price_snapshot         CPS商品价格快照表
---   37. cps_coupon_pool                  CPS券池表
---   38. cps_marketing_short_link         CPS营销短链表
---   39. cps_marketing_click_event        CPS营销点击事件表
---   40. cpx_task                         CPX任务表
---   41. cpx_offer                        CPX任务报价表
---   42. cpx_material                     CPX素材表
---   43. cpx_platform_profile             CPX平台档案表
---   44. cpx_article                      CPX资讯文章表
---   45. cpx_tracking_link                CPX追踪链接表
---   46. cpx_event                        CPX事件表
---   47. cpx_conversion                   CPX转化表
---   48. cpx_settlement_record            CPX结算记录表
---   49. cpx_lead_detail                  CPX线索详情表
+--   8.  cps_refund_report_import         退款报表导入记录表
+--   9.  cps_refund_report_detail         退款报表明细表
+--   10. cps_rebate_config                返利配置表
+--   11. cps_rebate_record                返利记录表（含冻结关联字段）
+--   12. cps_rebate_account               会员返利账户表
+--   13. cps_withdraw                     提现申请表
+--   14. cps_mcp_api_key                  MCP API Key管理表
+--   15. cps_mcp_access_log               MCP访问日志表
+--   16. cps_openapi_access_log           OpenAPI访问审计日志表
+--   17. cps_transfer_record              CPS转链记录表
+--   18. cps_freeze_config                冻结解冻配置表
+--   19. cps_freeze_record                冻结解冻记录表
+--   20. cps_rebate_asset_ledger          返利资产流水表
+--   21. cps_rebate_asset_migration_check 返利资产迁移核对表
+--   22. cps_rebate_debt                  返利债务表
+--   23. cps_order_attribution_log        订单归因日志表
+--   24. cps_order_sync_checkpoint        订单同步检查点表
+--   25. cps_order_sync_policy            订单同步策略表
+--   26. cps_order_sync_batch             订单同步批次表
+--   27. cps_order_sync_window            订单同步窗口表
+--   28. cps_order_sync_attempt           订单同步重试记录表
+--   29. cps_rebate_asset_policy          返利资产策略表
+--   30. cps_rebate_token_exchange_order  CPS返利兑换Token订单表
+--   31. cps_order_sync_log               订单同步日志表
+--   32. cps_statistics                   统计数据表
+--   33. cps_risk_rule                    风控规则表
+--   34. cps_api_vendor                   CPS API供应商配置表
+--   35. cps_didi_callback_event          滴滴订单/领券回调审计与幂等表
+--   36. cps_platform_onboarding_draft    CPS平台接入草稿表
+--   37. cps_rebate_activity              CPS返利活动表
+--   38. cps_selection_theme              选品主题表
+--   39. cps_selection_theme_item         选品主题商品快照表
+--   40. cps_selection_ai_review          AI选品人工复核审计表
+--   41. cps_member_goods_record          会员商品足迹与收藏记录表
+--   42. cps_goods_master                 CPS商品主档表
+--   43. cps_goods_source_mapping         CPS商品来源映射表
+--   44. cps_goods_price_snapshot         CPS商品价格快照表
+--   45. cps_coupon_pool                  CPS券池表
+--   46. cps_marketing_short_link         CPS营销短链表
+--   47. cps_marketing_click_event        CPS营销点击事件表
+--   48. cpx_task                         CPX任务表
+--   49. cpx_offer                        CPX任务报价表
+--   50. cpx_material                     CPX素材表
+--   51. cpx_platform_profile             CPX平台档案表
+--   52. cpx_article                      CPX资讯文章表
+--   53. cpx_tracking_link                CPX追踪链接表
+--   54. cpx_event                        CPX事件表
+--   55. cpx_conversion                   CPX转化表
+--   56. cpx_settlement_record            CPX结算记录表
+--   57. cpx_lead_detail                  CPX线索详情表
+--   58. cps_schema_version               数据库结构版本与更新时间追踪表
 -- ============================================================
 
 SET NAMES utf8mb4;
@@ -2178,6 +2186,12 @@ SELECT 'CPS返利冻结自动解冻', 1, 'cpsFreezeUnfreezeJob', '{"batchSize":5
        '0 0/10 * * * ?', 2, 60, 900, 'system', 'system', b'0'
 WHERE NOT EXISTS (
   SELECT 1 FROM `infra_job` WHERE `handler_name` = 'cpsFreezeUnfreezeJob' AND `deleted` = b'0'
+);
+
+INSERT INTO `system_schema_version` (`module`, `version`, `schema_update_time`, `script_source`, `description`, `status`, `tenant_id`, `deleted`, `creator`, `updater`)
+SELECT 'cps', 'v2.1.0', '2026-10-16 14:50:00', 'cps-all-in-one.sql', 'CPS联盟返利系统全量基线结构（含结构版本与更新时间追踪表）', 'SUCCESS', 0, b'0', 'system', 'system'
+WHERE NOT EXISTS (
+  SELECT 1 FROM `system_schema_version` WHERE `module` = 'cps' AND `version` = 'v2.1.0' AND `schema_update_time` = '2026-10-16 14:50:00'
 );
 
 SET FOREIGN_KEY_CHECKS = 1;

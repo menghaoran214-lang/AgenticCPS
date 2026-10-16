@@ -182,9 +182,8 @@ Current feature anchors:
 - CPS SQL lives in `backend/sql/module/cps-all-in-one.sql` and `backend/sql/module/cps-update.sql`.
 - Every update block in `cps-update.sql` must include modification date/time.
 - New incremental SQL update records must be appended to the end of the corresponding `*-update.sql` file; do not insert them in the middle. Use the actual write date and time in the modification comment.
-- Keep full baseline and incremental scripts synchronized.
-- Do not add CPS SQL to `backend/sql/mysql/ruoyi-vue-pro.sql`.
-- Do not create one-off/date-named CPS SQL scripts under `backend/sql/mysql`.
+- Database script convention for every module: maintain exactly `backend/sql/module/<module>-all.sql` for new-database initialization and `backend/sql/module/<module>-update.sql` for existing-database upgrades. Do not create date-named module SQL scripts. Every update block in `<module>-update.sql` must include its modification date/time, and every schema or seed-data change must be synchronized into the matching `<module>-all.sql`.
+- Database structure version and update time: globally tracked in `system_schema_version` (defined in `backend/sql/mysql/ruoyi-vue-pro.sql`, compatible via `cps_schema_version` view). Covers all modules: `system`, `member`, `mall`, `pay`, `mp`, `jimureport`, `ai`, `cps`. Whenever altering tables or adding migration blocks in `*-update.sql`, record the schema update time and version. Run `python script/update_schema_version.py --status` to view the full-module status matrix, or `python script/update_schema_version.py --desc "描述" [--module cps|ai|mall|member|jimureport|...] [--version vX.Y.Z]` to record updates across module scripts and synchronize `ruoyi-vue-pro.sql`.
 - Local development test records belong in `backend/sql/module/test_data.sql`; keep it local-only and excluded from Git.
 
 ## File Encoding Rules

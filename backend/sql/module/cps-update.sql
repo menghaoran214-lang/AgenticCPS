@@ -1872,3 +1872,15 @@ ALTER TABLE cps_mcp_access_log
  ADD COLUMN `skill_version` int NULL,
  ADD COLUMN `policy_result` varchar(32) NULL,
  ADD COLUMN `reject_reason` varchar(128) NULL;
+
+-- ============================================================
+-- 修改时间：2026-10-16 14:50:00
+-- 目的：创建全系统数据库结构版本与更新时间追踪表（system_schema_version）及 cps 兼容视图，记录当前结构版本与更新时间。
+-- ============================================================
+
+INSERT INTO `system_schema_version` (`module`, `version`, `schema_update_time`, `script_source`, `description`, `status`, `tenant_id`, `deleted`, `creator`, `updater`)
+SELECT 'cps', 'v2.1.0', '2026-10-16 14:50:00', 'cps-update.sql', '增加数据库结构版本与更新时间追踪表 system_schema_version，确立结构时间点与增量更新规范', 'SUCCESS', 0, b'0', 'system', 'system'
+WHERE NOT EXISTS (
+  SELECT 1 FROM `system_schema_version` WHERE `module` = 'cps' AND `version` = 'v2.1.0' AND `schema_update_time` = '2026-10-16 14:50:00'
+);
+

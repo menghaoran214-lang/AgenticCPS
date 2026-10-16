@@ -22,8 +22,11 @@ import org.springframework.util.StringUtils;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
 import java.util.Comparator;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import static com.qiji.cps.framework.common.pojo.CommonResult.success;
@@ -38,6 +41,8 @@ import static com.qiji.cps.framework.common.pojo.CommonResult.success;
 @RequestMapping("/cps/goods")
 @Validated
 public class AppCpsGoodsController {
+
+    private static final Pattern NUMBER_PATTERN = Pattern.compile("(\\d+(?:\\.\\d+)?)");
 
     @Resource
     private CpsGoodsService cpsGoodsService;
@@ -138,7 +143,10 @@ public class AppCpsGoodsController {
         CpsGoodsParseReqVO toolboxReqVO = new CpsGoodsParseReqVO();
         toolboxReqVO.setPlatformCode(reqVO.getPlatformCode());
         toolboxReqVO.setOriginalContent(reqVO.getOriginalContent());
-        return success(toAppParseRespVO(goodsToolboxService.parseContent(toolboxReqVO)));
+        CpsGoodsParseRespVO toolboxResp = goodsToolboxService.parseContent(toolboxReqVO);
+        AppCpsGoodsParseRespVO vo = toAppParseRespVO(toolboxResp);
+        enrichParseRespWithGoodsDetail(vo);
+        return success(vo);
     }
 
     @PostMapping("/link")
@@ -172,6 +180,9 @@ public class AppCpsGoodsController {
         transferRecordMapper.insert(record);
 
         AppCpsLinkRespVO vo = new AppCpsLinkRespVO();
+        vo.setPlatformCode(reqVO.getPlatformCode());
+        vo.setGoodsId(reqVO.getGoodsId());
+        vo.setGoodsSign(reqVO.getGoodsSign());
         vo.setShortUrl(result.getShortUrl());
         vo.setLongUrl(result.getLongUrl());
         vo.setTpwd(result.getTpwd());
@@ -185,10 +196,109 @@ public class AppCpsGoodsController {
         vo.setCommissionRate(result.getCommissionRate());
         vo.setEstimateRebateAmount(result.getCommissionAmount());
         vo.setCouponInfo(result.getCouponInfo());
+        enrichLinkRespWithGoodsDetail(vo, reqVO);
         return success(vo);
     }
 
     // ==================== 私有方法 ====================
+
+    private void enrichParseRespWithGoodsDetail(AppCpsGoodsParseRespVO vo) {
+        if (vo == null || !Boolean.TRUE.equals(vo.getSupported())) {
+            return;
+        }
+        String keyword = firstText(vo.getGoodsId(), vo.getGoodsSign(), vo.getTitle());
+        if (!StringUtils.hasText(keyword)) {
+            return;
+        }
+        try {
+            CpsGoodsSearchRequest request = new CpsGoodsSearchRequest();
+            request.setKeyword(keyword);
+            request.setPageNo(1);
+            request.setPageSize(1);
+            String platform = StringUtils.hasText(vo.getPlatformCode()) ? vo.getPlatformCode() : "taobao";
+            CpsGoodsSearchResult result = cpsGoodsService.searchGoods(platform, request);
+            if (result != null && result.getList() != null && !result.getList().isEmpty()) {
+                CpsGoodsItem item = result.getList().get(0);
+                if (!StringUtils.hasText(vo.getTitle())) {
+                    vo.setTitle(item.getTitle());
+                }
+                vo.setMainPic(item.getMainPic());
+                vo.setOriginalPrice(item.getOriginalPrice());
+                vo.setActualPrice(item.getActualPrice());
+                vo.setCouponPrice(item.getCouponPrice());
+                vo.setCouponConditions(item.getCouponConditions());
+                vo.setEstimateRebateAmount(item.getCommissionAmount());
+                vo.setCommissionRate(item.getCommissionRate());
+                vo.setMonthSales(item.getMonthSales());
+                vo.setShopName(item.getShopName());
+                if (item.getCouponPrice() != null && item.getCouponPrice().compareTo(BigDecimal.ZERO) > 0) {
+                    vo.setCouponInfo("券 ¥" + item.getCouponPrice().stripTrailingZeros().toPlainString());
+                }
+            }
+        } catch (Exception ignored) {
+            // 安全降级，不阻断基础解析
+        }
+    }
+
+    private void enrichLinkRespWithGoodsDetail(AppCpsLinkRespVO vo, AppCpsLinkReqVO reqVO) {
+        if (vo.getCouponPrice() == null && StringUtils.hasText(vo.getCouponInfo())) {
+            BigDecimal parsed = extractCouponAmount(vo.getCouponInfo());
+            if (parsed != null) {
+                vo.setCouponPrice(parsed);
+            }
+        }
+        String keyword = firstText(reqVO.getGoodsId(), reqVO.getGoodsSign());
+        if (!StringUtils.hasText(keyword)) {
+            return;
+        }
+        try {
+            CpsGoodsSearchRequest request = new CpsGoodsSearchRequest();
+            request.setKeyword(keyword);
+            request.setPageNo(1);
+            request.setPageSize(1);
+            CpsGoodsSearchResult result = cpsGoodsService.searchGoods(reqVO.getPlatformCode(), request);
+            if (result != null && result.getList() != null && !result.getList().isEmpty()) {
+                CpsGoodsItem item = result.getList().get(0);
+                if (!StringUtils.hasText(vo.getTitle())) {
+                    vo.setTitle(item.getTitle());
+                }
+                if (!StringUtils.hasText(vo.getMainPic())) {
+                    vo.setMainPic(item.getMainPic());
+                }
+                if (vo.getOriginalPrice() == null) {
+                    vo.setOriginalPrice(item.getOriginalPrice());
+                }
+                if (vo.getActualPrice() == null) {
+                    vo.setActualPrice(item.getActualPrice());
+                }
+                if (vo.getCouponPrice() == null) {
+                    vo.setCouponPrice(item.getCouponPrice());
+                }
+                if (vo.getEstimateRebateAmount() == null) {
+                    vo.setEstimateRebateAmount(item.getCommissionAmount());
+                }
+                if (vo.getCommissionRate() == null) {
+                    vo.setCommissionRate(item.getCommissionRate());
+                }
+            }
+        } catch (Exception ignored) {
+            // 安全降级
+        }
+    }
+
+    private BigDecimal extractCouponAmount(String text) {
+        if (!StringUtils.hasText(text)) {
+            return null;
+        }
+        Matcher matcher = NUMBER_PATTERN.matcher(text);
+        if (matcher.find()) {
+            try {
+                return new BigDecimal(matcher.group(1));
+            } catch (Exception ignored) {
+            }
+        }
+        return null;
+    }
 
     private CpsGoodsSearchRequest buildSearchRequest(AppCpsGoodsSearchReqVO reqVO) {
         CpsGoodsSearchRequest request = new CpsGoodsSearchRequest();

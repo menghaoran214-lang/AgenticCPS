@@ -16,11 +16,45 @@
       }}</button>
     </view>
     <view v-if="state.result" class="transfer-result">
-      <view class="result-title">{{ state.result.title || '已生成返利链接' }}</view>
-      <view class="result-meta"
-        >券后价 ¥{{ money(state.result.actualPrice) }} · 佣金
-        {{ state.result.commissionRate || '--' }}%</view
-      >
+      <view class="result-goods-box">
+        <image
+          class="result-goods-img"
+          :src="imageUrl(state.result)"
+          mode="aspectFill"
+          @error="state.result.imageFailed = true"
+        />
+        <view class="result-goods-info">
+          <view class="result-title ss-line-2">{{ state.result.title || '已生成返利链接' }}</view>
+          <view class="result-tags">
+            <text class="result-platform-tag">{{ platformText(state.result.platformCode) }}</text>
+            <text v-if="state.result.shopName" class="result-shop-name">{{ state.result.shopName }}</text>
+          </view>
+          <view class="result-price-row">
+            <text class="result-actual-price">券后 ¥{{ money(state.result.actualPrice) }}</text>
+            <text
+              v-if="toNumber(state.result.originalPrice) > toNumber(state.result.actualPrice)"
+              class="result-origin-price"
+              >¥{{ money(state.result.originalPrice) }}</text
+            >
+          </view>
+          <view class="result-benefit-row">
+            <text v-if="toNumber(state.result.couponPrice) > 0" class="result-coupon-tag"
+              >券 ¥{{ money(state.result.couponPrice) }}</text
+            >
+            <text v-else-if="state.result.couponInfo" class="result-coupon-tag"
+              >{{ state.result.couponInfo }}</text
+            >
+            <text
+              v-if="toNumber(state.result.estimateRebateAmount) > 0"
+              class="result-rebate-tag"
+              >预估返 ¥{{ money(state.result.estimateRebateAmount) }}</text
+            >
+            <text v-else-if="state.result.commissionRate" class="result-rebate-tag"
+              >佣金 {{ state.result.commissionRate }}%</text
+            >
+          </view>
+        </view>
+      </view>
       <button class="ss-reset-button result-button" @tap="copyResult">复制推广链接</button>
       <button class="ss-reset-button result-button result-copy-rebate" @tap="copyRebateCopy"
         >复制返利文案</button
@@ -34,7 +68,12 @@
   import sheep from '@/sheep';
   import { showAuthModal } from '@/sheep/hooks/useModal';
   import CpsGoodsApi from '@/sheep/api/cps/goods';
-  import { copyPromotionValue, formatMoney } from '@/sheep/helper/cps';
+  import {
+    copyPromotionValue,
+    formatMoney,
+    platformText,
+    toNumber,
+  } from '@/sheep/helper/cps';
 
   const props = defineProps({
     data: { type: Object, default: () => ({}) },
@@ -52,6 +91,9 @@
     borderRadius: `${Number(props.styles.borderRadius || 8)}px`,
   }));
   const money = (value) => formatMoney(value);
+  function imageUrl(item) {
+    return item?.imageFailed ? '/static/goods-empty.png' : item?.mainPic || '/static/goods-empty.png';
+  }
   async function transfer() {
     const originalContent = state.input.trim();
     if (!originalContent || state.loading) return;
@@ -80,7 +122,17 @@
         sheep.$helper.toast('生成推广链接失败，请重试');
         return;
       }
-      state.result = { ...linked.data, title: parsed.data.title };
+      state.result = {
+        ...parsed.data,
+        ...linked.data,
+        title: linked.data?.title || parsed.data?.title,
+        mainPic: linked.data?.mainPic || parsed.data?.mainPic,
+        actualPrice: linked.data?.actualPrice || parsed.data?.actualPrice,
+        originalPrice: linked.data?.originalPrice || parsed.data?.originalPrice,
+        couponPrice: linked.data?.couponPrice || parsed.data?.couponPrice,
+        estimateRebateAmount:
+          linked.data?.estimateRebateAmount || parsed.data?.estimateRebateAmount,
+      };
     } catch (error) {
       sheep.$helper.toast('转链失败，请稍后重试');
     } finally {
@@ -97,9 +149,14 @@
     const result = state.result;
     if (!result) return;
     const value = result.shortUrl || result.longUrl || result.mobileUrl || result.tpwd || '';
+    const hasOrigin = toNumber(result.originalPrice) > toNumber(result.actualPrice);
     const lines = [
       result.title || '精选商品',
-      `券后价 ¥${money(result.actualPrice)} · 佣金 ${result.commissionRate || '--'}%`,
+      `【券后价】¥${money(result.actualPrice)}` + (hasOrigin ? ` (原价¥${money(result.originalPrice)})` : ''),
+      toNumber(result.couponPrice) > 0 ? `【优惠券】¥${money(result.couponPrice)}` : '',
+      toNumber(result.estimateRebateAmount) > 0
+        ? `【预估返利】¥${money(result.estimateRebateAmount)}`
+        : (result.commissionRate ? `【佣金率】${result.commissionRate}%` : ''),
       value,
     ].filter(Boolean);
     await copyPromotionValue(lines.join('\n'));
@@ -161,15 +218,84 @@
     border-radius: 12rpx;
     background: #edfaf4;
   }
+  .result-goods-box {
+    display: flex;
+    gap: 16rpx;
+    margin-bottom: 12rpx;
+  }
+  .result-goods-img {
+    flex: 0 0 136rpx;
+    width: 136rpx;
+    height: 136rpx;
+    border-radius: 10rpx;
+    background: #e8f5ee;
+  }
+  .result-goods-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
   .result-title {
-    color: #333;
+    color: #202226;
     font-size: 25rpx;
     font-weight: 600;
+    line-height: 33rpx;
   }
-  .result-meta {
-    margin-top: 8rpx;
-    color: #54826b;
-    font-size: 22rpx;
+  .result-tags {
+    display: flex;
+    gap: 8rpx;
+    margin-top: 4rpx;
+  }
+  .result-platform-tag {
+    padding: 2rpx 8rpx;
+    border-radius: 6rpx;
+    background: #e6f7ff;
+    color: #1890ff;
+    font-size: 19rpx;
+    font-weight: 600;
+  }
+  .result-shop-name {
+    font-size: 20rpx;
+    color: #999;
+  }
+  .result-price-row {
+    display: flex;
+    align-items: baseline;
+    gap: 10rpx;
+    margin-top: 6rpx;
+  }
+  .result-actual-price {
+    color: #fa3534;
+    font-size: 27rpx;
+    font-weight: 700;
+  }
+  .result-origin-price {
+    color: #bbb;
+    font-size: 19rpx;
+    text-decoration: line-through;
+  }
+  .result-benefit-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8rpx;
+    margin-top: 6rpx;
+  }
+  .result-coupon-tag {
+    padding: 2rpx 8rpx;
+    border: 1rpx solid #fa3534;
+    border-radius: 6rpx;
+    color: #fa3534;
+    font-size: 18rpx;
+  }
+  .result-rebate-tag {
+    padding: 2rpx 8rpx;
+    border-radius: 6rpx;
+    background: #fff0e6;
+    color: #ff6600;
+    font-size: 18rpx;
+    font-weight: 600;
   }
   .result-button {
     height: 58rpx;

@@ -1,10 +1,10 @@
 package com.qiji.cps.module.cps.controller.app.goods;
 
-import com.qiji.cps.framework.security.core.util.SecurityFrameworkUtils;
 import com.qiji.cps.module.cps.client.dto.CpsGoodsItem;
 import com.qiji.cps.module.cps.client.dto.CpsGoodsSearchResult;
 import com.qiji.cps.module.cps.client.dto.CpsPromotionLinkResult;
 import com.qiji.cps.module.cps.controller.admin.goods.vo.CpsGoodsParseRespVO;
+import com.qiji.cps.module.cps.controller.app.CpsAppMemberContext;
 import com.qiji.cps.module.cps.controller.app.goods.vo.AppCpsGoodsCompareReqVO;
 import com.qiji.cps.module.cps.controller.app.goods.vo.AppCpsGoodsDetailReqVO;
 import com.qiji.cps.module.cps.controller.app.goods.vo.AppCpsGoodsParseReqVO;
@@ -27,6 +27,7 @@ import java.math.BigDecimal;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mockStatic;
@@ -168,6 +169,50 @@ class AppCpsGoodsControllerTest {
     }
 
     @Test
+    @DisplayName("parseContent enriches response with goods price, coupon and rebate details")
+    void parseContent_enrichesResponseWithGoodsPriceCouponAndRebateDetails() {
+        AppCpsGoodsParseReqVO reqVO = new AppCpsGoodsParseReqVO();
+        reqVO.setPlatformCode("taobao");
+        reqVO.setOriginalContent("https://item.taobao.com/item.htm?id=ITEM-ENRICH");
+        when(goodsToolboxService.parseContent(any())).thenReturn(CpsGoodsParseRespVO.builder()
+                .platformCode("taobao")
+                .supported(true)
+                .goodsId("ITEM-ENRICH")
+                .title("原始标题")
+                .itemLink("https://item.taobao.com/item.htm?id=ITEM-ENRICH")
+                .parseSource("local")
+                .build());
+        when(cpsGoodsService.searchGoods(any(), any())).thenReturn(CpsGoodsSearchResult.builder()
+                .list(List.of(CpsGoodsItem.builder()
+                        .goodsId("ITEM-ENRICH")
+                        .platformCode("taobao")
+                        .title("品质咖啡豆")
+                        .mainPic("https://img.alicdn.com/coffee.jpg")
+                        .originalPrice(new BigDecimal("99.00"))
+                        .actualPrice(new BigDecimal("79.00"))
+                        .couponPrice(new BigDecimal("20.00"))
+                        .commissionAmount(new BigDecimal("11.85"))
+                        .commissionRate(new BigDecimal("15.00"))
+                        .shopName("旗舰店")
+                        .monthSales(5000L)
+                        .build()))
+                .total(1L)
+                .build());
+
+        var response = controller.parseContent(reqVO);
+
+        assertNotNull(response.getData());
+        assertEquals(true, response.getData().getSupported());
+        assertEquals("https://img.alicdn.com/coffee.jpg", response.getData().getMainPic());
+        assertEquals(new BigDecimal("99.00"), response.getData().getOriginalPrice());
+        assertEquals(new BigDecimal("79.00"), response.getData().getActualPrice());
+        assertEquals(new BigDecimal("20.00"), response.getData().getCouponPrice());
+        assertEquals(new BigDecimal("11.85"), response.getData().getEstimateRebateAmount());
+        assertEquals("旗舰店", response.getData().getShopName());
+        assertEquals(5000L, response.getData().getMonthSales());
+    }
+
+    @Test
     @DisplayName("generateLink inserts transfer record for order attribution")
     void generateLink_insertsTransferRecordForOrderAttribution() {
         AppCpsLinkReqVO reqVO = new AppCpsLinkReqVO();
@@ -182,14 +227,20 @@ class AppCpsGoodsControllerTest {
                         .shortUrl("https://s.click/1")
                         .longUrl("https://item.taobao.com/item.htm?id=ITEM-1")
                         .tpwd("abc")
+                        .actualPrice(new BigDecimal("50.00"))
+                        .commissionAmount(new BigDecimal("5.00"))
+                        .couponInfo("减10元")
                         .build());
 
-        try (MockedStatic<SecurityFrameworkUtils> securityMock = mockStatic(SecurityFrameworkUtils.class)) {
-            securityMock.when(SecurityFrameworkUtils::getLoginUserId).thenReturn(1001L);
+        try (MockedStatic<CpsAppMemberContext> memberMock = mockStatic(CpsAppMemberContext.class)) {
+            memberMock.when(CpsAppMemberContext::requireMemberId).thenReturn(1001L);
 
             var response = controller.generateLink(reqVO);
 
             assertEquals("https://s.click/1", response.getData().getShortUrl());
+            assertEquals(new BigDecimal("50.00"), response.getData().getActualPrice());
+            assertEquals(new BigDecimal("5.00"), response.getData().getEstimateRebateAmount());
+            assertEquals(new BigDecimal("10"), response.getData().getCouponPrice());
         }
 
         ArgumentCaptor<CpsTransferRecordDO> captor = ArgumentCaptor.forClass(CpsTransferRecordDO.class);
@@ -221,8 +272,8 @@ class AppCpsGoodsControllerTest {
                         .shortUrl("https://s.click/1")
                         .build());
 
-        try (MockedStatic<SecurityFrameworkUtils> securityMock = mockStatic(SecurityFrameworkUtils.class)) {
-            securityMock.when(SecurityFrameworkUtils::getLoginUserId).thenReturn(1001L);
+        try (MockedStatic<CpsAppMemberContext> memberMock = mockStatic(CpsAppMemberContext.class)) {
+            memberMock.when(CpsAppMemberContext::requireMemberId).thenReturn(1001L);
 
             var response = controller.generateLink(reqVO);
 
@@ -249,8 +300,8 @@ class AppCpsGoodsControllerTest {
                 "taobao", "ITEM-1", null, 1001L, "mm_111_222_333", null, null))
                 .thenReturn(null);
 
-        try (MockedStatic<SecurityFrameworkUtils> securityMock = mockStatic(SecurityFrameworkUtils.class)) {
-            securityMock.when(SecurityFrameworkUtils::getLoginUserId).thenReturn(1001L);
+        try (MockedStatic<CpsAppMemberContext> memberMock = mockStatic(CpsAppMemberContext.class)) {
+            memberMock.when(CpsAppMemberContext::requireMemberId).thenReturn(1001L);
 
             var response = controller.generateLink(reqVO);
 
