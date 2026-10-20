@@ -9,6 +9,32 @@
       </div>
     </el-card>
 
+    <!-- 商业合作与广告赞助动态展位 -->
+    <el-card shadow="never" class="ad-card">
+      <template #header>
+        <div class="ad-card-header">
+          <div class="ad-header-left">
+            <span class="ad-badge-live"><span class="live-dot"></span>HOT</span>
+            <span class="ad-header-title">商业合作与广告展位</span>
+            <span class="ad-header-desc">支持资源互换 · 广告位合作 · 黄金付费展位</span>
+          </div>
+          <div class="ad-header-right">
+            <el-button type="primary" size="small" plain @click="handleAdClick(adSlots[0])">
+              <Icon icon="ep:service" class="mr-1" /> 洽谈合作
+            </el-button>
+          </div>
+        </div>
+      </template>
+
+      <el-row :gutter="12" class="ad-row">
+        <el-col v-for="ad in adSlots" :key="ad.id" :xl="8" :lg="8" :md="12" :sm="24" :xs="24" class="ad-col">
+          <div class="ad-item-box" :title="ad.title" @click="handleAdClick(ad)">
+            <img :src="ad.image" :alt="ad.title" class="ad-dynamic-img" />
+          </div>
+        </el-col>
+      </el-row>
+    </el-card>
+
     <el-card shadow="never" class="range-card">
       <div class="range-toolbar">
         <span class="range-title">数据统计</span>
@@ -76,6 +102,27 @@
         <el-card shadow="never" class="panel-card shortcut-card"><template #header><div class="panel-header"><span class="panel-title">常用功能</span></div></template><div class="shortcut-grid"><div v-for="item in shortcuts" :key="item.name" class="shortcut-item" @click="router.push(item.url)"><span class="shortcut-icon" :style="{ color: item.color, background: `${item.color}15` }"><Icon :icon="item.icon" /></span><span>{{ item.name }}</span></div></div></el-card>
       </el-col>
     </el-row>
+
+    <!-- 广告合作咨询弹窗 -->
+    <el-dialog v-model="adModalVisible" title="商业合作与广告赞助咨询" width="460px" append-to-body center>
+      <div class="ad-dialog-content">
+        <div v-if="selectedAd" class="ad-dialog-target">
+          <el-tag size="small" :type="selectedAd.badgeType" class="mr-2">{{ selectedAd.tag }}</el-tag>
+          <span class="ad-dialog-title">{{ selectedAd.title }}</span>
+        </div>
+        <p class="ad-dialog-intro">
+          感谢您对 AgenticCPS 的关注！本项目面向一人公司、淘客 CPS 运营与 AI Agent 创业团队，具有高粘性的精准受众群体。欢迎优质服务商、工具平台、云厂商与技术博主洽谈合作。
+        </p>
+        <div class="ad-dialog-qr-wrap">
+          <img :src="contactWechat" alt="微信联系方式" class="ad-dialog-qr" />
+          <div class="ad-dialog-tip">扫码添加群主微信沟通合作</div>
+          <div class="ad-dialog-note">添加时请备注：<el-tag size="small" type="danger">广告合作</el-tag> 或 <el-tag size="small" type="success">资源互换</el-tag></div>
+        </div>
+      </div>
+      <template #footer>
+        <el-button type="primary" @click="adModalVisible = false">我知道了</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -87,10 +134,54 @@ import { useUserStore } from '@/store/modules/user'
 import { Echart } from '@/components/Echart'
 import { useRouter } from 'vue-router'
 import { getTenantId, getVisitTenantId } from '@/utils/auth'
+import adSlotPaid from '@/assets/imgs/ads/ad-slot-paid.gif'
+import adSlotExchange from '@/assets/imgs/ads/ad-slot-exchange.gif'
+import adSlotCoop from '@/assets/imgs/ads/ad-slot-coop.gif'
+import contactWechat from '@/assets/imgs/ads/contact-wechat.png'
 
 defineOptions({ name: 'Index' })
 const { t } = useI18n(); const router = useRouter(); const userStore = useUserStore(); const avatar = userStore.getUser.avatar; const username = userStore.getUser.nickname
 const updateTime = ref(dayjs().format('MM月DD日 HH:mm')); const pendingCount = ref(3)
+
+const adModalVisible = ref(false)
+const selectedAd = ref<{ id: string; tag: string; badgeType: string; title: string; desc: string; statusText: string; image: string; cta: string } | null>(null)
+const adSlots = [
+  {
+    id: 'paid',
+    tag: '付费广告位',
+    badgeType: 'warning',
+    title: '🥇 黄金展位 · 虚位以待',
+    desc: '全站首屏黄金展位，适合云厂商、大模型 API、出海工具与电商 SaaS 等高权重曝光',
+    statusText: '招募中 · 支持按月/季',
+    image: adSlotPaid,
+    cta: '立即洽谈'
+  },
+  {
+    id: 'exchange',
+    tag: '资源互换',
+    badgeType: 'success',
+    title: '🤝 开源生态 · 流量互推',
+    desc: '欢迎优质开源项目、AI 开发者社区与技术博客互换友情链接与生态互荐，流量共赢',
+    statusText: '开放中 · 免费互荐',
+    image: adSlotExchange,
+    cta: '申请互换'
+  },
+  {
+    id: 'coop',
+    tag: '广告位合作',
+    badgeType: 'primary',
+    title: '💼 商业合作 · 解决方案',
+    desc: 'CPS 联盟平台、选品平台、供应链货源与电商服务商深度定制与联合推广',
+    statusText: '洽谈中 · 深度定制',
+    image: adSlotCoop,
+    cta: '联系合作'
+  }
+]
+
+function handleAdClick(ad: any) {
+  selectedAd.value = ad
+  adModalVisible.value = true
+}
 const rangeOptions = [{ key: 'day', label: '当天' }, { key: 'week', label: '本周' }, { key: '30d', label: '近30天' }] as const
 const selectedRange = ref<'day' | 'week' | '30d'>('day')
 const selectedRangeLabel = computed(() => rangeOptions.find((item) => item.key === selectedRange.value)?.label || '当天')
@@ -199,4 +290,142 @@ onMounted(async () => { await Promise.all([loadDashboard(), loadTrend(), loadPla
 .mobile-preview-error { color: #dc2626; }
 .is-loading { animation: mobile-preview-spin 1s linear infinite; }
 @keyframes mobile-preview-spin { to { transform: rotate(360deg); } }
+
+/* 商业合作与广告展位样式 */
+.ad-card {
+  margin-top: 12px;
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 10px;
+  background: #fff;
+}
+.ad-card :deep(.el-card__header) {
+  padding: 10px 16px;
+  border-bottom: 1px solid #f1f5f9;
+}
+.ad-card :deep(.el-card__body) {
+  padding: 12px 16px;
+}
+.ad-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.ad-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.ad-badge-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: 10px;
+  background: #fef2f2;
+  color: #ef4444;
+  font-size: 11px;
+  font-weight: 700;
+  border: 1px solid #fee2e2;
+}
+.live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ef4444;
+  animation: live-pulse 1.4s infinite;
+}
+@keyframes live-pulse {
+  0% { transform: scale(0.9); opacity: 0.8; }
+  50% { transform: scale(1.3); opacity: 1; }
+  100% { transform: scale(0.9); opacity: 0.8; }
+}
+.ad-header-title {
+  color: #1e293b;
+  font-size: 15px;
+  font-weight: 600;
+}
+.ad-header-desc {
+  color: #64748b;
+  font-size: 12px;
+}
+.ad-row {
+  margin-right: 0 !important;
+  margin-left: 0 !important;
+}
+.ad-col {
+  margin-bottom: 8px;
+}
+@media (min-width: 992px) {
+  .ad-col {
+    margin-bottom: 0;
+  }
+}
+.ad-item-box {
+  border-radius: 10px;
+  overflow: hidden;
+  background: #18181b;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+}
+.ad-item-box:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.16);
+}
+.ad-dynamic-img {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 760 / 170;
+  object-fit: cover;
+  display: block;
+}
+.ad-dialog-content {
+  text-align: center;
+  padding: 6px 12px;
+}
+.ad-dialog-target {
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.ad-dialog-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1e293b;
+}
+.ad-dialog-intro {
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.6;
+  margin-bottom: 16px;
+  text-align: left;
+}
+.ad-dialog-qr-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 16px;
+  background: #f8fafc;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+}
+.ad-dialog-qr {
+  width: 170px;
+  height: 170px;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+.ad-dialog-tip {
+  margin-top: 10px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #1e293b;
+}
+.ad-dialog-note {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #64748b;
+}
 </style>
