@@ -26,12 +26,12 @@
 
     // 检测 H5 登录回调
     let returnUrl = uni.getStorageSync('returnUrl');
-    if (returnUrl) {
-      uni.removeStorage({key:'returnUrl'});
+    uni.removeStorage({ key: 'returnUrl' });
+    if (event === 'bind' && returnUrl) {
       location.replace(returnUrl);
     } else {
       uni.switchTab({
-        url: '/',
+        url: '/pages/index/index',
       });
     }
     // #endif

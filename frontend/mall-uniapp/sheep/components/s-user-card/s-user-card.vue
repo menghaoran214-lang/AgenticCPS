@@ -8,12 +8,12 @@
               isLogin && userInfo.avatar
                 ? sheep.$url.cdn(userInfo.avatar)
                 : sheep.$url.static('/static/img/shop/default_avatar.png')"
-                 mode="aspectFill" @tap="sheep.$router.go('/pages/user/info')">
+                 mode="aspectFill" @tap="onUserCardClick">
           </image>
         </view>
         <view>
           <view class="nickname-box ss-flex ss-col-center">
-            <view class="nick-name ss-m-r-20">{{ isLogin ? userInfo?.nickname || nickname : nickname }}</view>
+            <view class="nick-name ss-m-r-20" @tap="onUserCardClick">{{ isLogin ? userInfo?.nickname || nickname : nickname }}</view>
           </view>
         </view>
       </view>
@@ -116,6 +116,15 @@
   // 绑定手机号
   function onBind() {
     showAuthModal('changeMobile');
+  }
+
+  // 用户卡片点击：未登录唤起授权弹窗，已登录进入用户信息页
+  function onUserCardClick() {
+    if (isLogin.value) {
+      sheep.$router.go('/pages/user/info');
+    } else {
+      showAuthModal();
+    }
   }
 </script>
 

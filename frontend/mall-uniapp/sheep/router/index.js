@@ -39,11 +39,15 @@ function guardRoute(value, { remember = true } = {}) {
 }
 
 function restorePendingAuthRoute() {
-  if (!pendingAuthRoute || !$store('user').isLogin) return;
-  const target = pendingAuthRoute;
+  if (!$store('user').isLogin) return;
   pendingAuthRoute = '';
   setTimeout(() => {
-    uni.reLaunch({ url: target });
+    uni.switchTab({
+      url: '/pages/index/index',
+      fail: () => {
+        uni.reLaunch({ url: '/pages/index/index' });
+      },
+    });
   }, 0);
 }
 
