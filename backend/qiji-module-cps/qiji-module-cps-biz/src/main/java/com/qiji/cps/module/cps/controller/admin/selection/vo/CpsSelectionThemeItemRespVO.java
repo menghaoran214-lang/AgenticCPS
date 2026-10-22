@@ -39,5 +39,7 @@ public class CpsSelectionThemeItemRespVO {
     private String itemLink;
     private LocalDateTime snapshotTime;
     private Integer sort;
+    private Integer priceTrackStatus;
+    private LocalDateTime priceTrackTime;
     private LocalDateTime createTime;
 }

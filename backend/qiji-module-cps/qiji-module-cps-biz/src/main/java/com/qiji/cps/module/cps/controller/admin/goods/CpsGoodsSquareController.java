@@ -8,6 +8,8 @@ import com.qiji.cps.module.cps.controller.admin.goods.vo.CpsGoodsSquareMetaRespV
 import com.qiji.cps.module.cps.controller.admin.goods.vo.CpsGoodsSquareSearchReqVO;
 import com.qiji.cps.module.cps.controller.admin.goods.vo.CpsGoodsSquareSearchRespVO;
 import com.qiji.cps.module.cps.service.goods.CpsGoodsSquareService;
+import com.qiji.cps.module.cps.service.selection.CpsSelectionThemeService;
+import com.qiji.cps.module.cps.controller.admin.selection.vo.CpsGoodsPriceTrendRespVO;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.annotation.Resource;
@@ -33,6 +35,9 @@ public class CpsGoodsSquareController {
 
     @Resource
     private CpsGoodsSquareService goodsSquareService;
+
+    @Resource
+    private CpsSelectionThemeService selectionThemeService;
 
     @GetMapping("/meta")
     @Operation(summary = "获取返利商品广场选品元数据")
@@ -104,6 +109,17 @@ public class CpsGoodsSquareController {
     @PreAuthorize("@ss.hasPermission('cps:goods-square:link')")
     public CommonResult<CpsGoodsSquareLinkRespVO> generateLink(@Valid @RequestBody CpsGoodsSquareLinkReqVO reqVO) {
         return success(goodsSquareService.generateLink(reqVO));
+    }
+
+
+    @GetMapping("/price-trend")
+    @Operation(summary = "获取商品价格趋势")
+    @PreAuthorize("@ss.hasPermission('cps:goods-square:query')")
+    public CommonResult<CpsGoodsPriceTrendRespVO> getPriceTrend(
+            @RequestParam(value = "selectionItemId", required = false) Long selectionItemId,
+            @RequestParam(value = "platformCode", required = false) String platformCode,
+            @RequestParam(value = "goodsId", required = false) String goodsId) {
+        return success(selectionThemeService.getGoodsPriceTrend(selectionItemId, platformCode, goodsId));
     }
 
 }

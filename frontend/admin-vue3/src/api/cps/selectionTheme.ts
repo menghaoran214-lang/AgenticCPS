@@ -114,7 +114,54 @@ export interface CpsSelectionThemeItemVO {
   itemLink?: string
   snapshotTime?: string
   sort?: number
+  priceTrackStatus?: number
+  priceTrackTime?: string
+  _trackLoading?: boolean
   createTime?: string
+}
+
+export interface CpsGoodsPricePointVO {
+  id: number
+  snapshotTime: string
+  actualPrice: number
+  originalPrice?: number
+  couponPrice?: number
+  commissionRate?: number
+  commissionAmount?: number
+  monthSales?: number
+  shopName?: string
+  activityTag?: string
+}
+
+export interface CpsGoodsPriceTrendVO {
+  trackStatus: number
+  selectionItemId?: number
+  goodsId: string
+  platformCode: string
+  vendorCode?: string
+  title?: string
+  currentPrice?: number
+  originalPrice?: number
+  couponPrice?: number
+  minPrice?: number
+  maxPrice?: number
+  avgPrice?: number
+  priceChange?: number
+  lastTrackTime?: string
+  historyList: CpsGoodsPricePointVO[]
+}
+
+export interface CpsSelectionThemeItemPriceTrackReqVO {
+  id?: number
+  platformCode?: string
+  goodsId?: string
+  vendorCode?: string
+  title?: string
+  mainPic?: string
+  actualPrice?: number
+  originalPrice?: number
+  couponPrice?: number
+  priceTrackStatus: number
 }
 
 export interface CpsSelectionThemeImportItemVO {
@@ -378,5 +425,17 @@ export const CpsSelectionThemeApi = {
     request.get<CpsSelectionThemeTemplateVO[]>({ url: '/cps/selection-theme/templates' }),
 
   createFromTemplate: (data: { templateCode: string; themeCode?: string }) =>
-    request.post<number>({ url: '/cps/selection-theme/templates/create', data })
+    request.post<number>({ url: '/cps/selection-theme/templates/create', data }),
+
+  updateItemPriceTrackStatus: (data: CpsSelectionThemeItemPriceTrackReqVO) =>
+    request.put<boolean>({ url: '/cps/selection-theme/items/price-track-status', data }),
+
+  batchUpdateItemPriceTrackStatus: (data: { ids: number[]; priceTrackStatus: number }) =>
+    request.put<boolean>({ url: '/cps/selection-theme/items/price-track-status/batch', data }),
+
+  pullItemPrice: (id: number) =>
+    request.post<CpsGoodsPricePointVO>({ url: '/cps/selection-theme/items/pull-price', params: { id } }),
+
+  getPriceTrend: (params: { selectionItemId?: number; platformCode?: string; goodsId?: string }) =>
+    request.get<CpsGoodsPriceTrendVO>({ url: '/cps/selection-theme/items/price-trend', params })
 }

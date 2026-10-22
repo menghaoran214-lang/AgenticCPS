@@ -1616,7 +1616,6 @@ WHERE `vendor_code` = 'haodanku'
   AND `deleted` = b'0';
 
 SET FOREIGN_KEY_CHECKS = 1;
-
 -- ============================================================
 -- Modified: 2026-08-12 18:35:00
 -- Purpose: register the hourly Jutuike order synchronization job.
@@ -1884,3 +1883,43 @@ WHERE NOT EXISTS (
   SELECT 1 FROM `system_schema_version` WHERE `module` = 'cps' AND `version` = 'v2.1.0' AND `schema_update_time` = '2026-10-16 14:50:00'
 );
 
+
+
+-- ============================================================
+-- 修改时间：2026-10-22 10:48:46
+-- 目的：选品库商品支持开启价格趋势跟踪功能，支持开关、定时任务定期拉取与商品详情价格趋势查看
+-- ============================================================
+
+-- 1. cps_selection_theme_item 增加价格趋势跟踪开关与最后跟踪时间
+ALTER TABLE `cps_selection_theme_item`
+  ADD COLUMN `price_track_status` tinyint NOT NULL DEFAULT 0 COMMENT '价格趋势跟踪：0关闭 1开启',
+  ADD COLUMN `price_track_time` datetime NULL DEFAULT NULL COMMENT '最后价格跟踪抓取时间';
+
+ALTER TABLE `cps_selection_theme_item`
+  ADD INDEX `idx_cps_selection_theme_item_price_track` (`tenant_id`, `deleted`, `price_track_status`);
+
+-- 2. cps_goods_price_snapshot 增加选品主题商品ID关联，并调整关联字段允许默认值
+ALTER TABLE `cps_goods_price_snapshot`
+  ADD COLUMN `selection_item_id` bigint NULL DEFAULT NULL COMMENT '选品主题商品ID' AFTER `id`,
+  MODIFY COLUMN `master_id` bigint NOT NULL DEFAULT 0 COMMENT '商品主档ID',
+  MODIFY COLUMN `source_mapping_id` bigint NOT NULL DEFAULT 0 COMMENT '商品来源映射ID';
+
+ALTER TABLE `cps_goods_price_snapshot`
+  ADD INDEX `idx_cps_goods_price_item` (`tenant_id`, `deleted`, `selection_item_id`, `snapshot_time`),
+  ADD INDEX `idx_cps_goods_price_external` (`tenant_id`, `deleted`, `platform_code`, `external_goods_id`, `snapshot_time`);
+
+-- 3. infra_job 增加定时拉取商品价格任务
+INSERT INTO `infra_job` (`name`, `status`, `handler_name`, `handler_param`, `cron_expression`,
+                         `retry_count`, `retry_interval`, `monitor_timeout`, `creator`, `updater`, `deleted`)
+SELECT 'CPS选品商品价格趋势跟踪拉取', 1, 'cpsGoodsPriceTrackingJob', '{"batchSize":50}',
+       '0 0 */2 * * ?', 2, 60, 900, 'system', 'system', b'0'
+WHERE NOT EXISTS (
+  SELECT 1 FROM `infra_job` WHERE `handler_name` = 'cpsGoodsPriceTrackingJob' AND `deleted` = b'0'
+);
+
+-- 4. 记录结构版本更新
+INSERT INTO `system_schema_version` (`module`, `version`, `schema_update_time`, `script_source`, `description`, `status`, `tenant_id`, `deleted`, `creator`, `updater`)
+SELECT 'cps', 'v2.1.1', '2026-10-22 10:48:46', 'cps-update.sql', '选品库商品支持开启价格趋势跟踪功能，支持开关、定时任务拉取与商品详情价格趋势查看', 'SUCCESS', 0, b'0', 'system', 'system'
+WHERE NOT EXISTS (
+  SELECT 1 FROM `system_schema_version` WHERE `module` = 'cps' AND `version` = 'v2.1.1' AND `schema_update_time` = '2026-10-22 10:48:46'
+);

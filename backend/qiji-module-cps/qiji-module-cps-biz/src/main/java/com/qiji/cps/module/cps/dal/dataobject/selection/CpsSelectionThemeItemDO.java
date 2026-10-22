@@ -88,4 +88,10 @@ public class CpsSelectionThemeItemDO extends TenantBaseDO {
     private LocalDateTime snapshotTime;
 
     private Integer sort;
+
+    /** 是否开启价格趋势跟踪：0 否，1 是。 */
+    private Integer priceTrackStatus;
+
+    /** 最近一次价格跟踪抓取时间。 */
+    private LocalDateTime priceTrackTime;
 }

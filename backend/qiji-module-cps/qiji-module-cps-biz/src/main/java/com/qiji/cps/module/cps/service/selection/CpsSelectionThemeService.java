@@ -1,22 +1,9 @@
 package com.qiji.cps.module.cps.service.selection;
 
 import com.qiji.cps.framework.common.pojo.PageResult;
-import com.qiji.cps.module.cps.controller.admin.selection.vo.CpsSelectionAiReviewReqVO;
-import com.qiji.cps.module.cps.controller.admin.selection.vo.CpsSelectionThemeAiRecommendReqVO;
-import com.qiji.cps.module.cps.controller.admin.selection.vo.CpsSelectionThemeItemImportReqVO;
-import com.qiji.cps.module.cps.controller.admin.selection.vo.CpsSelectionThemeItemPageReqVO;
-import com.qiji.cps.module.cps.controller.admin.selection.vo.CpsSelectionThemeItemSortReqVO;
-import com.qiji.cps.module.cps.controller.admin.selection.vo.CpsSelectionThemeItemStatusReqVO;
-import com.qiji.cps.module.cps.controller.admin.selection.vo.CpsSelectionThemeOperationRespVO;
-import com.qiji.cps.module.cps.controller.admin.selection.vo.CpsSelectionThemePageReqVO;
-import com.qiji.cps.module.cps.controller.admin.selection.vo.CpsSelectionThemeSaveReqVO;
-import com.qiji.cps.module.cps.controller.admin.selection.vo.CpsSelectionThemeStatsRespVO;
-import com.qiji.cps.module.cps.controller.admin.selection.vo.CpsSelectionThemeSyncReqVO;
-import com.qiji.cps.module.cps.controller.admin.selection.vo.CpsSelectionThemeTemplateCreateReqVO;
-import com.qiji.cps.module.cps.controller.admin.selection.vo.CpsSelectionThemeTemplateRespVO;
-import com.qiji.cps.module.cps.controller.admin.selection.vo.CpsSelectionThemeVendorPullReqVO;
-import com.qiji.cps.module.cps.dal.dataobject.selection.CpsSelectionThemeDO;
+import com.qiji.cps.module.cps.controller.admin.selection.vo.*;
 import com.qiji.cps.module.cps.dal.dataobject.selection.CpsSelectionAiReviewDO;
+import com.qiji.cps.module.cps.dal.dataobject.selection.CpsSelectionThemeDO;
 import com.qiji.cps.module.cps.dal.dataobject.selection.CpsSelectionThemeItemDO;
 import jakarta.validation.Valid;
 
@@ -77,4 +64,29 @@ public interface CpsSelectionThemeService {
     List<CpsSelectionAiReviewDO> listAiReviews(String reviewContextId, Long ownerUserId);
 
     Long upsertAiReview(@Valid CpsSelectionAiReviewReqVO reqVO, Long reviewerId);
+
+    /**
+     * 更新单个选品商品的商品价格趋势跟踪开关
+     */
+    void updateItemPriceTrackStatus(@Valid CpsSelectionThemeItemPriceTrackReqVO reqVO);
+
+    /**
+     * 批量更新选品商品的商品价格趋势跟踪开关
+     */
+    void batchUpdateItemPriceTrackStatus(@Valid CpsSelectionThemeItemPriceTrackBatchReqVO reqVO);
+
+    /**
+     * 获取商品价格趋势详情
+     */
+    CpsGoodsPriceTrendRespVO getGoodsPriceTrend(Long selectionItemId, String platformCode, String goodsId);
+
+    /**
+     * 手动触发单个选品商品的价格拉取
+     */
+    CpsGoodsPricePointVO pullItemPrice(Long selectionItemId);
+
+    /**
+     * 定时任务定期拉取已开启价格跟踪的选品商品价格
+     */
+    String trackTrackedItemPrices(Integer batchSize);
 }

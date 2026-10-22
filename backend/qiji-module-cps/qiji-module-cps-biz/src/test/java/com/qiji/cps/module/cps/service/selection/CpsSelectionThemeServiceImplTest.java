@@ -28,6 +28,13 @@ import com.qiji.cps.module.cps.dal.mysql.selection.CpsSelectionThemeItemMapper;
 import com.qiji.cps.module.cps.dal.mysql.selection.CpsSelectionAiReviewMapper;
 import com.qiji.cps.module.cps.dal.mysql.selection.CpsSelectionThemeMapper;
 import com.qiji.cps.module.cps.service.goods.CpsGoodsSquareService;
+import com.qiji.cps.module.cps.dal.dataobject.goods.CpsGoodsPriceSnapshotDO;
+import com.qiji.cps.module.cps.dal.mysql.goods.CpsGoodsPriceSnapshotMapper;
+import com.qiji.cps.module.cps.controller.admin.selection.vo.CpsSelectionThemeItemPriceTrackReqVO;
+import com.qiji.cps.module.cps.controller.admin.selection.vo.CpsSelectionThemeItemPriceTrackBatchReqVO;
+import com.qiji.cps.module.cps.controller.admin.selection.vo.CpsGoodsPricePointVO;
+import com.qiji.cps.module.cps.controller.admin.selection.vo.CpsGoodsPriceTrendRespVO;
+import java.time.LocalDateTime;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -41,6 +48,7 @@ import java.math.BigDecimal;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
@@ -61,6 +69,9 @@ class CpsSelectionThemeServiceImplTest {
 
     @Mock
     private CpsSelectionThemeItemMapper itemMapper;
+
+    @Mock
+    private CpsGoodsPriceSnapshotMapper priceSnapshotMapper;
 
     @Mock
     private CpsSelectionAiReviewMapper aiReviewMapper;
@@ -792,4 +803,156 @@ class CpsSelectionThemeServiceImplTest {
         item.setMonthSales(5000L);
         return item;
     }
+
+    @Test
+    @DisplayName("updateItemPriceTrackStatus - 开启价格跟踪且无快照时记录初始快照")
+    void updateItemPriceTrackStatus_enable_createsInitialSnapshotWhenEmpty() {
+        CpsSelectionThemeItemDO item = CpsSelectionThemeItemDO.builder()
+                .id(100L)
+                .themeId(1L)
+                .platformCode("taobao")
+                .vendorCode("dataoke")
+                .goodsId("G100")
+                .title("测试商品")
+                .actualPrice(new BigDecimal("29.90"))
+                .originalPrice(new BigDecimal("59.90"))
+                .couponPrice(new BigDecimal("30.00"))
+                .commissionRate(new BigDecimal("15"))
+                .commissionAmount(new BigDecimal("4.48"))
+                .monthSales(8000L)
+                .status("ENABLED")
+                .priceTrackStatus(0)
+                .build();
+        when(itemMapper.selectById(100L)).thenReturn(item);
+        when(priceSnapshotMapper.selectListBySelectionItemId(100L)).thenReturn(List.of());
+
+        service.updateItemPriceTrackStatus(CpsSelectionThemeItemPriceTrackReqVO.builder()
+                .id(100L)
+                .priceTrackStatus(1)
+                .build());
+
+        assertEquals(1, item.getPriceTrackStatus());
+        assertNotNull(item.getPriceTrackTime());
+        verify(itemMapper).updateById(item);
+        ArgumentCaptor<CpsGoodsPriceSnapshotDO> snapCaptor = ArgumentCaptor.forClass(CpsGoodsPriceSnapshotDO.class);
+        verify(priceSnapshotMapper).insert(snapCaptor.capture());
+        CpsGoodsPriceSnapshotDO capturedSnap = snapCaptor.getValue();
+        assertEquals(100L, capturedSnap.getSelectionItemId());
+        assertEquals("G100", capturedSnap.getExternalGoodsId());
+        assertEquals(2990, capturedSnap.getActualPrice());
+    }
+
+    @Test
+    @DisplayName("updateItemPriceTrackStatus - 关闭价格跟踪时不写入快照")
+    void updateItemPriceTrackStatus_disable() {
+        CpsSelectionThemeItemDO item = CpsSelectionThemeItemDO.builder()
+                .id(100L)
+                .priceTrackStatus(1)
+                .build();
+        when(itemMapper.selectById(100L)).thenReturn(item);
+
+        service.updateItemPriceTrackStatus(CpsSelectionThemeItemPriceTrackReqVO.builder()
+                .id(100L)
+                .priceTrackStatus(0)
+                .build());
+
+        assertEquals(0, item.getPriceTrackStatus());
+        verify(itemMapper).updateById(item);
+        verify(priceSnapshotMapper, never()).insert(any(CpsGoodsPriceSnapshotDO.class));
+    }
+
+    @Test
+    @DisplayName("batchUpdateItemPriceTrackStatus - 批量开关价格跟踪")
+    void batchUpdateItemPriceTrackStatus_success() {
+        CpsSelectionThemeItemDO item1 = CpsSelectionThemeItemDO.builder().id(101L).priceTrackStatus(0).build();
+        CpsSelectionThemeItemDO item2 = CpsSelectionThemeItemDO.builder().id(102L).priceTrackStatus(0).build();
+        when(itemMapper.selectById(101L)).thenReturn(item1);
+        when(itemMapper.selectById(102L)).thenReturn(item2);
+        when(priceSnapshotMapper.selectListBySelectionItemId(any())).thenReturn(List.of(new CpsGoodsPriceSnapshotDO()));
+
+        service.batchUpdateItemPriceTrackStatus(CpsSelectionThemeItemPriceTrackBatchReqVO.builder()
+                .ids(List.of(101L, 102L))
+                .priceTrackStatus(1)
+                .build());
+
+        assertEquals(1, item1.getPriceTrackStatus());
+        assertEquals(1, item2.getPriceTrackStatus());
+        verify(itemMapper, times(2)).updateById(any(CpsSelectionThemeItemDO.class));
+    }
+
+    @Test
+    @DisplayName("pullItemPrice - 手动触发商品最新价格抓取并更新")
+    void pullItemPrice_updatesSnapshotAndItem() {
+        CpsSelectionThemeItemDO item = CpsSelectionThemeItemDO.builder()
+                .id(200L)
+                .platformCode("taobao")
+                .vendorCode("dataoke")
+                .goodsId("G200")
+                .actualPrice(new BigDecimal("50.00"))
+                .originalPrice(new BigDecimal("100.00"))
+                .couponPrice(new BigDecimal("50.00"))
+                .build();
+        when(itemMapper.selectById(200L)).thenReturn(item);
+
+        CpsGoodsSquareGoodsRespVO latestGoods = new CpsGoodsSquareGoodsRespVO();
+        latestGoods.setGoodsId("G200");
+        latestGoods.setActualPrice(new BigDecimal("39.90"));
+        latestGoods.setOriginalPrice(new BigDecimal("99.90"));
+        latestGoods.setCouponPrice(new BigDecimal("60.00"));
+        latestGoods.setCommissionRate(new BigDecimal("20.00"));
+        latestGoods.setCommissionAmount(new BigDecimal("7.98"));
+        latestGoods.setMonthSales(10000L);
+
+        when(goodsSquareService.searchGoods(any(CpsGoodsSquareSearchReqVO.class))).thenReturn(
+                CpsGoodsSquareSearchRespVO.builder().list(List.of(latestGoods)).build());
+
+        CpsGoodsPricePointVO point = service.pullItemPrice(200L);
+
+        assertNotNull(point);
+        assertEquals(new BigDecimal("39.90"), point.getActualPrice());
+        assertEquals(new BigDecimal("39.90"), item.getActualPrice());
+        verify(itemMapper).updateById(item);
+        verify(priceSnapshotMapper).insert(any(CpsGoodsPriceSnapshotDO.class));
+    }
+
+    @Test
+    @DisplayName("getGoodsPriceTrend - 计算历史最高价、最低价、均价与涨跌差值")
+    void getGoodsPriceTrend_calculatesStatsCorrectly() {
+        CpsSelectionThemeItemDO item = CpsSelectionThemeItemDO.builder()
+                .id(300L)
+                .platformCode("taobao")
+                .goodsId("G300")
+                .actualPrice(new BigDecimal("30.00"))
+                .priceTrackStatus(1)
+                .build();
+        when(itemMapper.selectById(300L)).thenReturn(item);
+
+        LocalDateTime now = LocalDateTime.now();
+        CpsGoodsPriceSnapshotDO snap1 = CpsGoodsPriceSnapshotDO.builder()
+                .id(1L)
+                .selectionItemId(300L)
+                .actualPrice(4000) // 40.00
+                .originalPrice(8000)
+                .snapshotTime(now.minusDays(2))
+                .build();
+        CpsGoodsPriceSnapshotDO snap2 = CpsGoodsPriceSnapshotDO.builder()
+                .id(2L)
+                .selectionItemId(300L)
+                .actualPrice(3000) // 30.00
+                .originalPrice(8000)
+                .snapshotTime(now.minusDays(1))
+                .build();
+
+        when(priceSnapshotMapper.selectListBySelectionItemId(300L)).thenReturn(List.of(snap1, snap2));
+
+        CpsGoodsPriceTrendRespVO trend = service.getGoodsPriceTrend(300L, null, null);
+
+        assertEquals(1, trend.getTrackStatus());
+        assertEquals(2, trend.getHistoryList().size());
+        assertEquals(new BigDecimal("30.00"), trend.getMinPrice());
+        assertEquals(new BigDecimal("40.00"), trend.getMaxPrice());
+        assertEquals(new BigDecimal("35.00"), trend.getAvgPrice());
+        assertEquals(new BigDecimal("-10.00"), trend.getPriceChange()); // 30 - 40 = -10
+    }
+
 }

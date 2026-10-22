@@ -27,6 +27,9 @@ public class CpsGoodsPriceSnapshotDO extends TenantBaseDO {
     @TableId
     private Long id;
 
+    /** 选品主题商品ID（若从选品库生成） */
+    private Long selectionItemId;
+
     private Long masterId;
 
     private Long sourceMappingId;

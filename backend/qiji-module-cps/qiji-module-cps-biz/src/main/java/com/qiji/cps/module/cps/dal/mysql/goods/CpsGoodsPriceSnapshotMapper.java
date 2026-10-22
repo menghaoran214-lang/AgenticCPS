@@ -7,6 +7,8 @@ import com.qiji.cps.module.cps.controller.admin.goodsmaster.vo.CpsGoodsPriceSnap
 import com.qiji.cps.module.cps.dal.dataobject.goods.CpsGoodsPriceSnapshotDO;
 import org.apache.ibatis.annotations.Mapper;
 
+import java.util.List;
+
 @Mapper
 public interface CpsGoodsPriceSnapshotMapper extends BaseMapperX<CpsGoodsPriceSnapshotDO> {
 
@@ -19,5 +21,20 @@ public interface CpsGoodsPriceSnapshotMapper extends BaseMapperX<CpsGoodsPriceSn
                 .betweenIfPresent(CpsGoodsPriceSnapshotDO::getSnapshotTime, reqVO.getSnapshotTime())
                 .orderByDesc(CpsGoodsPriceSnapshotDO::getSnapshotTime)
                 .orderByDesc(CpsGoodsPriceSnapshotDO::getId));
+    }
+
+    default List<CpsGoodsPriceSnapshotDO> selectListBySelectionItemId(Long selectionItemId) {
+        return selectList(new LambdaQueryWrapperX<CpsGoodsPriceSnapshotDO>()
+                .eq(CpsGoodsPriceSnapshotDO::getSelectionItemId, selectionItemId)
+                .orderByAsc(CpsGoodsPriceSnapshotDO::getSnapshotTime)
+                .orderByAsc(CpsGoodsPriceSnapshotDO::getId));
+    }
+
+    default List<CpsGoodsPriceSnapshotDO> selectListByExternalGoods(String platformCode, String externalGoodsId) {
+        return selectList(new LambdaQueryWrapperX<CpsGoodsPriceSnapshotDO>()
+                .eq(CpsGoodsPriceSnapshotDO::getPlatformCode, platformCode)
+                .eq(CpsGoodsPriceSnapshotDO::getExternalGoodsId, externalGoodsId)
+                .orderByAsc(CpsGoodsPriceSnapshotDO::getSnapshotTime)
+                .orderByAsc(CpsGoodsPriceSnapshotDO::getId));
     }
 }

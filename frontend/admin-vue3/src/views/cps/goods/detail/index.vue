@@ -88,6 +88,119 @@
         </div>
       </section>
 
+      <!-- 价格走势与跟踪面板 -->
+      <section class="price-trend-panel">
+        <div class="panel-header">
+          <div class="header-left">
+            <div class="section-title">价格走势与跟踪</div>
+            <span class="header-tip">开启后系统将定期抓取最新券后价，沉淀走势数据</span>
+          </div>
+          <div class="header-actions">
+            <el-switch
+              v-model="priceTrackSwitch"
+              :active-value="1"
+              :inactive-value="0"
+              :loading="priceTrackLoading"
+              active-text="价格跟踪开启"
+              inactive-text="未开启"
+              @change="handleTogglePriceTrack"
+            />
+            <el-button
+              size="small"
+              type="primary"
+              plain
+              :loading="pricePulling"
+              :disabled="priceTrackSwitch !== 1"
+              @click="handleManualPullPrice"
+            >
+              <Icon icon="ep:refresh" class="mr-4px" /> 立即抓取最新价格
+            </el-button>
+          </div>
+        </div>
+
+        <!-- 价格指标看板 -->
+        <div v-if="priceTrend" class="trend-metrics-grid">
+          <div class="metric-card">
+            <div class="metric-label">当前券后价</div>
+            <div class="metric-value current">{{ formatMoney(priceTrend.currentPrice) }}</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">历史最低券后价</div>
+            <div class="metric-value low">{{ formatMoney(priceTrend.minPrice) }}</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">历史最高券后价</div>
+            <div class="metric-value high">{{ formatMoney(priceTrend.maxPrice) }}</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">历史平均券后价</div>
+            <div class="metric-value avg">{{ formatMoney(priceTrend.avgPrice) }}</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">价格波动</div>
+            <div class="metric-value change" :class="priceChangeClass">
+              {{ priceChangeText }}
+            </div>
+          </div>
+        </div>
+
+        <!-- 折线图与历史列表 -->
+        <div v-if="priceTrend && priceTrend.historyList && priceTrend.historyList.length > 0" class="trend-body">
+          <div class="chart-wrapper">
+            <Echart :options="trendChartOptions" height="300px" />
+          </div>
+
+          <div class="history-table-wrapper">
+            <div class="history-header">
+              <span class="history-title">历史价格采样明细（共 {{ priceTrend.historyList.length }} 次）</span>
+              <span v-if="priceTrend.lastTrackTime" class="last-time">
+                最近抓取：{{ formatDateTime(priceTrend.lastTrackTime) }}
+              </span>
+            </div>
+            <el-table :data="priceTrend.historyList" size="small" border stripe max-height="220">
+              <el-table-column label="采样时间" min-width="160">
+                <template #default="{ row }">
+                  {{ formatDateTime(row.snapshotTime) }}
+                </template>
+              </el-table-column>
+              <el-table-column label="券后价" width="110">
+                <template #default="{ row }">
+                  <span class="text-red-500 font-bold">{{ formatMoney(row.actualPrice) }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="原价" width="100">
+                <template #default="{ row }">
+                  {{ formatMoney(row.originalPrice) }}
+                </template>
+              </el-table-column>
+              <el-table-column label="优惠券" width="100">
+                <template #default="{ row }">
+                  {{ formatMoney(row.couponPrice) }}
+                </template>
+              </el-table-column>
+              <el-table-column label="佣金率" width="100">
+                <template #default="{ row }">
+                  {{ formatPercent(row.commissionRate) }}
+                </template>
+              </el-table-column>
+              <el-table-column label="月销量" prop="monthSales" width="90" />
+            </el-table>
+          </div>
+        </div>
+
+        <!-- 未开启或暂无走势数据 -->
+        <div v-else class="trend-empty">
+          <el-empty
+            :description="priceTrackSwitch === 1 ? '已开启价格跟踪，正在等待首次定时拉取或点击上方立即抓取' : '尚未开启价格趋势跟踪。开启后系统定时任务将定期抓取商品价格，沉淀走势图表。'"
+            :image-size="80"
+          >
+            <el-button v-if="priceTrackSwitch !== 1" type="primary" size="small" @click="handleTogglePriceTrack(1)">
+              立即开启价格趋势跟踪
+            </el-button>
+          </el-empty>
+        </div>
+      </section>
+
       <section class="promotion-panel">
         <div class="section-title">推广模板</div>
         <el-tabs v-model="activeTemplate">
@@ -246,6 +359,14 @@ import {
 } from '@/api/cps/goodsSquare'
 import { CpsPlatformApi, type CpsPlatformVO } from '@/api/cps/platform'
 import { getUserPage, type UserVO } from '@/api/member/user/index'
+import { Echart } from '@/components/Echart'
+import type { EChartsOption } from 'echarts'
+import {
+  CpsSelectionThemeApi,
+  type CpsGoodsPriceTrendVO
+} from '@/api/cps/selectionTheme'
+
+type DateTimeValue = string | number | Date | [number, number, number, number?, number?, number?]
 
 defineOptions({ name: 'CpsGoodsSquareDetail' })
 
@@ -270,6 +391,191 @@ const platformOptions = ref<CpsPlatformVO[]>([])
 const adzoneOptions = ref<CpsAdzoneVO[]>([])
 const memberOptions = ref<UserVO[]>([])
 const linkResult = ref<CpsGoodsSquareLinkRespVO>()
+const priceTrend = ref<CpsGoodsPriceTrendVO | null>(null)
+const priceTrackSwitch = ref(0)
+const priceTrackLoading = ref(false)
+const pricePulling = ref(false)
+const routeSelectionItemId = computed(() => {
+  const raw = routeText(route.query.selectionItemId)
+  return raw ? Number(raw) : undefined
+})
+
+const padDatePart = (value: number) => String(value).padStart(2, '0')
+
+const formatDateTime = (value?: DateTimeValue) => {
+  if (value == null || value === '') return '-'
+  if (Array.isArray(value)) {
+    const [year, month, day, hour = 0, minute = 0] = value
+    if (!year || !month || !day) return '-'
+    return `${year}-${padDatePart(month)}-${padDatePart(day)} ${padDatePart(hour)}:${padDatePart(minute)}`
+  }
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) return '-'
+    return `${value.getFullYear()}-${padDatePart(value.getMonth() + 1)}-${padDatePart(value.getDate())} ${padDatePart(value.getHours())}:${padDatePart(value.getMinutes())}`
+  }
+  if (typeof value === 'number') {
+    const date = new Date(value)
+    return Number.isNaN(date.getTime()) ? '-' : formatDateTime(date)
+  }
+  return String(value).replace('T', ' ').slice(0, 16)
+}
+
+const priceChangeText = computed(() => {
+  const change = Number(priceTrend.value?.priceChange || 0)
+  if (change < 0) return `降 ¥${Math.abs(change).toFixed(2)}`
+  if (change > 0) return `涨 ¥${change.toFixed(2)}`
+  return '持平'
+})
+
+const priceChangeClass = computed(() => {
+  const change = Number(priceTrend.value?.priceChange || 0)
+  if (change < 0) return 'text-green-600'
+  if (change > 0) return 'text-red-500'
+  return 'text-gray-500'
+})
+
+const loadPriceTrend = async () => {
+  const goodsId = routeGoodsId.value || goods.value?.goodsId
+  if (!goodsId) return
+  try {
+    const data = await CpsSelectionThemeApi.getPriceTrend({
+      selectionItemId: routeSelectionItemId.value || priceTrend.value?.selectionItemId,
+      platformCode: goods.value?.platformCode || routePlatformCode.value,
+      goodsId
+    })
+    priceTrend.value = data
+    priceTrackSwitch.value = data?.trackStatus || 0
+  } catch {
+    // ignore
+  }
+}
+
+const handleTogglePriceTrack = async (val?: unknown) => {
+  const targetStatus = typeof val === 'number' ? val : priceTrackSwitch.value
+  priceTrackLoading.value = true
+  try {
+    await CpsSelectionThemeApi.updateItemPriceTrackStatus({
+      id: routeSelectionItemId.value || priceTrend.value?.selectionItemId,
+      platformCode: goods.value?.platformCode || routePlatformCode.value,
+      goodsId: goods.value?.goodsId || routeGoodsId.value,
+      vendorCode: effectiveVendorCode.value,
+      title: goods.value?.title,
+      mainPic: goods.value?.mainPic,
+      actualPrice: goods.value?.actualPrice,
+      originalPrice: goods.value?.originalPrice,
+      couponPrice: goods.value?.couponPrice,
+      priceTrackStatus: targetStatus
+    })
+    priceTrackSwitch.value = targetStatus
+    message.success(targetStatus === 1 ? '已开启价格趋势跟踪' : '已关闭价格趋势跟踪')
+    await loadPriceTrend()
+  } catch {
+    priceTrackSwitch.value = targetStatus === 1 ? 0 : 1
+  } finally {
+    priceTrackLoading.value = false
+  }
+}
+
+const handleManualPullPrice = async () => {
+  const itemId = routeSelectionItemId.value || priceTrend.value?.selectionItemId
+  if (!itemId) {
+    message.warning('请先开启价格跟踪')
+    return
+  }
+  pricePulling.value = true
+  try {
+    await CpsSelectionThemeApi.pullItemPrice(itemId)
+    message.success('已抓取最新价格并记录快照')
+    await loadPriceTrend()
+    if (priceTrend.value?.currentPrice !== undefined && goods.value) {
+      goods.value.actualPrice = priceTrend.value.currentPrice
+    }
+  } finally {
+    pricePulling.value = false
+  }
+}
+
+const trendChartOptions = computed<EChartsOption>(() => {
+  if (!priceTrend.value || !priceTrend.value.historyList || priceTrend.value.historyList.length === 0) {
+    return {}
+  }
+  const dates = priceTrend.value.historyList.map((h) => formatDateTime(h.snapshotTime))
+  const actualPrices = priceTrend.value.historyList.map((h) => h.actualPrice)
+  const originalPrices = priceTrend.value.historyList.map((h) => h.originalPrice || h.actualPrice)
+
+  return {
+    tooltip: {
+      trigger: 'axis',
+      formatter: (params: any) => {
+        if (!Array.isArray(params) || params.length === 0) return ''
+        const date = params[0].name
+        const item = priceTrend.value?.historyList[params[0].dataIndex]
+        let html = `<div style="font-weight: 600; margin-bottom: 4px;">${date}</div>`
+        params.forEach((p: any) => {
+          html += `<div>${p.marker} ${p.seriesName}: ¥${p.value}</div>`
+        })
+        if (item?.couponPrice) {
+          html += `<div style="color: #f56c6c;">优惠券: ¥${item.couponPrice}</div>`
+        }
+        if (item?.monthSales) {
+          html += `<div style="color: #909399;">月销: ${item.monthSales}</div>`
+        }
+        return html
+      }
+    },
+    legend: {
+      data: ['券后价', '原价']
+    },
+    grid: {
+      left: 16,
+      right: 24,
+      top: 36,
+      bottom: 20,
+      containLabel: true
+    },
+    xAxis: {
+      type: 'category',
+      boundaryGap: false,
+      data: dates
+    },
+    yAxis: {
+      type: 'value',
+      axisLabel: {
+        formatter: '¥{value}'
+      }
+    },
+    series: [
+      {
+        name: '券后价',
+        type: 'line',
+        smooth: true,
+        data: actualPrices,
+        itemStyle: { color: '#ff4d4f' },
+        areaStyle: {
+          color: {
+            type: 'linear',
+            x: 0,
+            y: 0,
+            x2: 0,
+            y2: 1,
+            colorStops: [
+              { offset: 0, color: 'rgba(255, 77, 79, 0.35)' },
+              { offset: 1, color: 'rgba(255, 77, 79, 0.02)' }
+            ]
+          }
+        }
+      },
+      {
+        name: '原价',
+        type: 'line',
+        smooth: true,
+        data: originalPrices,
+        itemStyle: { color: '#909399' },
+        lineStyle: { type: 'dashed' }
+      }
+    ]
+  }
+})
 const linkFormRef = ref<FormInstance>()
 const linkForm = reactive<CpsGoodsSquareLinkReqVO>({
   platformCode: '',
@@ -417,6 +723,7 @@ const switchGoods = async (item: CpsGoodsSquareGoodsVO) => {
     }
   })
   await loadSimilarGoods()
+  await loadPriceTrend()
 }
 
 const openLinkDialog = async () => {
@@ -557,6 +864,7 @@ onMounted(async () => {
   await loadPlatformOptions()
   await loadGoods()
   await loadSimilarGoods()
+  await loadPriceTrend()
 })
 </script>
 
@@ -778,6 +1086,118 @@ onMounted(async () => {
   border-radius: inherit;
 }
 
+
+.price-trend-panel {
+  padding: 18px 20px;
+  background: rgb(255 255 255 / 92%);
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
+}
+
+.price-trend-panel .panel-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+}
+
+.price-trend-panel .header-left {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.price-trend-panel .header-tip {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+}
+
+.price-trend-panel .header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.trend-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.metric-card {
+  padding: 12px 14px;
+  background: #f8fafc;
+  border: 1px solid #edf2f7;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.metric-card .metric-label {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+}
+
+.metric-card .metric-value {
+  margin-top: 4px;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.metric-card .metric-value.current {
+  color: #ff4d39;
+}
+
+.metric-card .metric-value.low {
+  color: #10b981;
+}
+
+.metric-card .metric-value.high,
+.metric-card .metric-value.avg {
+  color: #1f2a44;
+}
+
+.trend-body {
+  margin-top: 16px;
+}
+
+.chart-wrapper {
+  padding: 10px 6px;
+  background: #fafcff;
+  border: 1px solid #edf2f7;
+  border-radius: 8px;
+}
+
+.history-table-wrapper {
+  margin-top: 14px;
+}
+
+.history-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.history-title {
+  color: #475569;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.last-time {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+}
+
+.trend-empty {
+  padding: 24px 0 16px;
+}
+
 .promotion-panel {
   padding: 16px 18px;
 }
@@ -911,7 +1331,8 @@ onMounted(async () => {
   }
 
   .price-matrix,
-  .trend-grid {
+  .trend-grid,
+  .trend-metrics-grid {
     grid-template-columns: repeat(2, 1fr);
   }
 }
@@ -929,7 +1350,8 @@ onMounted(async () => {
   }
 
   .price-matrix,
-  .trend-grid {
+  .trend-grid,
+  .trend-metrics-grid {
     grid-template-columns: 1fr;
   }
 }

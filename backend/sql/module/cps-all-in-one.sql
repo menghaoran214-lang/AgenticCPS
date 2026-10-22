@@ -1,7 +1,7 @@
 -- ============================================================
 -- CPS联盟返利系统 - 完整数据库建表脚本（All-in-One）
--- Version: 2.1.0
--- Date: 2026-10-16 14:50:00
+-- Version: 2.1.1
+-- Date: 2026-10-22 10:48:46
 -- Description: 新库全量初始化脚本，整合 CPS 核心表、P0 返利兑换、活动中心、选品库、CPX 扩展表、结构版本与更新时间追踪表、菜单与权限。
 -- Maintenance:
 --   1. 本文件只保存新库全量脚本。
@@ -1305,6 +1305,8 @@ CREATE TABLE `cps_selection_theme_item`  (
   `item_link` varchar(1024) DEFAULT NULL COMMENT '原始链接',
   `raw_data` mediumtext COMMENT '第三方原始快照',
   `snapshot_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '快照时间',
+  `price_track_status` tinyint NOT NULL DEFAULT 0 COMMENT '价格趋势跟踪：0关闭 1开启',
+  `price_track_time` datetime NULL DEFAULT NULL COMMENT '最后价格跟踪抓取时间',
   `sort` int NOT NULL DEFAULT 0 COMMENT '排序',
   `creator` varchar(64) DEFAULT '' COMMENT '创建者',
   `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
@@ -1317,7 +1319,8 @@ CREATE TABLE `cps_selection_theme_item`  (
   KEY `idx_cps_selection_theme_item_list` (`tenant_id`, `deleted`, `theme_id`, `status`, `top_flag`, `sort`) USING BTREE,
   KEY `idx_cps_selection_theme_item_platform` (`tenant_id`, `deleted`, `platform_code`, `source_type`) USING BTREE,
   KEY `idx_cps_selection_theme_item_score` (`tenant_id`, `deleted`, `theme_id`, `recommend_score`) USING BTREE,
-  KEY `idx_cps_selection_theme_item_refresh` (`tenant_id`, `deleted`, `theme_id`, `source_type`, `snapshot_time`) USING BTREE
+  KEY `idx_cps_selection_theme_item_refresh` (`tenant_id`, `deleted`, `theme_id`, `source_type`, `snapshot_time`) USING BTREE,
+  KEY `idx_cps_selection_theme_item_price_track` (`tenant_id`, `deleted`, `price_track_status`) USING BTREE
 ) ENGINE = InnoDB AUTO_INCREMENT = 1 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = 'CPS选品主题商品快照表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
@@ -1441,8 +1444,9 @@ CREATE TABLE `cps_goods_source_mapping` (
 DROP TABLE IF EXISTS `cps_goods_price_snapshot`;
 CREATE TABLE `cps_goods_price_snapshot` (
   `id` bigint NOT NULL AUTO_INCREMENT COMMENT '商品价格快照ID',
-  `master_id` bigint NOT NULL COMMENT '商品主档ID',
-  `source_mapping_id` bigint NOT NULL COMMENT '商品来源映射ID',
+  `selection_item_id` bigint DEFAULT NULL COMMENT '选品主题商品ID',
+  `master_id` bigint NOT NULL DEFAULT 0 COMMENT '商品主档ID',
+  `source_mapping_id` bigint NOT NULL DEFAULT 0 COMMENT '商品来源映射ID',
   `platform_code` varchar(32) NOT NULL COMMENT '平台编码',
   `vendor_code` varchar(64) NOT NULL DEFAULT '' COMMENT '供应商编码',
   `external_goods_id` varchar(128) NOT NULL COMMENT '外部商品ID',
@@ -1468,7 +1472,9 @@ CREATE TABLE `cps_goods_price_snapshot` (
   PRIMARY KEY (`id`) USING BTREE,
   KEY `idx_cps_goods_price_master` (`tenant_id`, `deleted`, `master_id`, `snapshot_time`) USING BTREE,
   KEY `idx_cps_goods_price_source` (`tenant_id`, `deleted`, `source_mapping_id`, `snapshot_time`) USING BTREE,
-  KEY `idx_cps_goods_price_platform` (`tenant_id`, `deleted`, `platform_code`, `vendor_code`, `snapshot_time`) USING BTREE
+  KEY `idx_cps_goods_price_platform` (`tenant_id`, `deleted`, `platform_code`, `vendor_code`, `snapshot_time`) USING BTREE,
+  KEY `idx_cps_goods_price_item` (`tenant_id`, `deleted`, `selection_item_id`, `snapshot_time`) USING BTREE,
+  KEY `idx_cps_goods_price_external` (`tenant_id`, `deleted`, `platform_code`, `external_goods_id`, `snapshot_time`) USING BTREE
 ) ENGINE = InnoDB AUTO_INCREMENT = 1 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = 'CPS商品价格快照表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
@@ -2189,9 +2195,17 @@ WHERE NOT EXISTS (
 );
 
 INSERT INTO `system_schema_version` (`module`, `version`, `schema_update_time`, `script_source`, `description`, `status`, `tenant_id`, `deleted`, `creator`, `updater`)
-SELECT 'cps', 'v2.1.0', '2026-10-16 14:50:00', 'cps-all-in-one.sql', 'CPS联盟返利系统全量基线结构（含结构版本与更新时间追踪表）', 'SUCCESS', 0, b'0', 'system', 'system'
+SELECT 'cps', 'v2.1.1', '2026-10-22 10:48:46', 'cps-all-in-one.sql', 'CPS联盟返利系统全量基线结构（含选品库价格趋势跟踪、结构版本与更新时间追踪表）', 'SUCCESS', 0, b'0', 'system', 'system'
 WHERE NOT EXISTS (
-  SELECT 1 FROM `system_schema_version` WHERE `module` = 'cps' AND `version` = 'v2.1.0' AND `schema_update_time` = '2026-10-16 14:50:00'
+  SELECT 1 FROM `system_schema_version` WHERE `module` = 'cps' AND `version` = 'v2.1.1' AND `schema_update_time` = '2026-10-22 10:48:46'
 );
 
 SET FOREIGN_KEY_CHECKS = 1;
+
+INSERT INTO `infra_job` (`name`, `status`, `handler_name`, `handler_param`, `cron_expression`,
+                         `retry_count`, `retry_interval`, `monitor_timeout`, `creator`, `updater`, `deleted`)
+SELECT 'CPS选品商品价格趋势跟踪拉取', 1, 'cpsGoodsPriceTrackingJob', '{"batchSize":50}',
+       '0 0 */2 * * ?', 2, 60, 900, 'system', 'system', b'0'
+WHERE NOT EXISTS (
+  SELECT 1 FROM `infra_job` WHERE `handler_name` = 'cpsGoodsPriceTrackingJob' AND `deleted` = b'0'
+);

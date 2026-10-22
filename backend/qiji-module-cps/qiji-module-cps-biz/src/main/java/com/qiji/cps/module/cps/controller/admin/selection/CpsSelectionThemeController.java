@@ -20,6 +20,10 @@ import com.qiji.cps.module.cps.controller.admin.selection.vo.CpsSelectionThemeSy
 import com.qiji.cps.module.cps.controller.admin.selection.vo.CpsSelectionThemeTemplateCreateReqVO;
 import com.qiji.cps.module.cps.controller.admin.selection.vo.CpsSelectionThemeTemplateRespVO;
 import com.qiji.cps.module.cps.controller.admin.selection.vo.CpsSelectionThemeVendorPullReqVO;
+import com.qiji.cps.module.cps.controller.admin.selection.vo.CpsSelectionThemeItemPriceTrackReqVO;
+import com.qiji.cps.module.cps.controller.admin.selection.vo.CpsSelectionThemeItemPriceTrackBatchReqVO;
+import com.qiji.cps.module.cps.controller.admin.selection.vo.CpsGoodsPricePointVO;
+import com.qiji.cps.module.cps.controller.admin.selection.vo.CpsGoodsPriceTrendRespVO;
 import com.qiji.cps.module.cps.dal.dataobject.selection.CpsSelectionThemeDO;
 import com.qiji.cps.module.cps.dal.dataobject.selection.CpsSelectionThemeItemDO;
 import com.qiji.cps.module.cps.dal.dataobject.selection.CpsSelectionAiReviewDO;
@@ -245,4 +249,41 @@ public class CpsSelectionThemeController {
     public CommonResult<Long> upsertAiReview(@Valid @RequestBody CpsSelectionAiReviewReqVO reqVO) {
         return success(selectionThemeService.upsertAiReview(reqVO, getLoginUserId()));
     }
+
+    @PutMapping("/items/price-track-status")
+    @Operation(summary = "更新选品商品价格趋势跟踪状态")
+    @PreAuthorize("@ss.hasPermission('cps:selection-theme:update')")
+    public CommonResult<Boolean> updateItemPriceTrackStatus(
+            @Valid @RequestBody CpsSelectionThemeItemPriceTrackReqVO reqVO) {
+        selectionThemeService.updateItemPriceTrackStatus(reqVO);
+        return success(true);
+    }
+
+    @PutMapping("/items/price-track-status/batch")
+    @Operation(summary = "批量更新选品商品价格趋势跟踪状态")
+    @PreAuthorize("@ss.hasPermission('cps:selection-theme:update')")
+    public CommonResult<Boolean> batchUpdateItemPriceTrackStatus(
+            @Valid @RequestBody CpsSelectionThemeItemPriceTrackBatchReqVO reqVO) {
+        selectionThemeService.batchUpdateItemPriceTrackStatus(reqVO);
+        return success(true);
+    }
+
+    @PostMapping("/items/pull-price")
+    @Operation(summary = "手动触发选品商品价格抓取")
+    @Parameter(name = "id", description = "选品商品快照ID", required = true)
+    @PreAuthorize("@ss.hasPermission('cps:selection-theme:update')")
+    public CommonResult<CpsGoodsPricePointVO> pullItemPrice(@RequestParam("id") Long id) {
+        return success(selectionThemeService.pullItemPrice(id));
+    }
+
+    @GetMapping("/items/price-trend")
+    @Operation(summary = "查询选品商品价格趋势")
+    @PreAuthorize("@ss.hasPermission('cps:selection-theme:query')")
+    public CommonResult<CpsGoodsPriceTrendRespVO> getPriceTrend(
+            @RequestParam(value = "selectionItemId", required = false) Long selectionItemId,
+            @RequestParam(value = "platformCode", required = false) String platformCode,
+            @RequestParam(value = "goodsId", required = false) String goodsId) {
+        return success(selectionThemeService.getGoodsPriceTrend(selectionItemId, platformCode, goodsId));
+    }
+
 }

@@ -310,6 +310,18 @@
           >
             批量停用
           </el-button>
+          <el-button
+            :disabled="selectedItemIds.length === 0"
+            @click="batchUpdatePriceTrack(1)"
+          >
+            批量开启跟踪
+          </el-button>
+          <el-button
+            :disabled="selectedItemIds.length === 0"
+            @click="batchUpdatePriceTrack(0)"
+          >
+            批量关闭跟踪
+          </el-button>
           <span v-if="selectedItemIds.length" class="selection-count">
             已选 {{ selectedItemIds.length }} 个商品
           </span>
@@ -329,11 +341,11 @@
             <el-table-column type="selection" width="44" />
             <el-table-column label="商品" min-width="280">
               <template #default="{ row }">
-                <div class="goods-cell">
+                <div class="goods-cell" style="cursor: pointer;" @click="openGoodsDetail(row)">
                   <el-image v-if="row.mainPic" :src="row.mainPic" fit="cover" lazy />
                   <div v-else class="goods-placeholder">{{ platformLabel(row.platformCode) }}</div>
                   <div class="min-w-0">
-                    <div class="goods-title">{{ row.title || '-' }}</div>
+                    <div class="goods-title hover:text-primary transition-colors">{{ row.title || '-' }}</div>
                     <div class="goods-meta"
                       >{{ row.goodsId }} · {{ row.shopName || row.categoryName || '-' }}</div
                     >
@@ -356,6 +368,23 @@
               <template #default="{ row }">
                 <div class="price-main">{{ formatMoney(row.actualPrice) }}</div>
                 <div class="text-12px text-gray-500">券 {{ formatMoney(row.couponPrice) }}</div>
+              </template>
+            </el-table-column>
+            <el-table-column label="价格跟踪" width="105" align="center">
+              <template #default="{ row }">
+                <el-tooltip
+                  :content="row.priceTrackStatus === 1 ? '价格趋势跟踪中，定时任务定期抓取最新价格并在商品详情页查看趋势' : '点击开启价格趋势跟踪功能'"
+                  placement="top"
+                >
+                  <el-switch
+                    v-model="row.priceTrackStatus"
+                    :active-value="1"
+                    :inactive-value="0"
+                    size="small"
+                    :loading="row._trackLoading"
+                    @change="handlePriceTrackChange(row)"
+                  />
+                </el-tooltip>
               </template>
             </el-table-column>
             <el-table-column label="佣金" width="130">
@@ -387,8 +416,10 @@
                 </el-tag>
               </template>
             </el-table-column>
-            <el-table-column label="操作" width="190" fixed="right">
+            <el-table-column label="操作" width="240" fixed="right">
               <template #default="{ row }">
+                <el-button link type="primary" @click="openGoodsDetail(row)">详情</el-button>
+                <el-button link type="success" @click="openTrendDialog(row)">走势</el-button>
                 <el-button link type="primary" @click="toggleTop(row)">
                   {{ row.topFlag === 1 ? '取消置顶' : '置顶' }}
                 </el-button>
@@ -437,11 +468,24 @@
                   <span>分 {{ item.recommendScore || 0 }}</span>
                 </div>
                 <p>{{ item.recommendReason || item.sellingPoint || '暂无推荐理由' }}</p>
+                <div class="card-track-row flex items-center justify-between my-6px px-2px text-12px text-gray-500">
+                  <span>价格跟踪</span>
+                  <el-switch
+                    v-model="item.priceTrackStatus"
+                    :active-value="1"
+                    :inactive-value="0"
+                    size="small"
+                    :loading="item._trackLoading"
+                    @change="handlePriceTrackChange(item)"
+                  />
+                </div>
                 <div class="card-footer">
                   <el-tag size="small" :type="itemStatusMeta(item.status).type" effect="plain">
                     {{ itemStatusMeta(item.status).label }}
                   </el-tag>
                   <div>
+                    <el-button link type="primary" @click="openGoodsDetail(item)">详情</el-button>
+                    <el-button link type="success" @click="openTrendDialog(item)">走势</el-button>
                     <el-button link type="primary" @click="toggleTop(item)">
                       {{ item.topFlag === 1 ? '取消置顶' : '置顶' }}
                     </el-button>
@@ -757,10 +801,115 @@
       </template>
     </el-dialog>
   </div>
+
+    <!-- 商品价格走势弹窗 -->
+    <el-dialog v-model="trendDialogVisible" title="商品价格走势分析" width="840px" destroy-on-close>
+      <div v-loading="trendDialogLoading" class="trend-dialog-content">
+        <div v-if="trendData" class="trend-summary-header flex items-center justify-between pb-12px border-b border-gray-100">
+          <div class="min-w-0 pr-16px">
+            <div class="font-600 text-15px text-gray-800 line-clamp-1">{{ trendData.title || currentTrendItem?.title || '-' }}</div>
+            <div class="mt-4px text-12px text-gray-400">
+              平台: {{ platformLabel(trendData.platformCode) }} · 商品ID: {{ trendData.goodsId }}
+              <span v-if="trendData.lastTrackTime" class="ml-8px">最近拉取: {{ formatDateTime(trendData.lastTrackTime) }}</span>
+            </div>
+          </div>
+          <div class="flex items-center gap-2 flex-shrink-0">
+            <el-switch
+              v-model="trendData.trackStatus"
+              :active-value="1"
+              :inactive-value="0"
+              active-text="跟踪开启"
+              inactive-text="关闭"
+              @change="handleDialogToggleTrack"
+            />
+            <el-button size="small" type="primary" plain :loading="manualPulling" @click="handleDialogManualPull">
+              <Icon icon="ep:refresh" class="mr-3px" /> 立即拉取
+            </el-button>
+            <el-button size="small" type="primary" @click="openGoodsDetail(currentTrendItem || { goodsId: trendData.goodsId, platformCode: trendData.platformCode, vendorCode: trendData.vendorCode })">
+              商品详情页 <Icon icon="ep:arrow-right" class="ml-3px" />
+            </el-button>
+          </div>
+        </div>
+
+        <div v-if="trendData" class="trend-metric-grid grid grid-cols-5 gap-3 mt-14px">
+          <div class="metric-box p-10px bg-gray-50 rounded text-center">
+            <div class="text-12px text-gray-500">当前券后价</div>
+            <div class="text-16px font-bold text-red-500 mt-2px">{{ formatMoney(trendData.currentPrice) }}</div>
+          </div>
+          <div class="metric-box p-10px bg-gray-50 rounded text-center">
+            <div class="text-12px text-gray-500">历史最低价</div>
+            <div class="text-16px font-bold text-green-600 mt-2px">{{ formatMoney(trendData.minPrice) }}</div>
+          </div>
+          <div class="metric-box p-10px bg-gray-50 rounded text-center">
+            <div class="text-12px text-gray-500">历史最高价</div>
+            <div class="text-16px font-bold text-gray-700 mt-2px">{{ formatMoney(trendData.maxPrice) }}</div>
+          </div>
+          <div class="metric-box p-10px bg-gray-50 rounded text-center">
+            <div class="text-12px text-gray-500">历史平均价</div>
+            <div class="text-16px font-bold text-gray-700 mt-2px">{{ formatMoney(trendData.avgPrice) }}</div>
+          </div>
+          <div class="metric-box p-10px bg-gray-50 rounded text-center">
+            <div class="text-12px text-gray-500">价格波动</div>
+            <div class="text-16px font-bold mt-2px" :class="Number(trendData.priceChange || 0) < 0 ? 'text-green-600' : Number(trendData.priceChange || 0) > 0 ? 'text-red-500' : 'text-gray-500'">
+              {{ Number(trendData.priceChange || 0) < 0 ? `降 ¥${Math.abs(Number(trendData.priceChange || 0)).toFixed(2)}` : Number(trendData.priceChange || 0) > 0 ? `涨 ¥${Number(trendData.priceChange || 0).toFixed(2)}` : '持平' }}
+            </div>
+          </div>
+        </div>
+
+        <div v-if="trendData && trendData.historyList && trendData.historyList.length > 0" class="chart-container mt-16px">
+          <Echart :options="trendChartOptions" height="280px" />
+        </div>
+
+        <div v-else class="py-24px text-center text-gray-400">
+          暂无历史走势数据。已记录当前快照，定时任务将定期更新。
+        </div>
+
+        <div v-if="trendData && trendData.historyList && trendData.historyList.length > 0" class="mt-14px">
+          <div class="text-13px font-600 text-gray-600 mb-8px">历史采样明细</div>
+          <el-table :data="trendData.historyList" size="small" border stripe max-height="200">
+            <el-table-column label="快照时间" min-width="160">
+              <template #default="{ row }">
+                {{ formatDateTime(row.snapshotTime) }}
+              </template>
+            </el-table-column>
+            <el-table-column label="券后价" width="110">
+              <template #default="{ row }">
+                <span class="text-red-500 font-bold">{{ formatMoney(row.actualPrice) }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="原价" width="100">
+              <template #default="{ row }">
+                {{ formatMoney(row.originalPrice) }}
+              </template>
+            </el-table-column>
+            <el-table-column label="券金额" width="100">
+              <template #default="{ row }">
+                {{ formatMoney(row.couponPrice) }}
+              </template>
+            </el-table-column>
+            <el-table-column label="佣金率" width="100">
+              <template #default="{ row }">
+                {{ formatPercent(row.commissionRate) }}
+              </template>
+            </el-table-column>
+            <el-table-column label="月销量" prop="monthSales" width="90" />
+          </el-table>
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="trendDialogVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
+
+  </div>
 </template>
 
 <script setup lang="ts">
 import type { FormInstance, FormRules } from 'element-plus'
+import { useRouter } from 'vue-router'
+import { Echart } from '@/components/Echart'
+import type { EChartsOption } from 'echarts'
+import type { CpsGoodsPriceTrendVO } from '@/api/cps/selectionTheme'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   CpsSelectionThemeApi,
@@ -781,6 +930,221 @@ import {
 } from '@/api/cps/selectionTheme'
 
 defineOptions({ name: 'CpsSelectionTheme' })
+
+const router = useRouter()
+const goodsSquareDetailCacheKey = 'cps:goods-square:detail'
+
+const trendDialogVisible = ref(false)
+const trendDialogLoading = ref(false)
+const trendData = ref<CpsGoodsPriceTrendVO | null>(null)
+const currentTrendItem = ref<any>(null)
+const manualPulling = ref(false)
+
+const openGoodsDetail = (item: any) => {
+  sessionStorage.setItem(
+    goodsSquareDetailCacheKey,
+    JSON.stringify({
+      goodsId: item.goodsId,
+      platformCode: item.platformCode,
+      vendorCode: item.vendorCode,
+      title: item.title,
+      mainPic: item.mainPic,
+      originalPrice: item.originalPrice,
+      actualPrice: item.actualPrice,
+      couponPrice: item.couponPrice,
+      commissionRate: item.commissionRate,
+      commissionAmount: item.commissionAmount,
+      monthSales: item.monthSales,
+      shopName: item.shopName,
+      brandName: item.brandName,
+      goodsSign: item.goodsSign,
+      itemLink: item.itemLink
+    })
+  )
+  router.push({
+    name: 'CpsGoodsSquareDetail',
+    query: {
+      platformCode: item.platformCode,
+      vendorCode: item.vendorCode,
+      goodsId: item.goodsId,
+      goodsSign: item.goodsSign,
+      selectionItemId: item.id
+    }
+  })
+}
+
+const handlePriceTrackChange = async (item: any) => {
+  item._trackLoading = true
+  try {
+    await CpsSelectionThemeApi.updateItemPriceTrackStatus({
+      id: item.id,
+      platformCode: item.platformCode,
+      goodsId: item.goodsId,
+      vendorCode: item.vendorCode,
+      title: item.title,
+      mainPic: item.mainPic,
+      actualPrice: item.actualPrice,
+      originalPrice: item.originalPrice,
+      couponPrice: item.couponPrice,
+      priceTrackStatus: item.priceTrackStatus || 0
+    })
+    ElMessage.success(item.priceTrackStatus === 1 ? '已开启价格趋势跟踪' : '已关闭价格趋势跟踪')
+    await getItems()
+  } catch {
+    item.priceTrackStatus = item.priceTrackStatus === 1 ? 0 : 1
+  } finally {
+    item._trackLoading = false
+  }
+}
+
+const batchUpdatePriceTrack = async (status: number) => {
+  if (selectedItemIds.value.length === 0) return
+  const actionText = status === 1 ? '开启' : '关闭'
+  await ElMessageBox.confirm(`确认批量${actionText}所选 ${selectedItemIds.value.length} 个商品的价格趋势跟踪？`, '价格跟踪设置', {
+    type: 'info'
+  })
+  try {
+    await CpsSelectionThemeApi.batchUpdateItemPriceTrackStatus({
+      ids: selectedItemIds.value,
+      priceTrackStatus: status
+    })
+    ElMessage.success(`批量${actionText}价格趋势跟踪成功`)
+    await getItems()
+  } catch {
+    // handled by request
+  }
+}
+
+const openTrendDialog = async (item: any) => {
+  currentTrendItem.value = item
+  trendDialogVisible.value = true
+  await loadTrendData(item.id, item.platformCode, item.goodsId)
+}
+
+const loadTrendData = async (selectionItemId?: number, platformCode?: string, goodsId?: string) => {
+  trendDialogLoading.value = true
+  try {
+    trendData.value = await CpsSelectionThemeApi.getPriceTrend({
+      selectionItemId,
+      platformCode,
+      goodsId
+    })
+  } finally {
+    trendDialogLoading.value = false
+  }
+}
+
+const handleDialogToggleTrack = async () => {
+  if (!trendData.value) return
+  try {
+    await CpsSelectionThemeApi.updateItemPriceTrackStatus({
+      id: trendData.value.selectionItemId,
+      platformCode: trendData.value.platformCode,
+      goodsId: trendData.value.goodsId,
+      priceTrackStatus: trendData.value.trackStatus
+    })
+    ElMessage.success(trendData.value.trackStatus === 1 ? '已开启价格趋势跟踪' : '已关闭价格趋势跟踪')
+    await loadTrendData(trendData.value.selectionItemId, trendData.value.platformCode, trendData.value.goodsId)
+    await getItems()
+  } catch {
+    trendData.value.trackStatus = trendData.value.trackStatus === 1 ? 0 : 1
+  }
+}
+
+const handleDialogManualPull = async () => {
+  if (!trendData.value?.selectionItemId) return
+  manualPulling.value = true
+  try {
+    await CpsSelectionThemeApi.pullItemPrice(trendData.value.selectionItemId)
+    ElMessage.success('最新价格抓取成功')
+    await loadTrendData(trendData.value.selectionItemId, trendData.value.platformCode, trendData.value.goodsId)
+    await getItems()
+  } finally {
+    manualPulling.value = false
+  }
+}
+
+const trendChartOptions = computed<EChartsOption>(() => {
+  if (!trendData.value || !trendData.value.historyList || trendData.value.historyList.length === 0) {
+    return {}
+  }
+  const dates = trendData.value.historyList.map(h => formatDateTime(h.snapshotTime))
+  const actualPrices = trendData.value.historyList.map(h => h.actualPrice)
+  const originalPrices = trendData.value.historyList.map(h => h.originalPrice || h.actualPrice)
+
+  return {
+    tooltip: {
+      trigger: 'axis',
+      formatter: (params: any) => {
+        if (!Array.isArray(params) || params.length === 0) return ''
+        const date = params[0].name
+        const item = trendData.value?.historyList[params[0].dataIndex]
+        let html = `<div style="font-weight: 600; margin-bottom: 4px;">${date}</div>`
+        params.forEach((p: any) => {
+          html += `<div>${p.marker} ${p.seriesName}: ¥${p.value}</div>`
+        })
+        if (item?.couponPrice) {
+          html += `<div style="color: #f56c6c;">优惠券: ¥${item.couponPrice}</div>`
+        }
+        if (item?.monthSales) {
+          html += `<div style="color: #909399;">月销: ${item.monthSales}</div>`
+        }
+        return html
+      }
+    },
+    legend: {
+      data: ['券后价', '原价']
+    },
+    grid: {
+      left: 16,
+      right: 24,
+      top: 40,
+      bottom: 24,
+      containLabel: true
+    },
+    xAxis: {
+      type: 'category',
+      boundaryGap: false,
+      data: dates
+    },
+    yAxis: {
+      type: 'value',
+      axisLabel: {
+        formatter: '¥{value}'
+      }
+    },
+    series: [
+      {
+        name: '券后价',
+        type: 'line',
+        smooth: true,
+        data: actualPrices,
+        itemStyle: { color: '#ff4d4f' },
+        areaStyle: {
+          color: {
+            type: 'linear',
+            x: 0,
+            y: 0,
+            x2: 0,
+            y2: 1,
+            colorStops: [
+              { offset: 0, color: 'rgba(255, 77, 79, 0.35)' },
+              { offset: 1, color: 'rgba(255, 77, 79, 0.02)' }
+            ]
+          }
+        }
+      },
+      {
+        name: '原价',
+        type: 'line',
+        smooth: true,
+        data: originalPrices,
+        itemStyle: { color: '#909399' },
+        lineStyle: { type: 'dashed' }
+      }
+    ]
+  }
+})
 
 const themeLoading = ref(false)
 const itemLoading = ref(false)

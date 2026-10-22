@@ -46,6 +46,15 @@ import org.springframework.dao.DuplicateKeyException;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.validation.annotation.Validated;
+import lombok.extern.slf4j.Slf4j;
+import com.qiji.cps.framework.mybatis.core.query.LambdaQueryWrapperX;
+import com.qiji.cps.module.cps.dal.dataobject.goods.CpsGoodsPriceSnapshotDO;
+import com.qiji.cps.module.cps.dal.mysql.goods.CpsGoodsPriceSnapshotMapper;
+import com.qiji.cps.module.cps.controller.admin.selection.vo.CpsSelectionThemeItemPriceTrackReqVO;
+import com.qiji.cps.module.cps.controller.admin.selection.vo.CpsSelectionThemeItemPriceTrackBatchReqVO;
+import com.qiji.cps.module.cps.controller.admin.selection.vo.CpsGoodsPricePointVO;
+import com.qiji.cps.module.cps.controller.admin.selection.vo.CpsGoodsPriceTrendRespVO;
+import java.math.RoundingMode;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -64,6 +73,7 @@ import static com.qiji.cps.module.cps.enums.CpsErrorCodeConstants.SELECTION_THEM
 import static com.qiji.cps.module.cps.enums.CpsErrorCodeConstants.SELECTION_THEME_NOT_EXISTS;
 import static com.qiji.cps.module.cps.enums.CpsErrorCodeConstants.SELECTION_THEME_STATUS_INVALID;
 
+@Slf4j
 @Service
 @Validated
 public class CpsSelectionThemeServiceImpl implements CpsSelectionThemeService {
@@ -88,6 +98,9 @@ public class CpsSelectionThemeServiceImpl implements CpsSelectionThemeService {
 
     @Resource
     private CpsSelectionThemeItemMapper itemMapper;
+
+    @Resource
+    private CpsGoodsPriceSnapshotMapper priceSnapshotMapper;
 
     @Resource
     private CpsSelectionAiReviewMapper aiReviewMapper;
@@ -1316,4 +1329,371 @@ public class CpsSelectionThemeServiceImpl implements CpsSelectionThemeService {
         }
         return null;
     }
+
+    private static final String PRICE_TRACKING_DEFAULT_THEME_CODE = "PRICE_TRACKING_DEFAULT";
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void updateItemPriceTrackStatus(CpsSelectionThemeItemPriceTrackReqVO reqVO) {
+        CpsSelectionThemeItemDO item = null;
+        if (reqVO.getId() != null) {
+            item = itemMapper.selectById(reqVO.getId());
+        }
+        if (item == null && StringUtils.hasText(reqVO.getPlatformCode()) && StringUtils.hasText(reqVO.getGoodsId())) {
+            List<CpsSelectionThemeItemDO> existingItems = itemMapper.selectList(new LambdaQueryWrapperX<CpsSelectionThemeItemDO>()
+                    .eq(CpsSelectionThemeItemDO::getPlatformCode, reqVO.getPlatformCode())
+                    .eq(CpsSelectionThemeItemDO::getGoodsId, reqVO.getGoodsId())
+                    .orderByDesc(CpsSelectionThemeItemDO::getId));
+            if (existingItems != null && !existingItems.isEmpty()) {
+                item = existingItems.get(0);
+            } else if (Integer.valueOf(1).equals(reqVO.getPriceTrackStatus())) {
+                CpsSelectionThemeDO defaultTheme = getOrCreatePriceTrackingTheme();
+                item = CpsSelectionThemeItemDO.builder()
+                        .themeId(defaultTheme.getId())
+                        .platformCode(reqVO.getPlatformCode())
+                        .vendorCode(firstText(reqVO.getVendorCode(), "dataoke"))
+                        .goodsId(reqVO.getGoodsId())
+                        .title(firstText(reqVO.getTitle(), "跟踪商品 " + reqVO.getGoodsId()))
+                        .mainPic(reqVO.getMainPic())
+                        .actualPrice(reqVO.getActualPrice())
+                        .originalPrice(reqVO.getOriginalPrice())
+                        .couponPrice(reqVO.getCouponPrice())
+                        .status(CpsSelectionConstants.ItemStatus.ENABLED)
+                        .sourceType("DETAIL_TRACK")
+                        .topFlag(0)
+                        .manualAdjusted(1)
+                        .snapshotTime(LocalDateTime.now())
+                        .priceTrackStatus(1)
+                        .priceTrackTime(LocalDateTime.now())
+                        .build();
+                itemMapper.insert(item);
+                recordInitialPriceSnapshot(item);
+                return;
+            }
+        }
+
+        if (item == null) {
+            throw exception(SELECTION_THEME_ITEM_NOT_EXISTS);
+        }
+
+        Integer newStatus = reqVO.getPriceTrackStatus();
+        item.setPriceTrackStatus(newStatus);
+        if (Integer.valueOf(1).equals(newStatus)) {
+            item.setPriceTrackTime(LocalDateTime.now());
+            List<CpsGoodsPriceSnapshotDO> existingSnapshots = priceSnapshotMapper.selectListBySelectionItemId(item.getId());
+            if (existingSnapshots.isEmpty()) {
+                recordInitialPriceSnapshot(item);
+            }
+        }
+        itemMapper.updateById(item);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void batchUpdateItemPriceTrackStatus(CpsSelectionThemeItemPriceTrackBatchReqVO reqVO) {
+        if (reqVO.getIds() == null || reqVO.getIds().isEmpty()) {
+            return;
+        }
+        for (Long id : reqVO.getIds()) {
+            updateItemPriceTrackStatus(CpsSelectionThemeItemPriceTrackReqVO.builder()
+                    .id(id)
+                    .priceTrackStatus(reqVO.getPriceTrackStatus())
+                    .build());
+        }
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public CpsGoodsPricePointVO pullItemPrice(Long selectionItemId) {
+        CpsSelectionThemeItemDO item = itemMapper.selectById(selectionItemId);
+        if (item == null) {
+            throw exception(SELECTION_THEME_ITEM_NOT_EXISTS);
+        }
+        return pullSingleItemPrice(item);
+    }
+
+    @Override
+    public String trackTrackedItemPrices(Integer batchSize) {
+        int limit = batchSize != null && batchSize > 0 ? batchSize : 50;
+        List<CpsSelectionThemeItemDO> trackedItems = itemMapper.selectList(
+                new LambdaQueryWrapperX<CpsSelectionThemeItemDO>()
+                        .eq(CpsSelectionThemeItemDO::getPriceTrackStatus, 1)
+                        .eq(CpsSelectionThemeItemDO::getStatus, CpsSelectionConstants.ItemStatus.ENABLED)
+                        .orderByAsc(CpsSelectionThemeItemDO::getPriceTrackTime)
+                        .last("LIMIT " + limit)
+        );
+        if (trackedItems == null || trackedItems.isEmpty()) {
+            return "未发现开启价格趋势跟踪的选品商品";
+        }
+        int success = 0;
+        int failed = 0;
+        for (CpsSelectionThemeItemDO item : trackedItems) {
+            try {
+                pullSingleItemPrice(item);
+                success++;
+            } catch (Exception e) {
+                log.error("[trackTrackedItemPrices] 价格拉取失败: itemId={}, goodsId={}, error={}",
+                        item.getId(), item.getGoodsId(), e.getMessage());
+                failed++;
+            }
+        }
+        return String.format("定时价格跟踪完成：共扫描 %d 个商品，成功 %d 个，失败 %d 个",
+                trackedItems.size(), success, failed);
+    }
+
+    @Override
+    public CpsGoodsPriceTrendRespVO getGoodsPriceTrend(Long selectionItemId, String platformCode, String goodsId) {
+        CpsSelectionThemeItemDO item = null;
+        if (selectionItemId != null) {
+            item = itemMapper.selectById(selectionItemId);
+        }
+        if (item == null && StringUtils.hasText(platformCode) && StringUtils.hasText(goodsId)) {
+            List<CpsSelectionThemeItemDO> items = itemMapper.selectList(new LambdaQueryWrapperX<CpsSelectionThemeItemDO>()
+                    .eq(CpsSelectionThemeItemDO::getPlatformCode, platformCode)
+                    .eq(CpsSelectionThemeItemDO::getGoodsId, goodsId)
+                    .orderByDesc(CpsSelectionThemeItemDO::getPriceTrackStatus)
+                    .orderByDesc(CpsSelectionThemeItemDO::getId));
+            if (items != null && !items.isEmpty()) {
+                item = items.get(0);
+            }
+        }
+
+        List<CpsGoodsPriceSnapshotDO> snapshots = new ArrayList<>();
+        if (item != null) {
+            snapshots = priceSnapshotMapper.selectListBySelectionItemId(item.getId());
+            if (snapshots.isEmpty()) {
+                snapshots = priceSnapshotMapper.selectListByExternalGoods(item.getPlatformCode(), item.getGoodsId());
+            }
+        } else if (StringUtils.hasText(platformCode) && StringUtils.hasText(goodsId)) {
+            snapshots = priceSnapshotMapper.selectListByExternalGoods(platformCode, goodsId);
+        }
+
+        Integer trackStatus = (item != null && item.getPriceTrackStatus() != null) ? item.getPriceTrackStatus() : 0;
+        Long targetItemId = item != null ? item.getId() : selectionItemId;
+        String targetGoodsId = item != null ? item.getGoodsId() : goodsId;
+        String targetPlatform = item != null ? item.getPlatformCode() : platformCode;
+        String targetVendor = item != null ? item.getVendorCode() : null;
+        String targetTitle = item != null ? item.getTitle() : null;
+        LocalDateTime lastTrackTime = item != null ? item.getPriceTrackTime() : null;
+
+        BigDecimal currentPrice = item != null ? item.getActualPrice() : null;
+        BigDecimal originalPrice = item != null ? item.getOriginalPrice() : null;
+        BigDecimal couponPrice = item != null ? item.getCouponPrice() : null;
+
+        List<CpsGoodsPricePointVO> historyList = new ArrayList<>();
+        BigDecimal minPrice = null;
+        BigDecimal maxPrice = null;
+        BigDecimal sumPrice = BigDecimal.ZERO;
+        int count = 0;
+
+        for (CpsGoodsPriceSnapshotDO snap : snapshots) {
+            BigDecimal actual = toYuan(snap.getActualPrice());
+            BigDecimal orig = toYuan(snap.getOriginalPrice());
+            BigDecimal coup = toYuan(snap.getCouponPrice());
+            BigDecimal comm = toYuan(snap.getCommissionAmount());
+
+            if (actual != null) {
+                if (minPrice == null || actual.compareTo(minPrice) < 0) {
+                    minPrice = actual;
+                }
+                if (maxPrice == null || actual.compareTo(maxPrice) > 0) {
+                    maxPrice = actual;
+                }
+                sumPrice = sumPrice.add(actual);
+                count++;
+            }
+
+            historyList.add(CpsGoodsPricePointVO.builder()
+                    .id(snap.getId())
+                    .snapshotTime(snap.getSnapshotTime())
+                    .actualPrice(actual)
+                    .originalPrice(orig)
+                    .couponPrice(coup)
+                    .commissionRate(snap.getCommissionRate())
+                    .commissionAmount(comm)
+                    .monthSales(snap.getMonthSales())
+                    .shopName(snap.getShopName())
+                    .activityTag(snap.getActivityTag())
+                    .build());
+        }
+
+        BigDecimal avgPrice = null;
+        if (count > 0) {
+            avgPrice = sumPrice.divide(BigDecimal.valueOf(count), 2, RoundingMode.HALF_UP);
+        }
+
+        BigDecimal priceChange = BigDecimal.ZERO;
+        if (historyList.size() >= 2) {
+            BigDecimal firstActual = historyList.get(0).getActualPrice();
+            BigDecimal lastActual = historyList.get(historyList.size() - 1).getActualPrice();
+            if (firstActual != null && lastActual != null) {
+                priceChange = lastActual.subtract(firstActual);
+            }
+        }
+
+        if (currentPrice == null && !historyList.isEmpty()) {
+            currentPrice = historyList.get(historyList.size() - 1).getActualPrice();
+            originalPrice = historyList.get(historyList.size() - 1).getOriginalPrice();
+            couponPrice = historyList.get(historyList.size() - 1).getCouponPrice();
+        }
+
+        return CpsGoodsPriceTrendRespVO.builder()
+                .trackStatus(trackStatus)
+                .selectionItemId(targetItemId)
+                .goodsId(targetGoodsId)
+                .platformCode(targetPlatform)
+                .vendorCode(targetVendor)
+                .title(targetTitle)
+                .currentPrice(currentPrice)
+                .originalPrice(originalPrice)
+                .couponPrice(couponPrice)
+                .minPrice(minPrice != null ? minPrice : currentPrice)
+                .maxPrice(maxPrice != null ? maxPrice : currentPrice)
+                .avgPrice(avgPrice != null ? avgPrice : currentPrice)
+                .priceChange(priceChange)
+                .lastTrackTime(lastTrackTime)
+                .historyList(historyList)
+                .build();
+    }
+
+    private void recordInitialPriceSnapshot(CpsSelectionThemeItemDO item) {
+        CpsGoodsPriceSnapshotDO snapshot = CpsGoodsPriceSnapshotDO.builder()
+                .selectionItemId(item.getId())
+                .masterId(0L)
+                .sourceMappingId(0L)
+                .platformCode(item.getPlatformCode())
+                .vendorCode(item.getVendorCode() != null ? item.getVendorCode() : "")
+                .externalGoodsId(item.getGoodsId())
+                .goodsSign(item.getGoodsSign() != null ? item.getGoodsSign() : "")
+                .originalPrice(toCent(item.getOriginalPrice()))
+                .actualPrice(toCent(item.getActualPrice()))
+                .couponPrice(toCent(item.getCouponPrice()))
+                .commissionRate(item.getCommissionRate())
+                .commissionAmount(toCent(item.getCommissionAmount()))
+                .monthSales(item.getMonthSales())
+                .shopName(item.getShopName())
+                .activityTag(item.getActivityTag())
+                .snapshotTime(item.getSnapshotTime() != null ? item.getSnapshotTime() : LocalDateTime.now())
+                .rawData(item.getRawData())
+                .build();
+        priceSnapshotMapper.insert(snapshot);
+    }
+
+    private CpsGoodsPricePointVO pullSingleItemPrice(CpsSelectionThemeItemDO item) {
+        CpsGoodsSquareSearchReqVO searchReq = new CpsGoodsSquareSearchReqVO();
+        searchReq.setPlatformCode(item.getPlatformCode());
+        searchReq.setVendorCode(item.getVendorCode());
+                searchReq.setSearchField("goods_id");
+        searchReq.setKeyword(item.getGoodsId());
+        searchReq.setPageNo(1);
+        searchReq.setPageSize(1);
+
+        CpsGoodsSquareGoodsRespVO latest = null;
+        try {
+            CpsGoodsSquareSearchRespVO resp = goodsSquareService.searchGoods(searchReq);
+            if (resp != null && resp.getList() != null && !resp.getList().isEmpty()) {
+                latest = resp.getList().get(0);
+            }
+        } catch (Exception e) {
+            log.warn("[pullSingleItemPrice] 检索商品最新价格异常: platformCode={}, goodsId={}, error={}",
+                    item.getPlatformCode(), item.getGoodsId(), e.getMessage());
+        }
+
+        BigDecimal actualPrice = latest != null && latest.getActualPrice() != null ?
+                latest.getActualPrice() : item.getActualPrice();
+        BigDecimal originalPrice = latest != null && latest.getOriginalPrice() != null ?
+                latest.getOriginalPrice() : item.getOriginalPrice();
+        BigDecimal couponPrice = latest != null && latest.getCouponPrice() != null ?
+                latest.getCouponPrice() : item.getCouponPrice();
+        BigDecimal commissionRate = latest != null && latest.getCommissionRate() != null ?
+                latest.getCommissionRate() : item.getCommissionRate();
+        BigDecimal commissionAmount = latest != null && latest.getCommissionAmount() != null ?
+                latest.getCommissionAmount() : item.getCommissionAmount();
+        Long monthSales = latest != null && latest.getMonthSales() != null ?
+                latest.getMonthSales() : item.getMonthSales();
+        String shopName = latest != null && StringUtils.hasText(latest.getShopName()) ?
+                latest.getShopName() : item.getShopName();
+        String activityTag = latest != null && StringUtils.hasText(latest.getActivityTag()) ?
+                latest.getActivityTag() : item.getActivityTag();
+
+        LocalDateTime now = LocalDateTime.now();
+
+        CpsGoodsPriceSnapshotDO snapshot = CpsGoodsPriceSnapshotDO.builder()
+                .selectionItemId(item.getId())
+                .masterId(0L)
+                .sourceMappingId(0L)
+                .platformCode(item.getPlatformCode())
+                .vendorCode(item.getVendorCode() != null ? item.getVendorCode() : "")
+                .externalGoodsId(item.getGoodsId())
+                .goodsSign(item.getGoodsSign() != null ? item.getGoodsSign() : "")
+                .originalPrice(toCent(originalPrice))
+                .actualPrice(toCent(actualPrice))
+                .couponPrice(toCent(couponPrice))
+                .commissionRate(commissionRate)
+                .commissionAmount(toCent(commissionAmount))
+                .monthSales(monthSales)
+                .shopName(shopName)
+                .activityTag(activityTag)
+                .snapshotTime(now)
+                .build();
+        priceSnapshotMapper.insert(snapshot);
+
+        item.setActualPrice(actualPrice);
+        item.setOriginalPrice(originalPrice);
+        item.setCouponPrice(couponPrice);
+        item.setCommissionRate(commissionRate);
+        item.setCommissionAmount(commissionAmount);
+        item.setMonthSales(monthSales);
+        item.setPriceTrackTime(now);
+        item.setSnapshotTime(now);
+        itemMapper.updateById(item);
+
+        return CpsGoodsPricePointVO.builder()
+                .id(snapshot.getId())
+                .snapshotTime(now)
+                .actualPrice(actualPrice)
+                .originalPrice(originalPrice)
+                .couponPrice(couponPrice)
+                .commissionRate(commissionRate)
+                .commissionAmount(commissionAmount)
+                .monthSales(monthSales)
+                .shopName(shopName)
+                .activityTag(activityTag)
+                .build();
+    }
+
+    private CpsSelectionThemeDO getOrCreatePriceTrackingTheme() {
+        CpsSelectionThemeDO theme = themeMapper.selectOne(new LambdaQueryWrapperX<CpsSelectionThemeDO>()
+                .eq(CpsSelectionThemeDO::getThemeCode, PRICE_TRACKING_DEFAULT_THEME_CODE));
+        if (theme != null) {
+            return theme;
+        }
+        theme = CpsSelectionThemeDO.builder()
+                .themeCode(PRICE_TRACKING_DEFAULT_THEME_CODE)
+                .themeName("商品价格趋势跟踪")
+                .themeType("CUSTOM")
+                .status(CpsSelectionConstants.ThemeStatus.PUBLISHED)
+                .goodsSquareVisible(1)
+                .description("用于存放开启价格趋势跟踪的选品商品")
+                .tags("价格跟踪,监控")
+                .sort(0)
+                .build();
+        themeMapper.insert(theme);
+        return theme;
+    }
+
+    private Integer toCent(BigDecimal amount) {
+        if (amount == null) {
+            return null;
+        }
+        return amount.multiply(BigDecimal.valueOf(100)).setScale(0, RoundingMode.HALF_UP).intValue();
+    }
+
+    private BigDecimal toYuan(Integer cents) {
+        if (cents == null) {
+            return null;
+        }
+        return BigDecimal.valueOf(cents).divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
+    }
+
 }

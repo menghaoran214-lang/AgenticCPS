@@ -3654,6 +3654,9 @@ WHERE NOT EXISTS (SELECT 1 FROM `system_schema_version` WHERE `module` = 'ai' AN
 INSERT INTO `system_schema_version` (`module`, `version`, `schema_update_time`, `script_source`, `description`, `status`, `tenant_id`, `deleted`, `creator`, `updater`)
 SELECT 'cps', 'v2.1.0', '2026-10-16 14:50:00', 'cps-update.sql', 'CPS联盟返利、转链、活动与分销全量表结构', 'SUCCESS', 0, b'0', 'system', 'system'
 WHERE NOT EXISTS (SELECT 1 FROM `system_schema_version` WHERE `module` = 'cps' AND `version` = 'v2.1.0');
+INSERT INTO `system_schema_version` (`module`, `version`, `schema_update_time`, `script_source`, `description`, `status`, `tenant_id`, `deleted`, `creator`, `updater`)
+SELECT 'cps', 'v2.1.1', '2026-10-22 10:48:46', 'cps-update.sql', '选品库商品支持开启价格趋势跟踪功能，支持开关、定时任务拉取与商品详情价格趋势查看', 'SUCCESS', 0, b'0', 'system', 'system'
+WHERE NOT EXISTS (SELECT 1 FROM `system_schema_version` WHERE `module` = 'cps' AND `version` = 'v2.1.1' AND `schema_update_time` = '2026-10-22 10:48:46');
 COMMIT;
 
 

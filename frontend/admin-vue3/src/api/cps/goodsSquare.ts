@@ -1,4 +1,5 @@
 import request from '@/config/axios'
+import type { CpsGoodsPriceTrendVO } from './selectionTheme'
 
 export interface CpsGoodsSquareSearchReqVO {
   keyword?: string
@@ -169,5 +170,8 @@ export const CpsGoodsSquareApi = {
     request.post<CpsGoodsSquareSearchRespVO>({ url: '/cps/goods-square/search-by-image', data }),
 
   generateLink: (data: CpsGoodsSquareLinkReqVO) =>
-    request.post<CpsGoodsSquareLinkRespVO>({ url: '/cps/goods-square/link', data })
+    request.post<CpsGoodsSquareLinkRespVO>({ url: '/cps/goods-square/link', data }),
+
+  getPriceTrend: (params: { selectionItemId?: number; platformCode?: string; goodsId?: string }) =>
+    request.get<CpsGoodsPriceTrendVO>({ url: '/cps/goods-square/price-trend', params })
 }
