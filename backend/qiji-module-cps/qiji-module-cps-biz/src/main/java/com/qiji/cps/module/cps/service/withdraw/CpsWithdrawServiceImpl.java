@@ -11,11 +11,15 @@ import jakarta.annotation.Resource;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.validation.annotation.Validated;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.Objects;
 
 import static com.qiji.cps.framework.common.exception.util.ServiceExceptionUtil.exception;
+import static com.qiji.cps.framework.common.util.servlet.ServletUtils.getClientIP;
+import com.qiji.cps.module.cps.dal.dataobject.withdraw.CpsWithdrawAccountDO;
 import static com.qiji.cps.module.cps.enums.CpsErrorCodeConstants.WITHDRAW_NOT_EXISTS;
+import static com.qiji.cps.module.cps.enums.CpsErrorCodeConstants.WITHDRAW_ACCOUNT_NOT_EXISTS;
 
 /**
  * CPS 提现申请 Service 实现类
@@ -24,6 +28,7 @@ import static com.qiji.cps.module.cps.enums.CpsErrorCodeConstants.WITHDRAW_NOT_E
  */
 @Service
 @Validated
+@Slf4j
 public class CpsWithdrawServiceImpl implements CpsWithdrawService {
 
     @Resource
@@ -32,29 +37,75 @@ public class CpsWithdrawServiceImpl implements CpsWithdrawService {
     private CpsWithdrawStepExecutor stepExecutor;
     @Resource
     private CpsWithdrawTransferExecutor transferExecutor;
+    @Resource
+    private CpsWithdrawAccountService withdrawAccountService;
+    @Resource
+    private CpsWithdrawSecurityService withdrawSecurityService;
 
     @Override
     public Long createWithdraw(Long memberId, AppCpsWithdrawCreateReqVO request) {
         if (memberId == null || memberId <= 0) throw new IllegalArgumentException("登录会员不能为空");
         CpsWithdrawDO existing = withdrawMapper.selectByIdempotencyKey(request.getIdempotencyKey());
         if (existing != null) return validateReplay(existing, memberId, request);
-        CpsWithdrawCreateCommand command = new CpsWithdrawCreateCommand(memberId, request.getAmountCent(),
-                request.getWithdrawType(), request.getWithdrawAccount(), request.getWithdrawAccountName(),
-                request.getIdempotencyKey());
+
+        // 1. 查询绑定账户（若指定）
+        CpsWithdrawAccountDO account = null;
+        if (request.getAccountId() != null) {
+            account = withdrawAccountService.getAccount(memberId, request.getAccountId());
+            if (account == null) {
+                throw exception(WITHDRAW_ACCOUNT_NOT_EXISTS);
+            }
+        }
+
+        // 2. 安全风控评估
+        String clientIp = getClientIP();
+        CpsWithdrawSecurityResult securityResult = withdrawSecurityService.checkAndEvaluate(
+                memberId, request, account, clientIp);
+
+        // 3. 构建创建命令
+        CpsWithdrawCreateCommand command = new CpsWithdrawCreateCommand(
+                memberId, request.getAmountCent(),
+                securityResult.getFinalWithdrawType(),
+                securityResult.getFinalWithdrawAccount(),
+                securityResult.getFinalWithdrawAccountName(),
+                request.getIdempotencyKey(),
+                securityResult.getAccountId(),
+                securityResult.getRiskLevel(),
+                clientIp,
+                null
+        );
+
+        CpsWithdrawDO withdraw;
         try {
-            return stepExecutor.createAndFreeze(command).getId();
+            withdraw = stepExecutor.createAndFreeze(command);
         } catch (DuplicateKeyException duplicate) {
             existing = withdrawMapper.selectByIdempotencyKey(request.getIdempotencyKey());
             if (existing == null) throw duplicate;
             return validateReplay(existing, memberId, request);
         }
+
+        // 4. 更新提现账户最近使用时间
+        if (securityResult.getAccountId() != null) {
+            withdrawAccountService.markAccountUsed(memberId, securityResult.getAccountId());
+        }
+
+        // 5. 分级出款决策：低风险小额常用账户系统免审自动打款
+        if (Integer.valueOf(0).equals(securityResult.getRiskLevel())) {
+            try {
+                approveWithdraw(withdraw.getId(), securityResult.getReviewNote());
+            } catch (Exception ex) {
+                log.warn("[createWithdraw] 自动免审转账触发异常，转入后台补偿: withdrawId={}", withdraw.getId(), ex);
+            }
+        }
+
+        return withdraw.getId();
     }
 
     private Long validateReplay(CpsWithdrawDO existing, Long memberId, AppCpsWithdrawCreateReqVO request) {
+        boolean accountMatch = (request.getAccountId() != null && Objects.equals(request.getAccountId(), existing.getAccountId()))
+                || (request.getWithdrawAccount() != null && Objects.equals(request.getWithdrawAccount(), existing.getWithdrawAccount()));
         if (!memberId.equals(existing.getMemberId()) || !request.getAmountCent().equals(existing.getAmountCent())
-                || !Objects.equals(request.getWithdrawType(), existing.getWithdrawType())
-                || !Objects.equals(request.getWithdrawAccount(), existing.getWithdrawAccount())
-                || !Objects.equals(request.getWithdrawAccountName(), existing.getWithdrawAccountName())) {
+                || !accountMatch) {
             throw new IllegalStateException("幂等键已用于其他提现申请");
         }
         return existing.getId();

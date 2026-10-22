@@ -33,6 +33,13 @@ public interface CpsWithdrawMapper extends BaseMapperX<CpsWithdrawDO> {
                 .eq(CpsWithdrawDO::getIdempotencyKey, idempotencyKey).last("LIMIT 1"));
     }
 
+    default List<CpsWithdrawDO> selectTodayActiveList(Long memberId, LocalDateTime startOfDay, LocalDateTime endOfDay) {
+        return selectList(new LambdaQueryWrapperX<CpsWithdrawDO>()
+                .eq(CpsWithdrawDO::getMemberId, memberId)
+                .between(CpsWithdrawDO::getCreateTime, startOfDay, endOfDay)
+                .notIn(CpsWithdrawDO::getStatus, "rejected", "failed"));
+    }
+
     default PageResult<CpsWithdrawDO> selectMemberPage(Long memberId, int pageNo, int pageSize) {
         com.qiji.cps.framework.common.pojo.PageParam page = new com.qiji.cps.framework.common.pojo.PageParam();
         page.setPageNo(pageNo);

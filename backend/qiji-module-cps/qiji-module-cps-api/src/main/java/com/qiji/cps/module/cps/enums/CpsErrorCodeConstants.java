@@ -46,6 +46,12 @@ public interface CpsErrorCodeConstants {
     ErrorCode WITHDRAW_STATUS_INVALID = new ErrorCode(1_100_007_001, "提现状态不合法，无法执行此操作");
     ErrorCode WITHDRAW_AMOUNT_MIN = new ErrorCode(1_100_007_002, "提现金额不能低于最低限额");
     ErrorCode WITHDRAW_DAILY_LIMIT = new ErrorCode(1_100_007_003, "今日提现次数已达上限");
+    ErrorCode WITHDRAW_ACCOUNT_NOT_EXISTS = new ErrorCode(1_100_007_004, "提现账户不存在");
+    ErrorCode WITHDRAW_ACCOUNT_EXISTS = new ErrorCode(1_100_007_005, "该提现账户已绑定，请勿重复添加");
+    ErrorCode WITHDRAW_NAME_NOT_MATCH_REAL = new ErrorCode(1_100_007_006, "收款人姓名与实名认证姓名不一致");
+    ErrorCode WITHDRAW_DAILY_AMOUNT_LIMIT = new ErrorCode(1_100_007_007, "今日累计提现金额已达上限");
+    ErrorCode WITHDRAW_AMOUNT_MAX = new ErrorCode(1_100_007_008, "单笔提现金额超出最大限制");
+    ErrorCode WITHDRAW_SECURITY_SMS_REQUIRED = new ErrorCode(1_100_007_009, "当前出金需输入短信验证码");
 
     // ========== 统计 1-100-008-000 ==========
     ErrorCode STATISTICS_NOT_EXISTS = new ErrorCode(1_100_008_000, "统计记录不存在");

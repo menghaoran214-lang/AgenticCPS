@@ -3660,6 +3660,9 @@ WHERE NOT EXISTS (SELECT 1 FROM `system_schema_version` WHERE `module` = 'cps' A
 INSERT INTO `system_schema_version` (`module`, `version`, `schema_update_time`, `script_source`, `description`, `status`, `tenant_id`, `deleted`, `creator`, `updater`)
 SELECT 'cps', 'v2.1.2', '2026-10-22 12:15:00', 'cps-update.sql', 'CPS三级分销推广关系表(cps_promoter_relation)、多级分账规则配置表(cps_split_rule)、分账记录角色扩展与净佣金池瓜分引擎支持', 'SUCCESS', 0, b'0', 'system', 'system'
 WHERE NOT EXISTS (SELECT 1 FROM `system_schema_version` WHERE `module` = 'cps' AND `version` = 'v2.1.2' AND `schema_update_time` = '2026-10-22 12:15:00');
+INSERT INTO `system_schema_version` (`module`, `version`, `schema_update_time`, `script_source`, `description`, `status`, `tenant_id`, `deleted`, `creator`, `updater`)
+SELECT 'cps', 'v2.1.3', '2026-10-22 14:42:48', 'cps-update.sql', '新增会员提现账户管理表(cps_withdraw_account)与提现安全风控审计支持', 'SUCCESS', 0, b'0', 'system', 'system'
+WHERE NOT EXISTS (SELECT 1 FROM `system_schema_version` WHERE `module` = 'cps' AND `version` = 'v2.1.3' AND `schema_update_time` = '2026-10-22 14:42:48');
 COMMIT;
 
 

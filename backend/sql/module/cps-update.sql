@@ -1625,6 +1625,16 @@ WHERE NOT EXISTS (
   SELECT 1 FROM `system_schema_version` WHERE `module` = 'cps' AND `version` = 'v2.1.2' AND `schema_update_time` = '2026-10-22 12:15:00'
 );
 
+-- ============================================================
+-- 修改时间：2026-10-22 14:42:48
+-- 目的：新增会员提现账户管理表(cps_withdraw_account)与提现安全风控审计支持
+-- ============================================================
+INSERT INTO `system_schema_version` (`module`, `version`, `schema_update_time`, `script_source`, `description`, `status`, `tenant_id`, `deleted`, `creator`, `updater`)
+SELECT 'cps', 'v2.1.3', '2026-10-22 14:42:48', 'cps-update.sql', '新增会员提现账户管理表(cps_withdraw_account)与提现安全风控审计支持', 'SUCCESS', 0, b'0', 'system', 'system'
+WHERE NOT EXISTS (
+  SELECT 1 FROM `system_schema_version` WHERE `module` = 'cps' AND `version` = 'v2.1.3' AND `schema_update_time` = '2026-10-22 14:42:48'
+);
+
 SET FOREIGN_KEY_CHECKS = 1;
 -- ============================================================
 -- Modified: 2026-08-12 18:35:00
@@ -2041,4 +2051,45 @@ INSERT INTO system_schema_version (module, version, schema_update_time, script_s
 SELECT 'cps', 'v2.1.2', '2026-10-22 12:15:00', 'cps-update.sql', 'CPS三级分销推广关系表(cps_promoter_relation)、多级分账规则配置表(cps_split_rule)、分账记录角色扩展与净佣金池瓜分引擎支持', 'SUCCESS', 0, b'0', 'system', 'system'
 WHERE NOT EXISTS (
   SELECT 1 FROM system_schema_version WHERE module = 'cps' AND version = 'v2.1.2' AND schema_update_time = '2026-10-22 12:15:00'
+);
+
+-- ----------------------------------------------------------------------------------------------------
+-- 修改时间：2026-10-22 14:45:00
+-- 描述：新增会员提现账户管理表(cps_withdraw_account)与提现单安全风控字段扩展
+-- ----------------------------------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS cps_withdraw_account (
+  id                    bigint        NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  member_id             bigint        NOT NULL COMMENT '会员用户ID',
+  	ype                  varchar(32)   NOT NULL COMMENT '账户类型（alipay:支付宝 wechat:微信 bank:银行卡）',
+  ccount               varchar(128)  NOT NULL COMMENT '提现账号（支付宝账号/微信OpenID/银行卡号）',
+  ccount_name          varchar(64)   NOT NULL COMMENT '真实姓名（必须与收款实名一致）',
+  ank_name             varchar(64)            DEFAULT NULL COMMENT '开户行（银行卡时有效）',
+  is_default            bit(1)        NOT NULL DEFAULT b\'0\' COMMENT '是否默认账户（0:否 1:是）',
+  status                tinyint       NOT NULL DEFAULT 0 COMMENT '状态（0:正常 1:禁用）',
+  last_used_time        datetime               DEFAULT NULL COMMENT '最近使用时间',
+  creator               varchar(64)            DEFAULT NULL COMMENT '创建人',
+  create_time           datetime      NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  updater               varchar(64)            DEFAULT NULL COMMENT '更新人',
+  update_time           datetime      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  deleted               bit(1)        NOT NULL DEFAULT b\'0\' COMMENT '是否删除',
+  	enant_id             bigint        NOT NULL DEFAULT 0 COMMENT '租户ID',
+  PRIMARY KEY (id),
+  KEY idx_member_tenant (	enant_id, member_id, 	ype),
+  KEY idx_create_time (create_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='会员提现账户管理表';
+
+ALTER TABLE cps_withdraw
+  ADD COLUMN ccount_id bigint NULL DEFAULT NULL COMMENT '关联会员提现账户ID' AFTER withdraw_account_name,
+  ADD COLUMN 
+isk_level tinyint NOT NULL DEFAULT 0 COMMENT '风控级别: 0正常自动 1待人工审核 2风控拦截' AFTER 
+eview_note,
+  ADD COLUMN client_ip varchar(64) NULL DEFAULT NULL COMMENT '申请客户端IP' AFTER idempotency_key,
+  ADD COLUMN user_agent varchar(512) NULL DEFAULT NULL COMMENT '客户端UserAgent' AFTER client_ip;
+
+-- 记录数据库结构版本号
+INSERT INTO system_schema_version (module, version, schema_update_time, script_source, description, status, tenant_id, deleted, creator, updater)
+SELECT 'cps', 'v2.1.3', '2026-10-22 14:45:00', 'cps-update.sql', '新增会员提现账户管理表(cps_withdraw_account)与提现安全风控审计支持', 'SUCCESS', 0, b\'0\', 'system', 'system'
+WHERE NOT EXISTS (
+  SELECT 1 FROM system_schema_version WHERE module = 'cps' AND version = 'v2.1.3' AND schema_update_time = '2026-10-22 14:45:00'
 );

@@ -28,6 +28,8 @@ class CpsWithdrawServiceImplTest {
     @Mock private CpsWithdrawMapper withdrawMapper;
     @Mock private CpsWithdrawStepExecutor stepExecutor;
     @Mock private CpsWithdrawTransferExecutor transferExecutor;
+    @Mock private CpsWithdrawAccountService withdrawAccountService;
+    @Mock private CpsWithdrawSecurityService withdrawSecurityService;
 
     @Test
     void repeatedApplicationReturnsOriginalOrderOnlyForSameMemberAndAmount() {
@@ -58,24 +60,25 @@ class CpsWithdrawServiceImplTest {
         try (MockedStatic<SecurityFrameworkUtils> security = mockStatic(SecurityFrameworkUtils.class)) {
             security.when(SecurityFrameworkUtils::getLoginUserId).thenReturn(77L);
             service.approveWithdraw(8L, "ok");
+            verify(stepExecutor).markReviewing(8L, "ok", 77L);
+            verify(transferExecutor).startTransfer(8L);
         }
-
-        verify(transferExecutor).startTransfer(8L);
     }
 
     @Test
-    void rejectDelegatesToAtomicUnfreezeStep() {
-        service.rejectWithdraw(8L, "bad account");
-        verify(stepExecutor).rejectAndUnfreeze(8L, "bad account", "withdraw-reject:8");
+    void rejectDelegatesToStepExecutor() {
+        service.rejectWithdraw(9L, "bad");
+        verify(stepExecutor).rejectAndUnfreeze(9L, "bad", "withdraw-reject:9");
     }
 
-    private AppCpsWithdrawCreateReqVO request(long amountCent, String key) {
-        AppCpsWithdrawCreateReqVO request = new AppCpsWithdrawCreateReqVO();
-        request.setAmountCent(amountCent);
-        request.setWithdrawType("alipay");
-        request.setWithdrawAccount("member@example.com");
-        request.setWithdrawAccountName("Member");
-        request.setIdempotencyKey(key);
-        return request;
+    private AppCpsWithdrawCreateReqVO request(Long amountCent, String idempotencyKey) {
+        AppCpsWithdrawCreateReqVO req = new AppCpsWithdrawCreateReqVO();
+        req.setAmountCent(amountCent);
+        req.setWithdrawType("alipay");
+        req.setWithdrawAccount("member@example.com");
+        req.setWithdrawAccountName("Member");
+        req.setIdempotencyKey(idempotencyKey);
+        return req;
     }
+
 }

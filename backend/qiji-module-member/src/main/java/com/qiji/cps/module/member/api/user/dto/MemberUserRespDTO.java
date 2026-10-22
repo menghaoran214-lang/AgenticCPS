@@ -22,6 +22,10 @@ public class MemberUserRespDTO {
      */
     private String nickname;
     /**
+     * 真实名字
+     */
+    private String name;
+    /**
      * 帐号状态
      *
      * 枚举 {@link CommonStatusEnum}

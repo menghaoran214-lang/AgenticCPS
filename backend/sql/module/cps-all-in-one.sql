@@ -1,7 +1,7 @@
 -- ============================================================
 -- CPS联盟返利系统 - 完整数据库建表脚本（All-in-One）
--- Version: 2.1.2
--- Date: 2026-10-22 12:15:00
+-- Version: 2.1.3
+-- Date: 2026-10-22 14:42:48
 -- Description: 新库全量初始化脚本，整合 CPS 核心表、P0 返利兑换、活动中心、选品库、CPX 扩展表、结构版本与更新时间追踪表、菜单与权限。
 -- Maintenance:
 --   1. 本文件只保存新库全量脚本。
@@ -505,6 +505,7 @@ CREATE TABLE `cps_withdraw` (
   `withdraw_type`         varchar(32)   NOT NULL DEFAULT 'alipay' COMMENT '提现类型（alipay:支付宝 wechat:微信 bank:银行卡）',
   `withdraw_account`      varchar(128)  NOT NULL COMMENT '提现账户',
   `withdraw_account_name` varchar(64)            DEFAULT NULL COMMENT '账户名称',
+  `account_id`            bigint                 DEFAULT NULL COMMENT '关联会员提现账户ID',
   `amount`                decimal(10,2) NOT NULL COMMENT '提现金额',
   `amount_cent`           bigint        NOT NULL COMMENT '提现金额（分，V2资金计算字段）',
   `fee_amount`            decimal(10,2)          DEFAULT '0.00' COMMENT '手续费',
@@ -513,12 +514,15 @@ CREATE TABLE `cps_withdraw` (
   `audit_user_id`         bigint                 DEFAULT NULL COMMENT '审核人ID',
   `audit_time`            datetime               DEFAULT NULL COMMENT '审核时间',
   `review_note`           varchar(512)           DEFAULT NULL COMMENT '审核备注',
+  `risk_level`            tinyint       NOT NULL DEFAULT '0' COMMENT '风控级别: 0正常自动 1待人工审核 2风控拦截',
   `transaction_no`        varchar(64)            DEFAULT NULL COMMENT '转账单号',
   `transfer_status`       varchar(32)            DEFAULT NULL COMMENT '打款状态（WAITING:待打款 PROCESSING:打款中 SUCCESS:成功 FAILED:失败）',
   `transfer_time`         datetime               DEFAULT NULL COMMENT '转账时间',
   `transfer_error`        varchar(512)           DEFAULT NULL COMMENT '转账错误信息',
   `freeze_record_id`      bigint                 DEFAULT NULL COMMENT '统一资产冻结记录ID',
   `idempotency_key`       varchar(64)   NOT NULL COMMENT '提现请求幂等键（租户内唯一）',
+  `client_ip`             varchar(64)            DEFAULT NULL COMMENT '申请客户端IP',
+  `user_agent`            varchar(512)           DEFAULT NULL COMMENT '客户端UserAgent',
   `status_version`        int           NOT NULL DEFAULT '0' COMMENT '状态CAS版本',
   `pay_transfer_id`       bigint                 DEFAULT NULL COMMENT 'Pay模块转账单ID',
   `transfer_channel_code` varchar(32)            DEFAULT NULL COMMENT 'Pay模块转账渠道编码',
@@ -542,6 +546,29 @@ CREATE TABLE `cps_withdraw` (
   KEY `idx_withdraw_compensation` (`tenant_id`, `status`, `next_retry_time`) USING BTREE,
   KEY `idx_pay_transfer_id` (`pay_transfer_id`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='提现申请表';
+
+DROP TABLE IF EXISTS `cps_withdraw_account`;
+CREATE TABLE `cps_withdraw_account` (
+  `id`                    bigint        NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `member_id`             bigint        NOT NULL COMMENT '会员用户ID',
+  `type`                  varchar(32)   NOT NULL COMMENT '账户类型（alipay:支付宝 wechat:微信 bank:银行卡）',
+  `account`               varchar(128)  NOT NULL COMMENT '提现账号（支付宝账号/微信OpenID/银行卡号）',
+  `account_name`          varchar(64)   NOT NULL COMMENT '真实姓名（必须与收款实名一致）',
+  `bank_name`             varchar(64)            DEFAULT NULL COMMENT '开户行（银行卡时有效）',
+  `is_default`            bit(1)        NOT NULL DEFAULT b'0' COMMENT '是否默认账户（0:否 1:是）',
+  `status`                tinyint       NOT NULL DEFAULT '0' COMMENT '状态（0:正常 1:禁用）',
+  `last_used_time`        datetime               DEFAULT NULL COMMENT '最近使用时间',
+  `creator`               varchar(64)            DEFAULT NULL COMMENT '创建人',
+  `create_time`           datetime      NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `updater`               varchar(64)            DEFAULT NULL COMMENT '更新人',
+  `update_time`           datetime      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  `deleted`               bit(1)        NOT NULL DEFAULT b'0' COMMENT '是否删除',
+  `tenant_id`             bigint        NOT NULL DEFAULT '0' COMMENT '租户ID',
+  PRIMARY KEY (`id`),
+  KEY `idx_member_tenant` (`tenant_id`, `member_id`, `type`),
+  KEY `idx_create_time` (`create_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='会员提现账户管理表';
+
 
 -- ----------------------------
 -- 8. 统计数据表（含Phase5扩展字段）

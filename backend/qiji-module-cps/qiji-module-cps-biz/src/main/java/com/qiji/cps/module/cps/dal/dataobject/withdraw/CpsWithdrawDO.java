@@ -51,6 +51,10 @@ public class CpsWithdrawDO extends TenantBaseDO {
      */
     private String withdrawAccountName;
     /**
+     * 关联会员提现账户ID
+     */
+    private Long accountId;
+    /**
      * 提现金额
      */
     private BigDecimal amount;
@@ -83,6 +87,10 @@ public class CpsWithdrawDO extends TenantBaseDO {
      */
     private String reviewNote;
     /**
+     * 风控级别: 0正常自动 1待人工审核 2风控拦截
+     */
+    private Integer riskLevel;
+    /**
      * 转账单号
      */
     private String transactionNo;
@@ -102,6 +110,10 @@ public class CpsWithdrawDO extends TenantBaseDO {
     private Long freezeRecordId;
     /** 请求幂等键，租户内唯一。 */
     private String idempotencyKey;
+    /** 申请客户端IP */
+    private String clientIp;
+    /** 客户端UserAgent */
+    private String userAgent;
     /** 提现状态 CAS 版本。 */
     private Integer statusVersion;
     /** Pay 模块转账单编号。 */
