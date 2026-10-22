@@ -42,6 +42,29 @@ public interface CpsRebateRecordMapper extends BaseMapperX<CpsRebateRecordDO> {
                 .last("LIMIT 1"));
     }
 
+    /**
+     * 按订单ID、返利类型和分账角色查询唯一返利记录
+     */
+    default CpsRebateRecordDO selectByOrderIdTypeAndRole(Long orderId, String rebateType, String splitRole) {
+        return selectOne(new LambdaQueryWrapperX<CpsRebateRecordDO>()
+                .eq(CpsRebateRecordDO::getOrderId, orderId)
+                .eq(CpsRebateRecordDO::getRebateType, rebateType)
+                .eqIfPresent(CpsRebateRecordDO::getSplitRole, splitRole)
+                .last("LIMIT 1"));
+    }
+
+    /**
+     * 按订单ID查询该订单下的所有返利/分账记录（用于退款级联扣回）
+     */
+    default List<CpsRebateRecordDO> selectListByOrderId(Long orderId) {
+        if (orderId == null) {
+            return Collections.emptyList();
+        }
+        return selectList(new LambdaQueryWrapperX<CpsRebateRecordDO>()
+                .eq(CpsRebateRecordDO::getOrderId, orderId)
+                .orderByAsc(CpsRebateRecordDO::getId));
+    }
+
     @Select("""
             SELECT COALESCE(SUM(rebate_amount), 0)
             FROM cps_rebate_record
@@ -60,6 +83,13 @@ public interface CpsRebateRecordMapper extends BaseMapperX<CpsRebateRecordDO> {
                 .eqIfPresent(CpsRebateRecordDO::getOrderId, orderId)
                 .eqIfPresent(CpsRebateRecordDO::getPlatformOrderId, platformOrderId)
                 .eqIfPresent(CpsRebateRecordDO::getIdempotencyKey, idempotencyKey)
+                .orderByDesc(CpsRebateRecordDO::getId));
+    }
+
+    default PageResult<CpsRebateRecordDO> selectPageByMemberAndSplitRole(Long memberId, String splitRole, com.qiji.cps.framework.common.pojo.PageParam pageParam) {
+        return selectPage(pageParam, new LambdaQueryWrapperX<CpsRebateRecordDO>()
+                .eq(CpsRebateRecordDO::getMemberId, memberId)
+                .eqIfPresent(CpsRebateRecordDO::getSplitRole, splitRole)
                 .orderByDesc(CpsRebateRecordDO::getId));
     }
 

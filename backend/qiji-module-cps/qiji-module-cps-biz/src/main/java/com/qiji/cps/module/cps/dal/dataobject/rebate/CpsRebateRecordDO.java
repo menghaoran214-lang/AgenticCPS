@@ -91,6 +91,24 @@ public class CpsRebateRecordDO extends TenantBaseDO {
      */
     private String rebateType;
     /**
+     * 分账角色
+     *
+     * 枚举 {@link com.qiji.cps.module.cps.enums.CpsSplitRoleEnum}
+     */
+    private String splitRole;
+    /**
+     * 产生订单的消费者/出单会员ID
+     */
+    private Long sourceMemberId;
+    /**
+     * 匹配的分账规则ID
+     */
+    private Long splitRuleId;
+    /**
+     * 分账规则与参数快照JSON
+     */
+    private String splitRuleSnapshot;
+    /**
      * 返利状态
      *
      * 枚举 {@link CpsRebateStatusEnum}

@@ -27,6 +27,7 @@ import org.springframework.util.StringUtils;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * 返利账户唯一写服务。所有余额变更、业务记录与资产流水在同一事务提交。
@@ -251,6 +252,77 @@ public class CpsRebateAssetServiceImpl implements CpsRebateAssetService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    public CpsFreezeRecordDO createSplitRebateFreeze(Long memberId, Long orderId, String platformOrderId,
+                                                     String businessType, String businessId, long amountCent,
+                                                     Integer freezeDays, String idempotencyKey) {
+        requirePositive(memberId, "会员ID");
+        requirePositive(amountCent, "冻结金额");
+        requireText(idempotencyKey, "幂等键");
+        CpsRebateAssetLedgerDO replay = ledgerMapper.selectByBusinessAndIdempotencyKey(businessType, idempotencyKey);
+        if (replay != null) {
+            return freezeRecordMapper.selectById(replay.getBusinessId());
+        }
+        policyService.assertWritable();
+
+        CpsRebateAccountDO account = lockOrCreateAccount(memberId);
+        replay = ledgerMapper.selectByBusinessAndIdempotencyKey(businessType, idempotencyKey);
+        if (replay != null) {
+            return freezeRecordMapper.selectById(replay.getBusinessId());
+        }
+        if (freezeRecordMapper.selectByBusinessId(businessType, businessId) != null) {
+            throw new IllegalStateException("已有分账冻结记录: " + businessId);
+        }
+        Balance before = balance(account);
+        Balance after = new Balance(before.available, Math.addExact(before.frozen, amountCent), before.debt);
+        persistAccount(account, after, 0L);
+
+        int days = freezeDays != null && freezeDays >= 1 ? freezeDays : 15;
+        LocalDateTime eligibleTime = LocalDateTime.now();
+        CpsFreezeRecordDO freeze = CpsFreezeRecordDO.builder()
+                .memberId(memberId).orderId(orderId).platformOrderId(platformOrderId)
+                .businessType(businessType).businessId(businessId).idempotencyKey(idempotencyKey)
+                .freezeAmount(moneyConverter.centToYuan(amountCent)).amountCent(amountCent)
+                .freezeDaysSnapshot(days).eligibleTime(eligibleTime)
+                .unfreezeTime(eligibleTime.plusDays(days))
+                .status(CpsFreezeStatusEnum.FROZEN.getStatus()).build();
+        freezeRecordMapper.insert(freeze);
+
+        appendLedger(memberId, businessType, String.valueOf(freeze.getId()), orderId,
+                platformOrderId, idempotencyKey, before, after,
+                CpsAssetOperatorContext.system(idempotencyKey, "平台结算后创建分账提成冻结"));
+        return freeze;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public CpsRebateAssetResult creditSplitRebate(Long memberId, Long orderId, String platformOrderId,
+                                                  String businessType, String businessId, long amountCent,
+                                                  String idempotencyKey) {
+        requirePositive(memberId, "会员ID");
+        requirePositive(amountCent, "入账金额");
+        requireText(idempotencyKey, "幂等键");
+        CpsRebateAssetLedgerDO replay = ledgerMapper.selectByBusinessAndIdempotencyKey(businessType, idempotencyKey);
+        if (replay != null) return result(replay, orderId, true);
+        policyService.assertWritable();
+
+        CpsRebateAccountDO account = lockOrCreateAccount(memberId);
+        replay = ledgerMapper.selectByBusinessAndIdempotencyKey(businessType, idempotencyKey);
+        if (replay != null) return result(replay, orderId, true);
+
+        Balance before = balance(account);
+        long repaid = repayOutstandingDebt(memberId, Math.min(amountCent, before.debt));
+        Balance after = new Balance(Math.addExact(before.available, amountCent - repaid),
+                before.frozen, before.debt - repaid);
+        persistAccount(account, after, amountCent);
+
+        CpsRebateAssetLedgerDO ledger = appendLedger(memberId, businessType, businessId, orderId,
+                platformOrderId, idempotencyKey, before, after,
+                CpsAssetOperatorContext.system(idempotencyKey, "平台结算后直接入账分账提成"));
+        return result(ledger, orderId, false);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
     public CpsRebateAssetResult reverseOrderRebate(Long orderId, String idempotencyKey) {
         CpsRebateAssetResult replay = replay(ORDER_REFUND, idempotencyKey);
         if (replay != null) return replay;
@@ -283,7 +355,46 @@ public class CpsRebateAssetServiceImpl implements CpsRebateAssetService {
         CpsRebateAssetLedgerDO ledger = appendLedger(rebate.getMemberId(), ORDER_REFUND, String.valueOf(orderId),
                 orderId, rebate.getPlatformOrderId(), idempotencyKey, before, after,
                 CpsAssetOperatorContext.system(idempotencyKey, "订单退款返利冲正"));
+
+        // 级联扣回该订单下的其他多级分账记录 (如 L1, L2 推荐人提成)
+        List<CpsRebateRecordDO> allRecords = rebateRecordMapper.selectListByOrderId(orderId);
+        for (CpsRebateRecordDO other : allRecords) {
+            if (Objects.equals(other.getId(), rebate.getId())) {
+                continue;
+            }
+            if (CpsRebateTypeEnum.REBATE.getType().equals(other.getRebateType())
+                    && !CpsRebateStatusEnum.REFUNDED.getStatus().equals(other.getRebateStatus())) {
+                reverseOneSplitRecord(other, idempotencyKey + ":" + other.getId());
+            }
+        }
+
         return result(ledger, orderId, false);
+    }
+
+    private void reverseOneSplitRecord(CpsRebateRecordDO other, String idempotencyKey) {
+        long otherAmountCent = moneyConverter.yuanToCent(other.getRebateAmount());
+        if (otherAmountCent <= 0) return;
+        CpsFreezeRecordDO otherFreeze = other.getFreezeRecordId() != null
+                ? freezeRecordMapper.selectById(other.getFreezeRecordId()) : null;
+        CpsRebateAccountDO otherAccount = lockOrCreateAccount(other.getMemberId());
+        Balance otherBefore = balance(otherAccount);
+        boolean otherReversingFrozen = otherFreeze != null && CpsFreezeStatusEnum.FROZEN.getStatus().equals(otherFreeze.getStatus());
+        long otherFrozenDeduct = otherReversingFrozen ? Math.min(otherAmountCent, otherBefore.frozen) : 0L;
+        long otherRemaining = otherAmountCent - otherFrozenDeduct;
+        long otherAvailableDeduct = Math.min(otherRemaining, otherBefore.available);
+        long otherDebtIncrease = otherRemaining - otherAvailableDeduct;
+        Balance otherAfter = new Balance(otherBefore.available - otherAvailableDeduct,
+                otherBefore.frozen - otherFrozenDeduct, Math.addExact(otherBefore.debt, otherDebtIncrease));
+        persistAccount(otherAccount, otherAfter, otherReversingFrozen ? 0L : -otherAmountCent);
+        if (otherFrozenDeduct > 0L) markFreeze(otherFreeze, CpsFreezeStatusEnum.DEDUCTED.getStatus(), null, null);
+        if (otherDebtIncrease > 0L) {
+            createDebt(other.getMemberId(), other.getOrderId(), other.getPlatformOrderId(),
+                    String.valueOf(other.getOrderId()), idempotencyKey, otherDebtIncrease);
+        }
+        createRefundRecord(other, idempotencyKey);
+        appendLedger(other.getMemberId(), ORDER_REFUND, String.valueOf(other.getOrderId()),
+                other.getOrderId(), other.getPlatformOrderId(), idempotencyKey, otherBefore, otherAfter,
+                CpsAssetOperatorContext.system(idempotencyKey, "分账提成级联扣回冲正"));
     }
 
     @Override

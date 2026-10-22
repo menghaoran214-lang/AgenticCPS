@@ -1,7 +1,7 @@
 -- ============================================================
 -- CPS联盟返利系统 - 完整数据库建表脚本（All-in-One）
--- Version: 2.1.1
--- Date: 2026-10-22 10:48:46
+-- Version: 2.1.2
+-- Date: 2026-10-22 12:15:00
 -- Description: 新库全量初始化脚本，整合 CPS 核心表、P0 返利兑换、活动中心、选品库、CPX 扩展表、结构版本与更新时间追踪表、菜单与权限。
 -- Maintenance:
 --   1. 本文件只保存新库全量脚本。
@@ -445,6 +445,10 @@ CREATE TABLE `cps_rebate_record` (
   `member_level_id_snapshot` bigint             DEFAULT NULL COMMENT '结算时会员等级ID快照',
   `idempotency_key`      varchar(128)           DEFAULT NULL COMMENT '资金操作幂等键',
   `rebate_type`          varchar(32)   NOT NULL DEFAULT 'rebate' COMMENT '返利类型（rebate:返利入账 refund:返利扣回 adjust:系统调整）',
+  `split_role`           varchar(32)   NOT NULL DEFAULT 'SELF' COMMENT '分账角色: SELF(自购/出单), PARENT_L1(一级推广), GRANDPARENT_L2(二级推广), PARTNER(合伙人级差), PLATFORM(平台留存)',
+  `source_member_id`     bigint                 DEFAULT NULL COMMENT '产生订单的消费者会员ID',
+  `split_rule_id`        bigint                 DEFAULT NULL COMMENT '匹配的分账规则ID',
+  `split_rule_snapshot`  text                   DEFAULT NULL COMMENT '分账比例与参数快照JSON',
   `rebate_status`        varchar(32)   NOT NULL DEFAULT 'pending' COMMENT '返利状态（pending:待结算 Rcptd:已到账 refunded:已扣回）',
   `preceding_rebate_id`  bigint                 DEFAULT NULL COMMENT '前序返利ID（扣回时关联）',
   `freeze_record_id`     bigint                 DEFAULT NULL COMMENT '关联的冻结记录ID',
@@ -456,7 +460,7 @@ CREATE TABLE `cps_rebate_record` (
   `deleted`              bit(1)                 DEFAULT b'0' COMMENT '是否删除',
   `tenant_id`            bigint        NOT NULL DEFAULT '0' COMMENT '租户编号',
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_tenant_order_rebate_type` (`tenant_id`, `order_id`, `rebate_type`) USING BTREE,
+  UNIQUE KEY `uk_tenant_order_rebate_split` (`tenant_id`, `order_id`, `rebate_type`, `split_role`) USING BTREE,
   KEY `idx_member_id` (`member_id`) USING BTREE,
   KEY `idx_order_id` (`order_id`) USING BTREE,
   KEY `idx_platform_order_id` (`platform_order_id`) USING BTREE,
@@ -2209,3 +2213,65 @@ SELECT 'CPS选品商品价格趋势跟踪拉取', 1, 'cpsGoodsPriceTrackingJob',
 WHERE NOT EXISTS (
   SELECT 1 FROM `infra_job` WHERE `handler_name` = 'cpsGoodsPriceTrackingJob' AND `deleted` = b'0'
 );
+
+-- ----------------------------
+-- 52. CPS推广员分销关系表
+-- ----------------------------
+DROP TABLE IF EXISTS `cps_promoter_relation`;
+CREATE TABLE `cps_promoter_relation` (
+  `id`                    bigint       NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `tenant_id`             bigint       NOT NULL DEFAULT '0' COMMENT '租户ID',
+  `member_id`             bigint       NOT NULL COMMENT '会员用户ID',
+  `parent_member_id`      bigint                DEFAULT NULL COMMENT '一级直接推荐人ID',
+  `grandparent_member_id` bigint                DEFAULT NULL COMMENT '二级间接推荐人ID',
+  `invite_code`           varchar(32)  NOT NULL COMMENT '会员专属邀请码',
+  `promoter_status`       tinyint      NOT NULL DEFAULT '1' COMMENT '分销资格状态: 0未激活/冻结 1正常有效',
+  `promoter_level`        tinyint      NOT NULL DEFAULT '1' COMMENT '推广员等级: 1普通会员 2VIP推广员 3团长/合伙人',
+  `bind_time`             datetime     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '绑定上级时间',
+  `team_count_l1`         int          NOT NULL DEFAULT '0' COMMENT '一级直推下线总人数',
+  `team_count_l2`         int          NOT NULL DEFAULT '0' COMMENT '二级间推下线总人数',
+  `team_order_count`      int          NOT NULL DEFAULT '0' COMMENT '团队累计出单量',
+  `total_rebate_cent`     bigint       NOT NULL DEFAULT '0' COMMENT '累计自购返利总额(分)',
+  `total_split_cent`      bigint       NOT NULL DEFAULT '0' COMMENT '累计推广分账提成总额(分)',
+  `creator`               varchar(64)           DEFAULT '' COMMENT '创建者',
+  `create_time`           datetime     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `updater`               varchar(64)           DEFAULT '' COMMENT '更新者',
+  `update_time`           datetime     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  `deleted`               bit(1)       NOT NULL DEFAULT b'0' COMMENT '是否删除',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_tenant_member` (`tenant_id`, `member_id`, `deleted`),
+  UNIQUE KEY `uk_tenant_invite_code` (`tenant_id`, `invite_code`, `deleted`),
+  KEY `idx_parent` (`tenant_id`, `parent_member_id`, `deleted`),
+  KEY `idx_grandparent` (`tenant_id`, `grandparent_member_id`, `deleted`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='CPS推广员分销关系与团队概况表';
+
+-- ----------------------------
+-- 53. CPS多级分账规则配置表
+-- ----------------------------
+DROP TABLE IF EXISTS `cps_split_rule`;
+CREATE TABLE `cps_split_rule` (
+  `id`                               bigint        NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `tenant_id`                        bigint        NOT NULL DEFAULT '0' COMMENT '租户ID',
+  `rule_name`                        varchar(64)   NOT NULL COMMENT '规则名称',
+  `platform_code`                    varchar(32)            DEFAULT NULL COMMENT '适用平台(NULL表示全平台通用)',
+  `member_level_id`                  bigint                 DEFAULT NULL COMMENT '适用出单人等级(NULL表示通用)',
+  `platform_share_rate`              decimal(5,4)  NOT NULL DEFAULT '0.2000' COMMENT '平台留存比例(如0.20表示扣留20%)',
+  `self_rebate_rate`                 decimal(5,4)  NOT NULL DEFAULT '0.6000' COMMENT '自购/出单人返利比例(占净佣金池的60%)',
+  `parent_rebate_rate`               decimal(5,4)  NOT NULL DEFAULT '0.2500' COMMENT '一级直接推荐人提成比例(占净佣金池的25%)',
+  `grandparent_rebate_rate`          decimal(5,4)  NOT NULL DEFAULT '0.1500' COMMENT '二级间接推荐人提成比例(占净佣金池的15%)',
+  `partner_spread_rate`              decimal(5,4)  NOT NULL DEFAULT '0.0000' COMMENT '合伙人/团长级差提成预留比例',
+  `attribution_priority`             tinyint       NOT NULL DEFAULT '1' COMMENT '跟单冲突归属优先级: 1关系链优先 2转链推广者优先',
+  `auto_lock_inviter_on_first_order` tinyint       NOT NULL DEFAULT '1' COMMENT '新客首单是否自动锁粉绑定转链推广人: 0否 1是',
+  `freeze_days`                      int           NOT NULL DEFAULT '15' COMMENT '提成分账冻结天数(天)',
+  `status`                           tinyint       NOT NULL DEFAULT '1' COMMENT '状态: 0停用 1启用',
+  `priority`                         int           NOT NULL DEFAULT '0' COMMENT '优先级(越大越优先)',
+  `creator`                          varchar(64)            DEFAULT '' COMMENT '创建者',
+  `create_time`                      datetime      NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `updater`                          varchar(64)            DEFAULT '' COMMENT '更新者',
+  `update_time`                      datetime      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  `deleted`                          bit(1)        NOT NULL DEFAULT b'0' COMMENT '是否删除',
+  PRIMARY KEY (`id`),
+  KEY `idx_rule_match` (`tenant_id`, `platform_code`, `member_level_id`, `status`, `deleted`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='CPS多级分账与提成规则配置表';
+
+CREATE OR REPLACE VIEW `cps_schema_version` AS SELECT * FROM `system_schema_version` WHERE `module` = 'cps';

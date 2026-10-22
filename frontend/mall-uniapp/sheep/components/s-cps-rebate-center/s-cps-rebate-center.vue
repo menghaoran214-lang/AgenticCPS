@@ -51,6 +51,14 @@
           </view>
           <text class="tool-arrow">›</text>
         </view>
+        <view class="tool-item promoter-tool" @tap="goAsset('/pages/cps/promoter/index')">
+          <text class="tool-icon">推</text>
+          <view class="tool-info">
+            <text class="tool-title">推广中心</text>
+            <text class="tool-description">邀请好友锁粉，享团队多级提成分润</text>
+          </view>
+          <text class="tool-arrow">›</text>
+        </view>
         <view class="tool-item aiot-tool" @tap="goTool('/pages/cps/scene')">
           <text class="tool-icon">智</text>
           <view class="tool-info">

@@ -13,6 +13,20 @@ public interface CpsRebateAssetService {
      */
     CpsRebateAssetResult creditOrderRebate(Long orderId, String idempotencyKey);
 
+    /**
+     * 为多级分账提成记录创建冻结资产（支持一级、二级、合伙人等推荐人）
+     */
+    CpsFreezeRecordDO createSplitRebateFreeze(Long memberId, Long orderId, String platformOrderId,
+                                             String businessType, String businessId, long amountCent,
+                                             Integer freezeDays, String idempotencyKey);
+
+    /**
+     * 将多级分账提成直接记入推荐人可用余额
+     */
+    CpsRebateAssetResult creditSplitRebate(Long memberId, Long orderId, String platformOrderId,
+                                           String businessType, String businessId, long amountCent,
+                                           String idempotencyKey);
+
     CpsRebateAssetResult releaseOrderRebate(Long freezeRecordId, CpsAssetOperatorContext operatorContext);
 
     CpsRebateAssetResult manualReleaseOrderRebate(Long freezeRecordId, CpsAssetOperatorContext operatorContext);

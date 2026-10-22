@@ -14,6 +14,13 @@ import com.qiji.cps.module.cps.enums.CpsOrderStatusEnum;
 import com.qiji.cps.module.cps.enums.CpsRebateStatusEnum;
 import com.qiji.cps.module.cps.enums.CpsRebateTypeEnum;
 import com.qiji.cps.module.cps.service.freeze.CpsFreezeService;
+import com.qiji.cps.module.cps.dal.dataobject.promoter.CpsPromoterRelationDO;
+import com.qiji.cps.module.cps.dal.dataobject.split.CpsSplitRuleDO;
+import com.qiji.cps.module.cps.enums.CpsSplitRoleEnum;
+import com.qiji.cps.module.cps.service.promoter.CpsPromoterRelationService;
+import com.qiji.cps.module.cps.service.split.CpsSplitRuleService;
+import com.qiji.cps.module.cps.service.split.calculator.CpsSplitAllocation;
+import com.qiji.cps.module.cps.service.split.calculator.CpsSplitCalculator;
 import com.qiji.cps.module.cps.service.rebate.asset.CpsMoneyConverter;
 import com.qiji.cps.module.cps.service.rebate.asset.CpsRebateAssetService;
 import com.qiji.cps.module.member.api.user.MemberUserApi;
@@ -84,6 +91,14 @@ public class CpsRebateSettleServiceImpl implements CpsRebateSettleService {
 
     @Resource
     private CpsRebateSettleExecutor settleExecutor;
+    @Resource
+    private CpsPromoterRelationService promoterRelationService;
+
+    @Resource
+    private CpsSplitRuleService splitRuleService;
+
+    @Resource
+    private CpsSplitCalculator splitCalculator;
 
     // ==================== 核心结算逻辑 ====================
 
@@ -119,6 +134,11 @@ public class CpsRebateSettleServiceImpl implements CpsRebateSettleService {
         MemberUserRespDTO member = memberUserApi.getUser(order.getMemberId());
         if (member == null) {
             throw new IllegalStateException("结算会员不存在: " + order.getMemberId());
+        }
+
+        // 若装配了多级分账服务，则优先走多级分账引擎
+        if (splitRuleService != null && promoterRelationService != null && splitCalculator != null) {
+            return settleOrderMultiLevel(order, member, existRecord);
         }
         CpsRebateConfigDO config = rebateConfigService.matchRebateConfig(
                 order.getMemberId(), member.getLevelId(), order.getPlatformCode());
@@ -195,6 +215,203 @@ public class CpsRebateSettleServiceImpl implements CpsRebateSettleService {
 
         log.info("[settleOrder] 返利冻结创建成功: orderId={}, memberId={}, rebateAmount={}",
                 order.getId(), order.getMemberId(), rebateAmount);
+        return true;
+    }
+
+    private boolean settleOrderMultiLevel(CpsOrderDO order, MemberUserRespDTO member, CpsRebateRecordDO existRecord) {
+        CpsSplitRuleDO splitRule = splitRuleService.matchSplitRule(order.getPlatformCode(), member.getLevelId());
+        CpsPromoterRelationDO buyerRel = promoterRelationService.getOrCreateRelation(order.getMemberId());
+        CpsPromoterRelationDO parentRel = buyerRel.getParentMemberId() != null
+                ? promoterRelationService.getOrCreateRelation(buyerRel.getParentMemberId()) : null;
+        CpsPromoterRelationDO grandparentRel = buyerRel.getGrandparentMemberId() != null
+                ? promoterRelationService.getOrCreateRelation(buyerRel.getGrandparentMemberId()) : null;
+
+        long commissionCent = order.getCommissionAmount() != null
+                ? moneyConverter.yuanToCent(order.getCommissionAmount()) : 0L;
+        if (commissionCent <= 0) {
+            log.warn("[settleOrderMultiLevel] 订单佣金为0，跳过结算: orderId={}", order.getId());
+            return false;
+        }
+
+        CpsSplitAllocation allocation = splitCalculator.calculateSplit(
+                commissionCent, splitRule, buyerRel, parentRel, grandparentRel);
+
+        BigDecimal selfRebateAmount = moneyConverter.centToYuan(allocation.getSelfRebateCent());
+        if (selfRebateAmount == null || selfRebateAmount.compareTo(BigDecimal.ZERO) <= 0) {
+            log.warn("[settleOrderMultiLevel] 自购返利金额计算为0，跳过结算: orderId={}", order.getId());
+            return false;
+        }
+
+        int freezeDays = splitRule != null && splitRule.getFreezeDays() != null ? splitRule.getFreezeDays() : 15;
+        CpsFreezeConfigDO freezeConfig = freezeService == null
+                ? null : freezeService.getActiveConfig(order.getPlatformCode(), allocation.getSelfRebateCent());
+        boolean shouldFreeze = freezeService == null ? (freezeDays > 0) : freezeConfig != null;
+
+        // 1. 记录或复用出单人 (SELF) 返利记录
+        String idempotencyKeySelf = "order-split:self:" + order.getId();
+        CpsRebateRecordDO selfRecord = CpsRebateRecordDO.builder()
+                .memberId(order.getMemberId())
+                .orderId(order.getId())
+                .platformCode(order.getPlatformCode())
+                .platformOrderId(order.getPlatformOrderId())
+                .itemId(order.getItemId())
+                .itemTitle(order.getItemTitle())
+                .orderAmount(order.getFinalPrice() != null ? order.getFinalPrice() : BigDecimal.ZERO)
+                .commissionAmount(order.getCommissionAmount() != null ? order.getCommissionAmount() : BigDecimal.ZERO)
+                .rebateRate(allocation.getSelfRebateRate())
+                .rebateAmount(selfRebateAmount)
+                .rebateType(CpsRebateTypeEnum.REBATE.getType())
+                .splitRole(CpsSplitRoleEnum.SELF.getRole())
+                .sourceMemberId(order.getMemberId())
+                .splitRuleId(allocation.getSplitRuleId())
+                .splitRuleSnapshot(allocation.getRuleSnapshotJson())
+                .rebateStatus(CpsRebateStatusEnum.PENDING.getStatus())
+                .memberLevelIdSnapshot(member.getLevelId())
+                .rebateAmountCent(allocation.getSelfRebateCent())
+                .idempotencyKey(idempotencyKeySelf)
+                .remark(shouldFreeze ? "多级分账自购冻结返利" : "多级分账自购直接入账返利")
+                .build();
+        if (existRecord == null) {
+            rebateRecordMapper.insert(selfRecord);
+        } else {
+            selfRecord = existRecord;
+        }
+
+        // 2. 记录一级推荐人 (PARENT_L1) 返利记录
+        CpsRebateRecordDO l1Record = null;
+        if (allocation.getParentRebateCent() > 0 && buyerRel.getParentMemberId() != null) {
+            CpsRebateRecordDO existL1 = rebateRecordMapper.selectByOrderIdTypeAndRole(
+                    order.getId(), CpsRebateTypeEnum.REBATE.getType(), CpsSplitRoleEnum.PARENT_L1.getRole());
+            if (existL1 == null) {
+                l1Record = CpsRebateRecordDO.builder()
+                        .memberId(buyerRel.getParentMemberId())
+                        .orderId(order.getId())
+                        .platformCode(order.getPlatformCode())
+                        .platformOrderId(order.getPlatformOrderId())
+                        .itemId(order.getItemId())
+                        .itemTitle(order.getItemTitle())
+                        .orderAmount(order.getFinalPrice() != null ? order.getFinalPrice() : BigDecimal.ZERO)
+                        .commissionAmount(order.getCommissionAmount() != null ? order.getCommissionAmount() : BigDecimal.ZERO)
+                        .rebateRate(allocation.getParentRebateRate())
+                        .rebateAmount(moneyConverter.centToYuan(allocation.getParentRebateCent()))
+                        .rebateType(CpsRebateTypeEnum.REBATE.getType())
+                        .splitRole(CpsSplitRoleEnum.PARENT_L1.getRole())
+                        .sourceMemberId(order.getMemberId())
+                        .splitRuleId(allocation.getSplitRuleId())
+                        .splitRuleSnapshot(allocation.getRuleSnapshotJson())
+                        .rebateStatus(CpsRebateStatusEnum.PENDING.getStatus())
+                        .rebateAmountCent(allocation.getParentRebateCent())
+                        .idempotencyKey("order-split:l1:" + order.getId() + ":" + buyerRel.getParentMemberId())
+                        .remark("下级自购多级分账一级推广提成")
+                        .build();
+                rebateRecordMapper.insert(l1Record);
+            } else {
+                l1Record = existL1;
+            }
+        }
+
+        // 3. 记录二级推荐人 (GRANDPARENT_L2) 返利记录
+        CpsRebateRecordDO l2Record = null;
+        if (allocation.getGrandparentRebateCent() > 0 && buyerRel.getGrandparentMemberId() != null) {
+            CpsRebateRecordDO existL2 = rebateRecordMapper.selectByOrderIdTypeAndRole(
+                    order.getId(), CpsRebateTypeEnum.REBATE.getType(), CpsSplitRoleEnum.GRANDPARENT_L2.getRole());
+            if (existL2 == null) {
+                l2Record = CpsRebateRecordDO.builder()
+                        .memberId(buyerRel.getGrandparentMemberId())
+                        .orderId(order.getId())
+                        .platformCode(order.getPlatformCode())
+                        .platformOrderId(order.getPlatformOrderId())
+                        .itemId(order.getItemId())
+                        .itemTitle(order.getItemTitle())
+                        .orderAmount(order.getFinalPrice() != null ? order.getFinalPrice() : BigDecimal.ZERO)
+                        .commissionAmount(order.getCommissionAmount() != null ? order.getCommissionAmount() : BigDecimal.ZERO)
+                        .rebateRate(allocation.getGrandparentRebateRate())
+                        .rebateAmount(moneyConverter.centToYuan(allocation.getGrandparentRebateCent()))
+                        .rebateType(CpsRebateTypeEnum.REBATE.getType())
+                        .splitRole(CpsSplitRoleEnum.GRANDPARENT_L2.getRole())
+                        .sourceMemberId(order.getMemberId())
+                        .splitRuleId(allocation.getSplitRuleId())
+                        .splitRuleSnapshot(allocation.getRuleSnapshotJson())
+                        .rebateStatus(CpsRebateStatusEnum.PENDING.getStatus())
+                        .rebateAmountCent(allocation.getGrandparentRebateCent())
+                        .idempotencyKey("order-split:l2:" + order.getId() + ":" + buyerRel.getGrandparentMemberId())
+                        .remark("下级自购多级分账二级推广提成")
+                        .build();
+                rebateRecordMapper.insert(l2Record);
+            } else {
+                l2Record = existL2;
+            }
+        }
+
+        // 4. 资产记账（自购）
+        CpsFreezeRecordDO freeze = null;
+        if (!shouldFreeze) {
+            rebateAssetService.creditOrderRebate(order.getId(), "order-rebate-credit:" + order.getId());
+        } else {
+            freeze = rebateAssetService.createOrderRebateFreeze(order.getId(), idempotencyKeySelf, freezeDays);
+        }
+
+        // 5. 资产记账（一级提成）
+        if (l1Record != null) {
+            String l1Key = l1Record.getIdempotencyKey();
+            if (!shouldFreeze) {
+                rebateAssetService.creditSplitRebate(l1Record.getMemberId(), order.getId(), order.getPlatformOrderId(),
+                        "ORDER_SPLIT_CREDIT", "l1:" + order.getId(), allocation.getParentRebateCent(), l1Key);
+                CpsRebateRecordDO updateL1 = new CpsRebateRecordDO();
+                updateL1.setId(l1Record.getId());
+                updateL1.setRebateStatus(CpsRebateStatusEnum.RECEIVED.getStatus());
+                rebateRecordMapper.updateById(updateL1);
+            } else {
+                CpsFreezeRecordDO l1Freeze = rebateAssetService.createSplitRebateFreeze(
+                        l1Record.getMemberId(), order.getId(), order.getPlatformOrderId(),
+                        "ORDER_SPLIT_L1", "l1:" + order.getId(), allocation.getParentRebateCent(), freezeDays, l1Key);
+                CpsRebateRecordDO updateL1 = new CpsRebateRecordDO();
+                updateL1.setId(l1Record.getId());
+                updateL1.setFreezeRecordId(l1Freeze.getId());
+                rebateRecordMapper.updateById(updateL1);
+            }
+        }
+
+        // 6. 资产记账（二级提成）
+        if (l2Record != null) {
+            String l2Key = l2Record.getIdempotencyKey();
+            if (!shouldFreeze) {
+                rebateAssetService.creditSplitRebate(l2Record.getMemberId(), order.getId(), order.getPlatformOrderId(),
+                        "ORDER_SPLIT_CREDIT", "l2:" + order.getId(), allocation.getGrandparentRebateCent(), l2Key);
+                CpsRebateRecordDO updateL2 = new CpsRebateRecordDO();
+                updateL2.setId(l2Record.getId());
+                updateL2.setRebateStatus(CpsRebateStatusEnum.RECEIVED.getStatus());
+                rebateRecordMapper.updateById(updateL2);
+            } else {
+                CpsFreezeRecordDO l2Freeze = rebateAssetService.createSplitRebateFreeze(
+                        l2Record.getMemberId(), order.getId(), order.getPlatformOrderId(),
+                        "ORDER_SPLIT_L2", "l2:" + order.getId(), allocation.getGrandparentRebateCent(), freezeDays, l2Key);
+                CpsRebateRecordDO updateL2 = new CpsRebateRecordDO();
+                updateL2.setId(l2Record.getId());
+                updateL2.setFreezeRecordId(l2Freeze.getId());
+                rebateRecordMapper.updateById(updateL2);
+            }
+        }
+
+        // 7. 累计团队出单与收益
+        promoterRelationService.recordTeamStats(order.getMemberId(),
+                allocation.getSelfRebateCent(), allocation.getParentRebateCent(), allocation.getGrandparentRebateCent());
+
+        // 8. 更新订单状态
+        CpsOrderDO.CpsOrderDOBuilder updateBuilder = CpsOrderDO.builder()
+                .id(order.getId())
+                .orderStatus(CpsOrderStatusEnum.SETTLED.getStatus())
+                .realRebate(selfRebateAmount);
+        if (freeze != null) {
+            updateBuilder.rebateFreezeStatus(CpsFreezeStatusEnum.FROZEN.getStatus())
+                    .planUnfreezeTime(freeze.getUnfreezeTime());
+        }
+        if (orderMapper.updateRebateFreezeByStatusVersion(updateBuilder.build(), order.getStatusVersion()) != 1) {
+            throw new IllegalStateException("订单状态已并发变更，回滚本次返利结算: orderId=" + order.getId());
+        }
+
+        log.info("[settleOrderMultiLevel] 多级分账结算完成: orderId={}, selfRebate={}, l1Split={}, l2Split={}",
+                order.getId(), selfRebateAmount, allocation.getParentRebateCent(), allocation.getGrandparentRebateCent());
         return true;
     }
 

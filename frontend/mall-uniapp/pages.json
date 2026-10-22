@@ -661,6 +661,56 @@
             "title": "返利 AI 助手",
             "group": "返利中心"
           }
+        },
+        {
+          "path": "promoter/index",
+          "style": {
+            "navigationBarTitleText": "推广中心"
+          },
+          "meta": {
+            "auth": true,
+            "sync": true,
+            "title": "推广中心",
+            "group": "返利中心"
+          }
+        },
+        {
+          "path": "promoter/team",
+          "style": {
+            "navigationBarTitleText": "我的团队",
+            "enablePullDownRefresh": true
+          },
+          "meta": {
+            "auth": true,
+            "sync": true,
+            "title": "我的团队",
+            "group": "返利中心"
+          }
+        },
+        {
+          "path": "promoter/orders",
+          "style": {
+            "navigationBarTitleText": "推广订单",
+            "enablePullDownRefresh": true
+          },
+          "meta": {
+            "auth": true,
+            "sync": true,
+            "title": "推广订单",
+            "group": "返利中心"
+          }
+        },
+        {
+          "path": "promoter/invite",
+          "style": {
+            "navigationBarTitleText": "邀请海报"
+          },
+          "meta": {
+            "auth": true,
+            "sync": true,
+            "title": "邀请海报",
+            "group": "返利中心"
+          }
         }
       ]
     },
