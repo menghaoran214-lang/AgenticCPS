@@ -179,7 +179,12 @@ if ($Backend) {
     Copy-Item -LiteralPath (Join-Path $BackendRoot "sql/mysql/ruoyi-vue-pro.sql") -Destination (Join-Path $DeployMysqlInit "00-ruoyi-vue-pro.sql") -Force
     Copy-Item -LiteralPath (Join-Path $BackendRoot "sql/mysql/quartz.sql") -Destination (Join-Path $DeployMysqlInit "05-quartz.sql") -Force
     Copy-Item -LiteralPath (Join-Path $BackendRoot "sql/module/cps-all-in-one.sql") -Destination (Join-Path $DeployMysqlInit "10-cps-all-in-one.sql") -Force
-    Copy-Item -LiteralPath (Join-Path $BackendRoot "sql/module/ai-all.sql") -Destination (Join-Path $DeployMysqlInit "15-ai-all.sql") -Force
+    $AiSeed = Join-Path $BackendRoot "sql/module/ai-all.sql"
+    if (Test-Path -LiteralPath $AiSeed -PathType Leaf) {
+        Copy-Item -LiteralPath $AiSeed -Destination (Join-Path $DeployMysqlInit "15-ai-all.sql") -Force
+    } else {
+        Write-Warning "ai-all.sql is absent in upstream; core CPS can be packaged, but AI default roles/data are NOT initialized."
+    }
     Write-Host "  [OK] 后端 JAR 与数据库初始化脚本已归集 "
 }
 
