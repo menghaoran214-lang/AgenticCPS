@@ -136,4 +136,18 @@ public class CpsPromoterRelationServiceTest {
         verify(promoterRelationMapper, times(1)).incrStats(101L, 1, 0L, 1200L);
     }
 
+
+    @Test
+    @DisplayName("Concurrent competing invitation cannot overwrite the winning parent")
+    void concurrentBindingMustNotOverwriteAnotherStation() {
+        when(promoterRelationMapper.selectByMemberId(103L)).thenReturn(userC,
+                CpsPromoterRelationDO.builder().id(3L).memberId(103L).parentMemberId(999L).build());
+        when(promoterRelationMapper.selectByMemberId(102L)).thenReturn(userB);
+        // A concurrent request has already committed another parent before this write.
+        when(promoterRelationMapper.updateById(any(CpsPromoterRelationDO.class))).thenReturn(0);
+
+        assertFalse(promoterRelationService.bindInviterByParentMemberId(103L, 102L));
+        verify(promoterRelationMapper, never()).incrTeamCountL1(anyLong(), anyInt());
+        verify(promoterRelationMapper, never()).incrTeamCountL2(anyLong(), anyInt());
+    }
 }
