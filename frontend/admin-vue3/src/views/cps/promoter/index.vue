@@ -86,7 +86,7 @@
       </el-table-column>
       <el-table-column label="绑定时间" align="center" prop="bindTime" width="160">
         <template #default="scope">
-          <span>{{ scope.row.bindTime ? parseTime(scope.row.bindTime) : '-' }}</span>
+          <span>{{ scope.row.bindTime ? formatDate(scope.row.bindTime) : '-' }}</span>
         </template>
       </el-table-column>
       <el-table-column label="操作" align="center" width="160" fixed="right">
@@ -165,7 +165,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { parseTime } from '@/utils/formatTime'
+import { formatDate } from '@/utils/formatTime'
 import {
   getPromoterPage,
   rebindPromoter,

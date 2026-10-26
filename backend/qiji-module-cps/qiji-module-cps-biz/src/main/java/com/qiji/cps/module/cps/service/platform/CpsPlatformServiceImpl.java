@@ -104,7 +104,7 @@ public class CpsPlatformServiceImpl implements CpsPlatformService {
 
     @Override
     @Cacheable(cacheNames = CpsCacheConfig.CACHE_PLATFORM, key = "#platformCode",
-            cacheManager = "cpsCacheManager")
+            cacheManager = "cpsCacheManager", unless = "#result == null")
     public CpsPlatformDO getPlatformByCode(String platformCode) {
         return platformMapper.selectByPlatformCode(platformCode);
     }
@@ -122,6 +122,7 @@ public class CpsPlatformServiceImpl implements CpsPlatformService {
                 .collect(java.util.stream.Collectors.joining(",")));
         if (existing == null) {
             platformMapper.insert(target);
+            cacheInvalidator.evictPlatformAfterCommit(saveReqVO.getPlatformCode());
             return target.getId();
         }
         if (!Objects.equals(existing.getPlatformCode(), saveReqVO.getPlatformCode())) {
@@ -129,6 +130,7 @@ public class CpsPlatformServiceImpl implements CpsPlatformService {
         }
         target.setId(existing.getId());
         platformMapper.updateById(target);
+        cacheInvalidator.evictPlatformAfterCommit(saveReqVO.getPlatformCode());
         return existing.getId();
     }
 

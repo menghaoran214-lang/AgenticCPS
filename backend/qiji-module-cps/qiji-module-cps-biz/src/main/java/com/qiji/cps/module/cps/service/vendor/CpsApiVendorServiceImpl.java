@@ -104,7 +104,7 @@ public class CpsApiVendorServiceImpl implements CpsApiVendorService {
     @Override
     @Cacheable(cacheNames = CpsCacheConfig.CACHE_API_VENDOR,
             key = "#vendorCode + ':' + #platformCode",
-            cacheManager = "cpsCacheManager")
+            cacheManager = "cpsCacheManager", unless = "#result == null")
     public CpsApiVendorDO getVendorByCodeAndPlatform(String vendorCode, String platformCode) {
         return vendorMapper.selectByVendorAndPlatform(vendorCode, platformCode);
     }

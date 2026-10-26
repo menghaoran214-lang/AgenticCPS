@@ -99,6 +99,39 @@ class CpsPlatformServiceImplTest {
         verify(platformMapper).insert(any(CpsPlatformDO.class));
     }
 
+    @Test
+    @DisplayName("upsertPlatformForOnboarding - 新建平台时失效缓存")
+    void upsertPlatformForOnboarding_insertsAndEvictsCache() {
+        CpsPlatformSaveReqVO reqVO = buildReqVO("taobao", null, null);
+        reqVO.setStatus(0);
+        when(platformMapper.selectByPlatformCode("taobao")).thenReturn(null);
+        when(platformMapper.insert(any(CpsPlatformDO.class))).thenAnswer(invocation -> {
+            CpsPlatformDO p = invocation.getArgument(0);
+            p.setId(1001L);
+            return 1;
+        });
+
+        service.upsertPlatformForOnboarding(reqVO, List.of("dataoke"));
+
+        verify(platformMapper).insert(any(CpsPlatformDO.class));
+        verify(cacheInvalidator).evictPlatformAfterCommit("taobao");
+    }
+
+    @Test
+    @DisplayName("upsertPlatformForOnboarding - 更新平台时失效缓存")
+    void upsertPlatformForOnboarding_updatesAndEvictsCache() {
+        CpsPlatformSaveReqVO reqVO = buildReqVO("taobao", null, null);
+        reqVO.setStatus(0);
+        CpsPlatformDO existing = CpsPlatformDO.builder().id(1001L).platformCode("taobao").build();
+        when(platformMapper.selectByPlatformCode("taobao")).thenReturn(existing);
+        when(platformMapper.updateById(any(CpsPlatformDO.class))).thenReturn(1);
+
+        service.upsertPlatformForOnboarding(reqVO, List.of("dataoke"));
+
+        verify(platformMapper).updateById(any(CpsPlatformDO.class));
+        verify(cacheInvalidator).evictPlatformAfterCommit("taobao");
+    }
+
     private CpsPlatformSaveReqVO buildReqVO(String platformCode, String activeVendorCode, String defaultAdzoneId) {
         CpsPlatformSaveReqVO reqVO = new CpsPlatformSaveReqVO();
         reqVO.setPlatformCode(platformCode);

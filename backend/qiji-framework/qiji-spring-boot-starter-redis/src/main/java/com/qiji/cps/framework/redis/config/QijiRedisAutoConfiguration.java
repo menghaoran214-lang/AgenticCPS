@@ -1,5 +1,6 @@
 package com.qiji.cps.framework.redis.config;
 
+import com.qiji.cps.framework.redis.core.SafeRedisJsonSerializer;
 import org.redisson.spring.starter.RedissonAutoConfigurationV4;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.context.annotation.Bean;
@@ -31,8 +32,10 @@ public class QijiRedisAutoConfiguration {
         return template;
     }
 
-    public static RedisSerializer<?> buildRedisSerializer() {
-        return RedisSerializer.json();
+    @SuppressWarnings("unchecked")
+    public static RedisSerializer<Object> buildRedisSerializer() {
+        RedisSerializer<Object> jsonSerializer = (RedisSerializer<Object>) RedisSerializer.json();
+        return new SafeRedisJsonSerializer(jsonSerializer);
     }
 
 }

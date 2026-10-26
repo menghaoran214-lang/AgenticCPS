@@ -451,9 +451,20 @@
                     置顶
                   </el-tag>
                 </div>
+                <div class="card-top-actions">
+                  <el-button
+                    size="small"
+                    type="success"
+                    round
+                    class="!px-8px !py-2px !h-24px shadow-sm"
+                    @click.stop="openTrendDialog(item)"
+                  >
+                    <Icon icon="ep:trend-charts" class="mr-2px" /> 走势
+                  </el-button>
+                </div>
               </div>
               <div class="card-body">
-                <div class="goods-title">{{ item.title || '-' }}</div>
+                <div class="goods-title hover:text-primary transition-colors cursor-pointer" @click="openGoodsDetail(item)">{{ item.title || '-' }}</div>
                 <div class="goods-tags">
                   <el-tag size="small" effect="plain">{{
                     platformLabel(item.platformCode)
@@ -800,7 +811,6 @@
         </el-button>
       </template>
     </el-dialog>
-  </div>
 
     <!-- 商品价格走势弹窗 -->
     <el-dialog v-model="trendDialogVisible" title="商品价格走势分析" width="840px" destroy-on-close>
@@ -2411,6 +2421,13 @@ onMounted(() => {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+}
+
+.card-top-actions {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
 }
 
 .card-body,

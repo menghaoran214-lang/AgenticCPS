@@ -44,10 +44,11 @@ public class CpsCacheConfig {
         RedisSerializationContext.SerializationPair<Object> serializationPair =
                 RedisSerializationContext.SerializationPair.fromSerializer((RedisSerializer<Object>) serializer);
 
-        // 默认缓存配置（10分钟）
+        // 默认缓存配置（10分钟，禁止缓存 null 值，防止因短暂查空导致长达30分钟的空值阻断）
         RedisCacheConfiguration defaultConfig = RedisCacheConfiguration.defaultCacheConfig()
                 .entryTtl(Duration.ofMinutes(10))
-                .serializeValuesWith(serializationPair);
+                .serializeValuesWith(serializationPair)
+                .disableCachingNullValues();
 
         return RedisCacheManager.builder(factory)
                 // 平台配置缓存 30 分钟（变更频率低）

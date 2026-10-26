@@ -1957,100 +1957,91 @@ WHERE NOT EXISTS (
 -- ============================================================
 
 -- 1. 新增推广员关系表 cps_promoter_relation
-CREATE TABLE IF NOT EXISTS cps_promoter_relation (
-  id bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
-  	enant_id bigint NOT NULL DEFAULT 0 COMMENT '租户ID',
-  member_id bigint NOT NULL COMMENT '会员用户ID',
-  parent_member_id bigint NULL DEFAULT NULL COMMENT '一级直接推荐人ID',
-  grandparent_member_id bigint NULL DEFAULT NULL COMMENT '二级间接推荐人ID',
-  invite_code varchar(32) NOT NULL COMMENT '会员专属邀请码',
-  promoter_status tinyint NOT NULL DEFAULT 1 COMMENT '分销资格状态: 0未激活/冻结 1正常有效',
-  promoter_level tinyint NOT NULL DEFAULT 1 COMMENT '推广员等级: 1普通会员 2VIP推广员 3团长/合伙人',
-  ind_time datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '绑定上级时间',
-  	eam_count_l1 int NOT NULL DEFAULT 0 COMMENT '一级直推下线总人数',
-  	eam_count_l2 int NOT NULL DEFAULT 0 COMMENT '二级间推下线总人数',
-  	eam_order_count int NOT NULL DEFAULT 0 COMMENT '团队累计出单量',
-  	otal_rebate_cent bigint NOT NULL DEFAULT 0 COMMENT '累计自购返利总额(分)',
-  	otal_split_cent bigint NOT NULL DEFAULT 0 COMMENT '累计推广分账提成总额(分)',
-  creator varchar(64) NULL DEFAULT '' COMMENT '创建者',
-  create_time datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-  updater varchar(64) NULL DEFAULT '' COMMENT '更新者',
-  update_time datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-  deleted bit(1) NOT NULL DEFAULT b'0' COMMENT '是否删除',
-  PRIMARY KEY (id),
-  UNIQUE KEY uk_tenant_member (	enant_id, member_id, deleted),
-  UNIQUE KEY uk_tenant_invite_code (	enant_id, invite_code, deleted),
-  KEY idx_parent (	enant_id, parent_member_id, deleted),
-  KEY idx_grandparent (	enant_id, grandparent_member_id, deleted)
+CREATE TABLE IF NOT EXISTS `cps_promoter_relation` (
+  `id`                    bigint       NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `tenant_id`             bigint       NOT NULL DEFAULT 0 COMMENT '租户ID',
+  `member_id`             bigint       NOT NULL COMMENT '会员用户ID',
+  `parent_member_id`      bigint       DEFAULT NULL COMMENT '一级直接推荐人ID',
+  `grandparent_member_id` bigint       DEFAULT NULL COMMENT '二级间接推荐人ID',
+  `invite_code`           varchar(32)  NOT NULL COMMENT '会员专属邀请码',
+  `promoter_status`       tinyint      NOT NULL DEFAULT 1 COMMENT '分销资格状态: 0未激活/冻结 1正常有效',
+  `promoter_level`        tinyint      NOT NULL DEFAULT 1 COMMENT '推广员等级: 1普通会员 2VIP推广员 3团长/合伙人',
+  `bind_time`             datetime     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '绑定上级时间',
+  `team_count_l1`         int          NOT NULL DEFAULT 0 COMMENT '一级直推下线总人数',
+  `team_count_l2`         int          NOT NULL DEFAULT 0 COMMENT '二级间推下线总人数',
+  `team_order_count`      int          NOT NULL DEFAULT 0 COMMENT '团队累计出单量',
+  `total_rebate_cent`     bigint       NOT NULL DEFAULT 0 COMMENT '累计自购返利总额(分)',
+  `total_split_cent`      bigint       NOT NULL DEFAULT 0 COMMENT '累计推广分账提成总额(分)',
+  `creator`               varchar(64)  DEFAULT '' COMMENT '创建者',
+  `create_time`           datetime     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `updater`               varchar(64)  DEFAULT '' COMMENT '更新者',
+  `update_time`           datetime     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  `deleted`               bit(1)       NOT NULL DEFAULT b'0' COMMENT '是否删除',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_tenant_member` (`tenant_id`, `member_id`, `deleted`),
+  UNIQUE KEY `uk_tenant_invite_code` (`tenant_id`, `invite_code`, `deleted`),
+  KEY `idx_parent` (`tenant_id`, `parent_member_id`, `deleted`),
+  KEY `idx_grandparent` (`tenant_id`, `grandparent_member_id`, `deleted`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='CPS推广员分销关系与团队概况表';
 
 -- 2. 新增多级分账规则配置表 cps_split_rule
-CREATE TABLE IF NOT EXISTS cps_split_rule (
-  id bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
-  	enant_id bigint NOT NULL DEFAULT 0 COMMENT '租户ID',
-  
-ule_name varchar(64) NOT NULL COMMENT '规则名称',
-  platform_code varchar(32) NULL DEFAULT NULL COMMENT '适用平台(NULL表示全平台通用)',
-  member_level_id bigint NULL DEFAULT NULL COMMENT '适用出单人等级(NULL表示通用)',
-  platform_share_rate decimal(5,4) NOT NULL DEFAULT 0.2000 COMMENT '平台留存比例(如0.20表示扣留20%)',
-  self_rebate_rate decimal(5,4) NOT NULL DEFAULT 0.6000 COMMENT '自购/出单人返利比例(占净佣金池的60%)',
-  parent_rebate_rate decimal(5,4) NOT NULL DEFAULT 0.2500 COMMENT '一级直接推荐人提成比例(占净佣金池的25%)',
-  grandparent_rebate_rate decimal(5,4) NOT NULL DEFAULT 0.1500 COMMENT '二级间接推荐人提成比例(占净佣金池的15%)',
-  partner_spread_rate decimal(5,4) NOT NULL DEFAULT 0.0000 COMMENT '合伙人/团长级差提成预留比例',
-  ttribution_priority tinyint NOT NULL DEFAULT 1 COMMENT '跟单冲突归属优先级: 1关系链优先 2转链推广者优先',
-  uto_lock_inviter_on_first_order tinyint NOT NULL DEFAULT 1 COMMENT '新客首单是否自动锁粉绑定转链推广人: 0否 1是',
-  reeze_days int NOT NULL DEFAULT 15 COMMENT '提成分账冻结天数(天)',
-  status tinyint NOT NULL DEFAULT 1 COMMENT '状态: 0停用 1启用',
-  priority int NOT NULL DEFAULT 0 COMMENT '优先级(越大越优先)',
-  creator varchar(64) NULL DEFAULT '' COMMENT '创建者',
-  create_time datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-  updater varchar(64) NULL DEFAULT '' COMMENT '更新者',
-  update_time datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-  deleted bit(1) NOT NULL DEFAULT b'0' COMMENT '是否删除',
-  PRIMARY KEY (id),
-  KEY idx_rule_match (	enant_id, platform_code, member_level_id, status, deleted)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='CPS多级分账与提成规则配置表';
+CREATE TABLE IF NOT EXISTS `cps_split_rule` (
+  `id`                               bigint        NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `tenant_id`                        bigint        NOT NULL DEFAULT 0 COMMENT '租户ID',
+  `rule_name`                        varchar(64)   NOT NULL COMMENT '规则名称',
+  `platform_code`                    varchar(32)   DEFAULT NULL COMMENT '适用平台(NULL表示全平台通用)',
+  `member_level_id`                  bigint        DEFAULT NULL COMMENT '适用出单人等级(NULL表示通用)',
+  `platform_share_rate`              decimal(5,4)  NOT NULL DEFAULT 0.2000 COMMENT '平台留存比例(如0.20表示扣留20%)',
+  `self_rebate_rate`                 decimal(5,4)  NOT NULL DEFAULT 0.6000 COMMENT '自购/出单人返利比例(占净佣金池的60%)',
+  `parent_rebate_rate`               decimal(5,4)  NOT NULL DEFAULT 0.2500 COMMENT '一级直接推荐人提成比例(占净佣金池的25%)',
+  `grandparent_rebate_rate`          decimal(5,4)  NOT NULL DEFAULT 0.1500 COMMENT '二级间接推荐人提成比例(占净佣金池的15%)',
+  `partner_spread_rate`              decimal(5,4)  NOT NULL DEFAULT 0.0000 COMMENT '合伙人/团长级差预留',
+  `attribution_priority`             tinyint       NOT NULL DEFAULT 1 COMMENT '归属冲突优先级: 1关系优先 2转链推广优先',
+  `auto_lock_inviter_on_first_order` tinyint       NOT NULL DEFAULT 1 COMMENT '新客首单是否自动锁粉绑定转链推广人: 0否 1是',
+  `freeze_days`                      int           NOT NULL DEFAULT 15 COMMENT '冻结结算天数(天)',
+  `status`                           tinyint       NOT NULL DEFAULT 1 COMMENT '规则状态: 0停用 1启用',
+  `priority`                         int           NOT NULL DEFAULT 0 COMMENT '匹配优先级(越高越优先)',
+  `creator`                          varchar(64)   DEFAULT '' COMMENT '创建者',
+  `create_time`                      datetime      NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `updater`                          varchar(64)   DEFAULT '' COMMENT '更新者',
+  `update_time`                      datetime      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  `deleted`                          bit(1)        NOT NULL DEFAULT b'0' COMMENT '是否删除',
+  PRIMARY KEY (`id`),
+  KEY `idx_rule_match` (`tenant_id`, `platform_code`, `member_level_id`, `status`, `deleted`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='CPS多级分账规则配置表';
 
--- 3. 扩展 cps_rebate_record 支持分账角色与出单人溯源
-ALTER TABLE cps_rebate_record
-  ADD COLUMN split_role varchar(32) NOT NULL DEFAULT 'SELF' COMMENT '分账角色: SELF(自购/出单), PARENT_L1(一级推广), GRANDPARENT_L2(二级推广), PARTNER(合伙人级差), PLATFORM(平台留存)' AFTER 
-ebate_type,
-  ADD COLUMN source_member_id bigint NULL DEFAULT NULL COMMENT '产生订单的消费者会员ID' AFTER split_role,
-  ADD COLUMN split_rule_id bigint NULL DEFAULT NULL COMMENT '匹配的分账规则ID' AFTER source_member_id,
-  ADD COLUMN split_rule_snapshot text NULL DEFAULT NULL COMMENT '分账比例与参数快照JSON' AFTER split_rule_id,
-  DROP INDEX uk_tenant_order_rebate_type,
-  ADD UNIQUE KEY uk_tenant_order_rebate_split (	enant_id, order_id, 
-ebate_type, split_role); varchar(32) NOT NULL DEFAULT 'SELF' COMMENT '分账角色: SELF(自购/出单), PARENT_L1(一级推广), GRANDPARENT_L2(二级推广), PARTNER(合伙人级差), PLATFORM(平台留存)' AFTER 
-ebate_type,
-  ADD COLUMN source_member_id bigint NULL DEFAULT NULL COMMENT '产生订单的消费者会员ID' AFTER split_role,
-  ADD COLUMN split_rule_id bigint NULL DEFAULT NULL COMMENT '匹配的分账规则ID' AFTER source_member_id,
-  ADD COLUMN split_rule_snapshot text NULL DEFAULT NULL COMMENT '分账比例与参数快照JSON' AFTER split_rule_id;
+-- 3. cps_rebate_record 扩展分账角色、来源人、分账规则与快照
+ALTER TABLE `cps_rebate_record`
+  ADD COLUMN `split_role` varchar(32) NOT NULL DEFAULT 'SELF' COMMENT '分账角色: SELF(自购/自返), PARENT_L1(一级推广), GRANDPARENT_L2(二级推广), PARTNER(合伙人级差), PLATFORM(平台留存)' AFTER `rebate_type`,
+  ADD COLUMN `source_member_id` bigint NULL DEFAULT NULL COMMENT '产生订单的消费者会员ID' AFTER `split_role`,
+  ADD COLUMN `split_rule_id` bigint NULL DEFAULT NULL COMMENT '匹配的分账规则ID' AFTER `source_member_id`,
+  ADD COLUMN `split_rule_snapshot` text NULL DEFAULT NULL COMMENT '分账比例与参数快照JSON' AFTER `split_rule_id`;
 
-ALTER TABLE cps_rebate_record
-  ADD INDEX idx_order_split (	enant_id, order_id, split_role, deleted);
+ALTER TABLE `cps_rebate_record`
+  DROP INDEX `uk_tenant_order_rebate_type`,
+  ADD UNIQUE KEY `uk_tenant_order_rebate_split` (`tenant_id`, `order_id`, `rebate_type`, `split_role`),
+  ADD INDEX `idx_order_split` (`tenant_id`, `order_id`, `split_role`, `deleted`);
 
 -- 4. 插入全平台默认多级分账规则种子数据 (租户 0 与 1 通用兜底)
-INSERT INTO cps_split_rule (
-  	enant_id, 
-ule_name, platform_code, member_level_id,
-  platform_share_rate, self_rebate_rate, parent_rebate_rate, grandparent_rebate_rate,
-  partner_spread_rate, ttribution_priority, uto_lock_inviter_on_first_order,
-  reeze_days, status, priority, creator, updater, deleted
+INSERT INTO `cps_split_rule` (
+  `tenant_id`, `rule_name`, `platform_code`, `member_level_id`,
+  `platform_share_rate`, `self_rebate_rate`, `parent_rebate_rate`, `grandparent_rebate_rate`,
+  `partner_spread_rate`, `attribution_priority`, `auto_lock_inviter_on_first_order`,
+  `freeze_days`, `status`, `priority`, `creator`, `updater`, `deleted`
 )
 SELECT 0, '全局默认多级分账规则', NULL, NULL,
        0.2000, 0.6000, 0.2500, 0.1500,
        0.0000, 1, 1,
        15, 1, 0, 'system', 'system', b'0'
 WHERE NOT EXISTS (
-  SELECT 1 FROM cps_split_rule WHERE 
-ule_name = '全局默认多级分账规则' AND deleted = b'0'
+  SELECT 1 FROM `cps_split_rule` WHERE `rule_name` = '全局默认多级分账规则' AND `deleted` = b'0'
 );
 
 -- 5. 记录数据库结构版本更新
-INSERT INTO system_schema_version (module, version, schema_update_time, script_source, description, status, 	enant_id, deleted, creator, updater)
+INSERT INTO `system_schema_version` (`module`, `version`, `schema_update_time`, `script_source`, `description`, `status`, `tenant_id`, `deleted`, `creator`, `updater`)
 SELECT 'cps', 'v2.1.2', '2026-10-22 12:15:00', 'cps-update.sql', 'CPS三级分销推广关系表(cps_promoter_relation)、多级分账规则配置表(cps_split_rule)、分账记录角色扩展与净佣金池瓜分引擎支持', 'SUCCESS', 0, b'0', 'system', 'system'
 WHERE NOT EXISTS (
-  SELECT 1 FROM system_schema_version WHERE module = 'cps' AND version = 'v2.1.2' AND schema_update_time = '2026-10-22 12:15:00'
+  SELECT 1 FROM `system_schema_version` WHERE `module` = 'cps' AND `version` = 'v2.1.2' AND `schema_update_time` = '2026-10-22 12:15:00'
 );
 
 -- ----------------------------------------------------------------------------------------------------
@@ -2058,38 +2049,36 @@ WHERE NOT EXISTS (
 -- 描述：新增会员提现账户管理表(cps_withdraw_account)与提现单安全风控字段扩展
 -- ----------------------------------------------------------------------------------------------------
 
-CREATE TABLE IF NOT EXISTS cps_withdraw_account (
-  id                    bigint        NOT NULL AUTO_INCREMENT COMMENT '主键ID',
-  member_id             bigint        NOT NULL COMMENT '会员用户ID',
-  	ype                  varchar(32)   NOT NULL COMMENT '账户类型（alipay:支付宝 wechat:微信 bank:银行卡）',
-  ccount               varchar(128)  NOT NULL COMMENT '提现账号（支付宝账号/微信OpenID/银行卡号）',
-  ccount_name          varchar(64)   NOT NULL COMMENT '真实姓名（必须与收款实名一致）',
-  ank_name             varchar(64)            DEFAULT NULL COMMENT '开户行（银行卡时有效）',
-  is_default            bit(1)        NOT NULL DEFAULT b\'0\' COMMENT '是否默认账户（0:否 1:是）',
-  status                tinyint       NOT NULL DEFAULT 0 COMMENT '状态（0:正常 1:禁用）',
-  last_used_time        datetime               DEFAULT NULL COMMENT '最近使用时间',
-  creator               varchar(64)            DEFAULT NULL COMMENT '创建人',
-  create_time           datetime      NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-  updater               varchar(64)            DEFAULT NULL COMMENT '更新人',
-  update_time           datetime      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-  deleted               bit(1)        NOT NULL DEFAULT b\'0\' COMMENT '是否删除',
-  	enant_id             bigint        NOT NULL DEFAULT 0 COMMENT '租户ID',
-  PRIMARY KEY (id),
-  KEY idx_member_tenant (	enant_id, member_id, 	ype),
-  KEY idx_create_time (create_time)
+CREATE TABLE IF NOT EXISTS `cps_withdraw_account` (
+  `id`                    bigint        NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `member_id`             bigint        NOT NULL COMMENT '会员用户ID',
+  `type`                  varchar(32)   NOT NULL COMMENT '账户类型（alipay:支付宝 wechat:微信 bank:银行卡）',
+  `account`               varchar(128)  NOT NULL COMMENT '提现账号（支付宝账号/微信OpenID/银行卡号）',
+  `account_name`          varchar(64)   NOT NULL COMMENT '真实姓名（必须与收款实名一致）',
+  `bank_name`             varchar(64)            DEFAULT NULL COMMENT '开户行（银行卡时有效）',
+  `is_default`            bit(1)        NOT NULL DEFAULT b'0' COMMENT '是否默认账户（0:否 1:是）',
+  `status`                tinyint       NOT NULL DEFAULT 0 COMMENT '状态（0:正常 1:禁用）',
+  `last_used_time`        datetime               DEFAULT NULL COMMENT '最近使用时间',
+  `creator`               varchar(64)            DEFAULT NULL COMMENT '创建人',
+  `create_time`           datetime      NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `updater`               varchar(64)            DEFAULT NULL COMMENT '更新人',
+  `update_time`           datetime      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  `deleted`               bit(1)        NOT NULL DEFAULT b'0' COMMENT '是否删除',
+  `tenant_id`             bigint        NOT NULL DEFAULT 0 COMMENT '租户ID',
+  PRIMARY KEY (`id`),
+  KEY `idx_member_tenant` (`tenant_id`, `member_id`, `type`),
+  KEY `idx_create_time` (`create_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='会员提现账户管理表';
 
-ALTER TABLE cps_withdraw
-  ADD COLUMN ccount_id bigint NULL DEFAULT NULL COMMENT '关联会员提现账户ID' AFTER withdraw_account_name,
-  ADD COLUMN 
-isk_level tinyint NOT NULL DEFAULT 0 COMMENT '风控级别: 0正常自动 1待人工审核 2风控拦截' AFTER 
-eview_note,
-  ADD COLUMN client_ip varchar(64) NULL DEFAULT NULL COMMENT '申请客户端IP' AFTER idempotency_key,
-  ADD COLUMN user_agent varchar(512) NULL DEFAULT NULL COMMENT '客户端UserAgent' AFTER client_ip;
+ALTER TABLE `cps_withdraw`
+  ADD COLUMN `account_id` bigint NULL DEFAULT NULL COMMENT '关联会员提现账户ID' AFTER `withdraw_account_name`,
+  ADD COLUMN `risk_level` tinyint NOT NULL DEFAULT 0 COMMENT '风控级别: 0正常自动 1待人工审核 2风控拦截' AFTER `review_note`,
+  ADD COLUMN `client_ip` varchar(64) NULL DEFAULT NULL COMMENT '申请客户端IP' AFTER `idempotency_key`,
+  ADD COLUMN `user_agent` varchar(512) NULL DEFAULT NULL COMMENT '客户端UserAgent' AFTER `client_ip`;
 
 -- 记录数据库结构版本号
-INSERT INTO system_schema_version (module, version, schema_update_time, script_source, description, status, tenant_id, deleted, creator, updater)
-SELECT 'cps', 'v2.1.3', '2026-10-22 14:45:00', 'cps-update.sql', '新增会员提现账户管理表(cps_withdraw_account)与提现安全风控审计支持', 'SUCCESS', 0, b\'0\', 'system', 'system'
+INSERT INTO `system_schema_version` (`module`, `version`, `schema_update_time`, `script_source`, `description`, `status`, `tenant_id`, `deleted`, `creator`, `updater`)
+SELECT 'cps', 'v2.1.3', '2026-10-22 14:45:00', 'cps-update.sql', '新增会员提现账户管理表(cps_withdraw_account)与提现安全风控审计支持', 'SUCCESS', 0, b'0', 'system', 'system'
 WHERE NOT EXISTS (
-  SELECT 1 FROM system_schema_version WHERE module = 'cps' AND version = 'v2.1.3' AND schema_update_time = '2026-10-22 14:45:00'
+  SELECT 1 FROM `system_schema_version` WHERE `module` = 'cps' AND `version` = 'v2.1.3' AND `schema_update_time` = '2026-10-22 14:45:00'
 );
