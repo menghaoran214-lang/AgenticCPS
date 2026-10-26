@@ -1,9 +1,6 @@
 name: AgenticCPS H5 Build (experimental)
 
 on:
-  push:
-    branches: [develop]
-    paths: ['.github/workflows/cps-h5-build.yml']
   workflow_dispatch:
 
 permissions:
