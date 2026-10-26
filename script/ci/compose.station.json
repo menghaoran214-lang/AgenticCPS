@@ -1,0 +1,136 @@
+{
+  "services": {
+    "qiji-mysql": {
+      "image": "mysql:8.0",
+      "environment": {
+        "MYSQL_DATABASE": "cps_station_ci",
+        "MYSQL_ROOT_PASSWORD": "${MYSQL_ROOT_PASSWORD:?}",
+        "MYSQL_USER": "qiji",
+        "MYSQL_PASSWORD": "${MYSQL_PASSWORD:?}",
+        "MYSQL_INITDB_SKIP_TZINFO": "1",
+        "TZ": "Asia/Shanghai"
+      },
+      "ports": [
+        "127.0.0.1:13307:3306"
+      ],
+      "volumes": [
+        "mysql:/var/lib/mysql",
+        "./.station-ci/mysql-init:/docker-entrypoint-initdb.d:ro"
+      ],
+      "mem_limit": "960m",
+      "healthcheck": {
+        "test": [
+          "CMD-SHELL",
+          "MYSQL_PWD=$$MYSQL_PASSWORD mysql -uqiji -h127.0.0.1 cps_station_ci -e 'SELECT 1' >/dev/null"
+        ],
+        "interval": "5s",
+        "timeout": "5s",
+        "retries": 60,
+        "start_period": "30s"
+      }
+    },
+    "qiji-redis": {
+      "image": "redis:8-alpine",
+      "environment": {
+        "REDIS_PASSWORD": "${REDIS_PASSWORD:?}"
+      },
+      "command": [
+        "redis-server",
+        "--requirepass",
+        "${REDIS_PASSWORD:?}"
+      ],
+      "ports": [
+        "127.0.0.1:16380:6379"
+      ],
+      "volumes": [
+        "redis:/data"
+      ],
+      "mem_limit": "128m",
+      "healthcheck": {
+        "test": [
+          "CMD-SHELL",
+          "redis-cli --no-auth-warning -a $$REDIS_PASSWORD ping | grep PONG"
+        ],
+        "interval": "5s",
+        "timeout": "3s",
+        "retries": 30
+      }
+    },
+    "qiji-server": {
+      "image": "eclipse-temurin:21-jre",
+      "working_dir": "/app",
+      "environment": {
+        "SPRING_PROFILES_ACTIVE": "prod",
+        "MASTER_DATASOURCE_URL": "jdbc:mysql://qiji-mysql:3306/cps_station_ci?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&nullCatalogMeansCurrent=true",
+        "MASTER_DATASOURCE_USERNAME": "qiji",
+        "MASTER_DATASOURCE_PASSWORD": "${MYSQL_PASSWORD:?}",
+        "SLAVE_DATASOURCE_URL": "jdbc:mysql://qiji-mysql:3306/cps_station_ci?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&nullCatalogMeansCurrent=true",
+        "SLAVE_DATASOURCE_USERNAME": "qiji",
+        "SLAVE_DATASOURCE_PASSWORD": "${MYSQL_PASSWORD:?}",
+        "REDIS_HOST": "qiji-redis",
+        "REDIS_PORT": "6379",
+        "REDIS_DATABASE": "0",
+        "REDIS_USERNAME": "default",
+        "REDIS_PASSWORD": "${REDIS_PASSWORD:?}",
+        "SWAGGER_ENABLED": "false",
+        "AI_MCP_CLIENT_ENABLED": "false",
+        "AI_MCP_CLIENT_TOOLCALLBACK_ENABLED": "false",
+        "HAINA_MCP_ENABLED": "false",
+        "SPRING_AI_MCP_SERVER_ENABLED": "false",
+        "CAPTCHA_ENABLE": "false"
+      },
+      "command": [
+        "java",
+        "-Xms256m",
+        "-Xmx768m",
+        "-jar",
+        "/app/qiji-server.jar",
+        "--qiji.security.mock-enable=false",
+        "--qiji.captcha.enable=false",
+        "--spring.ai.mcp.server.enabled=false",
+        "--justauth.enabled=false"
+      ],
+      "ports": [
+        "127.0.0.1:48081:48080"
+      ],
+      "volumes": [
+        "./.station-ci/server/qiji-server.jar:/app/qiji-server.jar:ro",
+        "server-logs:/app/logs"
+      ],
+      "mem_limit": "1500m",
+      "depends_on": {
+        "qiji-mysql": {
+          "condition": "service_healthy"
+        },
+        "qiji-redis": {
+          "condition": "service_healthy"
+        }
+      }
+    },
+    "admin": {
+      "image": "nginx:1.27-alpine",
+      "ports": [
+        "127.0.0.1:18081:80"
+      ],
+      "volumes": [
+        "./backend/script/docker/frontend/nginx.conf:/etc/nginx/conf.d/default.conf:ro",
+        "./.station-ci/admin:/usr/share/nginx/html:ro",
+        "./.station-ci/h5:/usr/share/nginx/h5:ro"
+      ],
+      "mem_limit": "128m",
+      "depends_on": [
+        "qiji-server"
+      ]
+    }
+  },
+  "networks": {
+    "default": {
+      "internal": true
+    }
+  },
+  "volumes": {
+    "mysql": {},
+    "redis": {},
+    "server-logs": {}
+  }
+}

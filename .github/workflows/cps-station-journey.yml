@@ -1,0 +1,118 @@
+name: AgenticCPS Station Journey (isolated)
+
+on:
+  push:
+    branches: [develop]
+    paths: ['script/ci/station_*', 'script/ci/test_station_*', 'script/ci/compose.station.json', '.github/workflows/cps-station-journey.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: cps-station-journey-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  journey:
+    name: Disposable MySQL, Redis, real login, settlement and browser QR
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    env:
+      CPS_STATION_ISOLATED: '1'
+      COMPOSE_PROJECT_NAME: cps-station-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Reject stale artifacts
+        run: |
+          git diff --exit-code cb1d5c650de5bcab7be90ab44c15d076169a815a HEAD -- backend
+          git diff --exit-code 97a98dacd78807916ddf5739924347c2de11a5eb HEAD -- frontend/mall-uniapp frontend/admin-vue3
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test isolation guards before any containers start
+        run: python -m unittest discover -s script/ci -p test_station_isolation.py -v
+      - name: Initialize disposable workspace and random credentials
+        run: python script/ci/station_journey.py init
+      - uses: actions/download-artifact@v4
+        with:
+          repository: menghaoran214-lang/AgenticCPS
+          run-id: 40359226998
+          github-token: ${{ github.token }}
+          name: agenticcps-java-server
+          path: .station-ci/server
+      - uses: actions/download-artifact@v4
+        with:
+          repository: menghaoran214-lang/AgenticCPS
+          run-id: 40359226998
+          github-token: ${{ github.token }}
+          name: agenticcps-admin-vue3
+          path: .station-ci/admin
+      - uses: actions/download-artifact@v4
+        with:
+          repository: menghaoran214-lang/AgenticCPS
+          run-id: 40357584351
+          github-token: ${{ github.token }}
+          name: agenticcps-mobile-h5
+          path: .station-ci/h5
+      - name: Install isolated acceptance dependencies
+        run: |
+          python -m pip install 'pymysql[rsa]==1.1.2' bcrypt==4.3.0 playwright==1.56.0 opencv-python-headless==4.12.0.88
+          python -m playwright install --with-deps chromium
+      - name: Start fresh database, prepare fixtures and launch application
+        shell: bash
+        run: |
+          set -euo pipefail
+          set -a
+          source .station-ci/runtime.env
+          set +a
+          compose() { docker compose --project-directory "$PWD" --env-file .station-ci/runtime.env -f script/ci/compose.station.json "$@"; }
+          compose config --quiet
+          compose pull
+          compose up -d --wait qiji-mysql qiji-redis
+          python script/ci/station_journey.py prepare
+          compose up -d qiji-server admin
+          for attempt in $(seq 1 100); do
+            if curl -fsS --max-time 3 http://127.0.0.1:48081/actuator/health >/dev/null; then
+              exit 0
+            fi
+            sleep 3
+          done
+          echo 'Application health check failed'
+          exit 1
+      - name: Exercise real HTTP business journey
+        shell: bash
+        run: |
+          set -euo pipefail
+          set -a
+          source .station-ci/runtime.env
+          set +a
+          python script/ci/station_journey.py exercise
+      - name: Verify rendered QR and login in mobile browser
+        shell: bash
+        run: |
+          set -euo pipefail
+          set -a
+          source .station-ci/runtime.env
+          set +a
+          python script/ci/station_browser.py
+      - name: Upload sanitized evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: agenticcps-station-acceptance
+          path: .station-ci/evidence/
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Diagnostics on failure
+        if: failure()
+        run: |
+          docker compose --project-directory "$PWD" --env-file .station-ci/runtime.env -f script/ci/compose.station.json ps
+          docker compose --project-directory "$PWD" --env-file .station-ci/runtime.env -f script/ci/compose.station.json logs --tail 120 qiji-server qiji-mysql
+      - name: Remove only this run's disposable containers and volumes
+        if: always()
+        run: docker compose --project-directory "$PWD" --env-file .station-ci/runtime.env -f script/ci/compose.station.json down -v --remove-orphans
