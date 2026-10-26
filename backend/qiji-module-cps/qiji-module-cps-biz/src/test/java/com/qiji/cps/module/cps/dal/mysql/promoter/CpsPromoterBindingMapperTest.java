@@ -34,6 +34,8 @@ class CpsPromoterBindingMapperTest extends BaseDbUnitTest {
         }
     }
 
+    // BaseDbUnitTest uses lazy initialization: force the tenant interceptor to be installed.
+    @Resource private TenantLineInnerInterceptor tenantLineInnerInterceptor;
     @Resource private CpsPromoterRelationMapper mapper;
     @Resource private DataSource dataSource;
     private JdbcTemplate jdbc;
