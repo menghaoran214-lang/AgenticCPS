@@ -146,6 +146,10 @@ public class AdminAuthServiceImpl implements AdminAuthService {
         }
 
         // 创建 Token 令牌，记录登录日志
+        if (CommonStatusEnum.isDisable(user.getStatus())) {
+            createLoginLog(user.getId(), reqVO.getMobile(), LoginLogTypeEnum.LOGIN_MOBILE, LoginResultEnum.USER_DISABLED);
+            throw exception(AUTH_LOGIN_USER_DISABLED);
+        }
         return createTokenAfterLoginSuccess(user.getId(), reqVO.getMobile(), LoginLogTypeEnum.LOGIN_MOBILE);
     }
 
@@ -184,6 +188,10 @@ public class AdminAuthServiceImpl implements AdminAuthService {
         }
 
         // 创建 Token 令牌，记录登录日志
+        if (CommonStatusEnum.isDisable(user.getStatus())) {
+            createLoginLog(user.getId(), user.getUsername(), LoginLogTypeEnum.LOGIN_SOCIAL, LoginResultEnum.USER_DISABLED);
+            throw exception(AUTH_LOGIN_USER_DISABLED);
+        }
         return createTokenAfterLoginSuccess(user.getId(), user.getUsername(), LoginLogTypeEnum.LOGIN_SOCIAL);
     }
 

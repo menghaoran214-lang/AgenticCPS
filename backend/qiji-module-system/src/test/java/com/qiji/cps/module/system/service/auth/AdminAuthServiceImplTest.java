@@ -215,7 +215,7 @@ public class AdminAuthServiceImplTest extends BaseDbUnitTest {
             return true;
         })));
         // mock 方法（用户信息）
-        AdminUserDO user = randomPojo(AdminUserDO.class, o -> o.setId(1L));
+        AdminUserDO user = randomPojo(AdminUserDO.class, o -> o.setId(1L).setStatus(CommonStatusEnum.ENABLE.getStatus()));
         when(userService.getUserByMobile(eq(mobile))).thenReturn(user);
         // mock 缓存登录用户到 Redis
         OAuth2AccessTokenDO accessTokenDO = randomPojo(OAuth2AccessTokenDO.class, o -> o.setUserId(1L)
@@ -243,7 +243,7 @@ public class AdminAuthServiceImplTest extends BaseDbUnitTest {
         when(socialUserService.getSocialUserByCode(eq(UserTypeEnum.ADMIN.getValue()), eq(reqVO.getType()),
                 eq(reqVO.getCode()), eq(reqVO.getState()))).thenReturn(new SocialUserRespDTO(randomString(), randomString(), randomString(), userId));
         // mock（用户）
-        AdminUserDO user = randomPojo(AdminUserDO.class, o -> o.setId(userId));
+        AdminUserDO user = randomPojo(AdminUserDO.class, o -> o.setId(userId).setStatus(CommonStatusEnum.ENABLE.getStatus()));
         when(userService.getUser(eq(userId))).thenReturn(user);
         // mock 缓存登录用户到 Redis
         OAuth2AccessTokenDO accessTokenDO = randomPojo(OAuth2AccessTokenDO.class, o -> o.setUserId(1L)

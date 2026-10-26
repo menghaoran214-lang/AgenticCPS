@@ -144,6 +144,11 @@ public class MemberAuthServiceImpl implements MemberAuthService {
                 getClientIP(), TerminalEnum.WECHAT_MINI_PROGRAM.getTerminal());
         Assert.notNull(user, "获取用户失败，结果为空");
 
+        if (CommonStatusEnum.isDisable(user.getStatus())) {
+            createLoginLog(user.getId(), user.getMobile(), LoginLogTypeEnum.LOGIN_SOCIAL, LoginResultEnum.USER_DISABLED);
+            throw exception(AUTH_LOGIN_USER_DISABLED);
+        }
+
         // 绑定社交用户
         String openid = socialUserApi.bindSocialUser(new SocialUserBindReqDTO(user.getId(), getUserType().getValue(),
                 SocialTypeEnum.WECHAT_MINI_PROGRAM.getType(), reqVO.getLoginCode(), reqVO.getState()));
@@ -154,6 +159,11 @@ public class MemberAuthServiceImpl implements MemberAuthService {
 
     private AppAuthLoginRespVO createTokenAfterLoginSuccess(MemberUserDO user, String mobile,
                                                             LoginLogTypeEnum logType, String openid) {
+        if (CommonStatusEnum.isDisable(user.getStatus())) {
+            createLoginLog(user.getId(), mobile, logType, LoginResultEnum.USER_DISABLED);
+            throw exception(AUTH_LOGIN_USER_DISABLED);
+        }
+
         // 插入登陆日志
         createLoginLog(user.getId(), mobile, logType, LoginResultEnum.SUCCESS);
         // 创建 Token 令牌
