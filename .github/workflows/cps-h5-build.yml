@@ -1,0 +1,57 @@
+name: AgenticCPS H5 Build (experimental)
+
+on:
+  push:
+    branches: [develop]
+    paths: ['.github/workflows/cps-h5-build.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  h5:
+    name: Build mobile H5 with official Linux HBuilderX CLI
+    runs-on: ubuntu-22.04
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+      - name: Disk preflight
+        run: df -h /
+      - name: Download pinned Linux HBuilderX CLI from DCloud
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 2 --connect-timeout 30 --max-time 900 \
+            "https://download1.dcloud.net.cn/download/HBuilderX.5.24.2026081301.linux_x64.full.tar.gz" \
+            --output "$RUNNER_TEMP/hbuilderx.tar.gz"
+          test "$(stat -c%s "$RUNNER_TEMP/hbuilderx.tar.gz")" -gt 1000000000
+          mkdir -p "$RUNNER_TEMP/hbuilderx"
+          tar -xzf "$RUNNER_TEMP/hbuilderx.tar.gz" -C "$RUNNER_TEMP/hbuilderx"
+      - name: Build UniApp H5 locally (do not deploy)
+        shell: bash
+        run: |
+          set -euo pipefail
+          CLI="$(find "$RUNNER_TEMP/hbuilderx" -maxdepth 4 -type f -name cli -print -quit)"
+          test -n "$CLI"
+          chmod +x "$CLI"
+          "$CLI" open
+          sleep 4
+          "$CLI" project open --path "$GITHUB_WORKSPACE/frontend/mall-uniapp"
+          sleep 4
+          "$CLI" publish web --project "$GITHUB_WORKSPACE/frontend/mall-uniapp" --webHosting false --ssr false
+          if test -f frontend/mall-uniapp/unpackage/dist/build/web/index.html; then
+            echo "H5_DIR=frontend/mall-uniapp/unpackage/dist/build/web" >> "$GITHUB_ENV"
+          elif test -f frontend/mall-uniapp/unpackage/dist/build/h5/index.html; then
+            echo "H5_DIR=frontend/mall-uniapp/unpackage/dist/build/h5" >> "$GITHUB_ENV"
+          else
+            echo "::error::H5 index.html not produced"
+            exit 1
+          fi
+      - name: Upload H5 output
+        uses: actions/upload-artifact@v4
+        with:
+          name: agenticcps-mobile-h5
+          path: ${{ env.H5_DIR }}
+          if-no-files-found: error
+          retention-days: 7
