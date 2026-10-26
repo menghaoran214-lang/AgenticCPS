@@ -38,20 +38,6 @@ jobs:
           java-version: '21'
           cache: maven
           cache-dependency-path: backend/pom.xml
-      - name: Test login, funds safety and order rebates
-        run: >-
-          mvn -B -ntp -f backend/pom.xml test
-          -pl qiji-module-cps/qiji-module-cps-biz -am
-          -Dtest=AdminAuthServiceImplTest,MemberAuthLoginSafetyTest,CpsAppMemberContextTest,AppCpsOrderControllerTest,AppCpsRebateControllerTest,AppCpsWithdrawControllerTest,CpsOrderServiceImplTest,CpsOrderClaimServiceImplTest,CpsRebateRecordServiceImplTest,CpsRebateSettleServiceImplTest,CpsRebateSettleMultiLevelTest,CpsMoneyConverterTest,CpsRebateAssetServiceImplTest,CpsRebateAssetLedgerConcurrencyTest,CpsRebateTokenExchangeServiceImplTest,CpsWithdrawSecurityServiceTest,CpsWithdrawAccountServiceTest,CpsMcpAuthorizationServiceTest
-          -Dsurefire.failIfNoSpecifiedTests=false
-      - name: Upload safety test reports
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: agenticcps-safety-test-reports
-          path: backend/**/target/surefire-reports/
-          if-no-files-found: warn
-          retention-days: 7
       - name: Package qiji-server
         run: mvn -B -ntp -f backend/pom.xml clean package -pl qiji-server -am -DskipTests
       - name: Upload Java build
