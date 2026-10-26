@@ -57,3 +57,12 @@
 
 只修改 GitHub develop 开发分支并使用 GitHub 托管临时 runner。
 没有连接惠普电脑、启停现有服务、执行生产 SQL、变更生产账号或部署生产环境。
+
+## 本轮最终验证记录
+
+- 代码提交：`cb1d5c650de5bcab7be90ab44c15d076169a815a`。
+- [安全回归](https://github.com/menghaoran214-lang/AgenticCPS/actions/runs/40359227160)：30 个必要套件、202 项后端测试全部通过，包含真实 H2 SQL 的并发抢绑与跨租户拒绝。
+- 报告校验器：5 项 Python 测试通过。
+- [H5 编译与邀请码测试](https://github.com/menghaoran214-lang/AgenticCPS/actions/runs/40357584351)：8 项 Node 测试通过，移动 H5 打包成功。该次构建后前端源码未再变更。
+- 新增用例先复现了禁用账号绕过、并发绑定错误和空冻结天数规则快照异常，修复后整组通过。
+- 上述结果不等同于真实联盟实单、实机扫码或生产环境验收。
