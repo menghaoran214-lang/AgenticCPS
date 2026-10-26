@@ -1,6 +1,9 @@
 name: AgenticCPS H5 Build (experimental)
 
 on:
+  push:
+    branches: [develop]
+    paths: ['.github/workflows/cps-h5-build.yml']
   workflow_dispatch:
 
 permissions:
@@ -31,7 +34,7 @@ jobs:
           node-version: '20'
       - name: Install mall-uniapp dependencies
         working-directory: frontend/mall-uniapp
-        run: npm install --no-audit --no-fund
+        run: npm install --legacy-peer-deps --no-audit --no-fund
       - name: Download pinned Linux HBuilderX CLI from DCloud
         shell: bash
         run: |
