@@ -28,6 +28,13 @@ public class MeituanPlatformClientAdapter implements CpsPlatformClient {
     @Resource
     private CpsPlatformClientFactory factory;
 
+    public MeituanPlatformClientAdapter() {
+    }
+
+    public MeituanPlatformClientAdapter(CpsPlatformClientFactory factory) {
+        this.factory = factory;
+    }
+
     @Override
     public String getPlatformCode() {
         return CpsPlatformCodeEnum.MEITUAN.getCode();
