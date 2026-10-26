@@ -1,0 +1,4 @@
+AgenticCPS H5 build trial
+AppID: __UNI__D067534
+Source branch: develop
+Build: non-production, GitHub Actions only
