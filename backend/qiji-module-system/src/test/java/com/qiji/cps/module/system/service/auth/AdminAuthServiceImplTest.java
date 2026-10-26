@@ -355,4 +355,30 @@ public class AdminAuthServiceImplTest extends BaseDbUnitTest {
         verify(loginLogService, never()).createLoginLog(any());
     }
 
+
+    @Test
+    public void testSmsLogin_disabledUserCannotReceiveToken() {
+        AdminUserDO user = randomPojo(AdminUserDO.class, o -> o.setId(42L)
+                .setStatus(CommonStatusEnum.DISABLE.getStatus()));
+        when(userService.getUserByMobile("13800000000")).thenReturn(user);
+        assertServiceException(() -> authService.smsLogin(new AuthSmsLoginReqVO("13800000000", "123456")),
+                AUTH_LOGIN_USER_DISABLED);
+        verifyNoInteractions(oauth2TokenService);
+        verify(loginLogService).createLoginLog(argThat(log ->
+                LoginResultEnum.USER_DISABLED.getResult().equals(log.getResult())));
+    }
+
+    @Test
+    public void testSocialLogin_disabledUserCannotReceiveToken() {
+        AuthSocialLoginReqVO request = randomPojo(AuthSocialLoginReqVO.class);
+        when(socialUserService.getSocialUserByCode(eq(UserTypeEnum.ADMIN.getValue()), eq(request.getType()),
+                eq(request.getCode()), eq(request.getState())))
+                .thenReturn(new SocialUserRespDTO("openid", "nickname", "avatar", 42L));
+        when(userService.getUser(42L)).thenReturn(randomPojo(AdminUserDO.class,
+                o -> o.setId(42L).setStatus(CommonStatusEnum.DISABLE.getStatus())));
+        assertServiceException(() -> authService.socialLogin(request), AUTH_LOGIN_USER_DISABLED);
+        verifyNoInteractions(oauth2TokenService);
+        verify(loginLogService).createLoginLog(argThat(log ->
+                LoginResultEnum.USER_DISABLED.getResult().equals(log.getResult())));
+    }
 }
