@@ -1,10 +1,6 @@
 name: AgenticCPS H5 Build (experimental)
 
 on:
-  push:
-    branches: [develop]
-    paths:
-      - '.github/h5-trigger-once.txt'
   workflow_dispatch:
 
 permissions:
