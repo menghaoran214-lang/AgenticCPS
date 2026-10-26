@@ -64,14 +64,12 @@ public class CpsPromoterRelationServiceTest {
         when(promoterRelationMapper.selectByMemberId(103L)).thenReturn(userC);
         when(promoterRelationMapper.selectByMemberId(102L)).thenReturn(userB);
 
+        when(promoterRelationMapper.bindIfUnbound(eq(3L), eq(102L), eq(101L), any())).thenReturn(1);
         boolean success = promoterRelationService.bindInviterByParentMemberId(103L, 102L);
 
         assertTrue(success);
         // 验证 C 的 parent=102, grandparent=101
-        verify(promoterRelationMapper, times(1)).updateById(argThat((CpsPromoterRelationDO rel) ->
-                Objects.equals(rel.getId(), 3L)
-                        && Objects.equals(rel.getParentMemberId(), 102L)
-                        && Objects.equals(rel.getGrandparentMemberId(), 101L)));
+        verify(promoterRelationMapper).bindIfUnbound(eq(3L), eq(102L), eq(101L), any());
 
         // 验证递增 B 的 L1 直推
         verify(promoterRelationMapper, times(1)).incrTeamCountL1(102L, 1);
@@ -143,10 +141,20 @@ public class CpsPromoterRelationServiceTest {
         when(promoterRelationMapper.selectByMemberId(103L)).thenReturn(userC,
                 CpsPromoterRelationDO.builder().id(3L).memberId(103L).parentMemberId(999L).build());
         when(promoterRelationMapper.selectByMemberId(102L)).thenReturn(userB);
-        // A concurrent request has already committed another parent before this write.
-        when(promoterRelationMapper.updateById(any(CpsPromoterRelationDO.class))).thenReturn(0);
+        when(promoterRelationMapper.bindIfUnbound(eq(3L), eq(102L), isNull(), any())).thenReturn(0);
 
         assertFalse(promoterRelationService.bindInviterByParentMemberId(103L, 102L));
+        verify(promoterRelationMapper, never()).incrTeamCountL1(anyLong(), anyInt());
+        verify(promoterRelationMapper, never()).incrTeamCountL2(anyLong(), anyInt());
+    }
+
+    @Test
+    void concurrentSameStationBindingReturnsSuccessWithoutDoubleCounting() {
+        when(promoterRelationMapper.selectByMemberId(103L)).thenReturn(userC,
+                CpsPromoterRelationDO.builder().id(3L).memberId(103L).parentMemberId(102L).build());
+        when(promoterRelationMapper.selectByMemberId(102L)).thenReturn(userB);
+        when(promoterRelationMapper.bindIfUnbound(eq(3L), eq(102L), isNull(), any())).thenReturn(0);
+        assertTrue(promoterRelationService.bindInviterByParentMemberId(103L, 102L));
         verify(promoterRelationMapper, never()).incrTeamCountL1(anyLong(), anyInt());
         verify(promoterRelationMapper, never()).incrTeamCountL2(anyLong(), anyInt());
     }

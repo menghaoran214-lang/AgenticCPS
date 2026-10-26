@@ -190,7 +190,7 @@ public class CpsSplitCalculator {
         map.put("selfRebateRate", selfRebateRate);
         map.put("parentRebateRate", parentRebateRate);
         map.put("grandparentRebateRate", grandparentRebateRate);
-        map.put("freezeDays", rule != null ? rule.getFreezeDays() : 15);
+        map.put("freezeDays", rule != null && rule.getFreezeDays() != null ? rule.getFreezeDays() : 15);
         return JsonUtils.toJsonString(map);
     }
 

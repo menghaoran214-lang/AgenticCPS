@@ -145,13 +145,12 @@ public class CpsPromoterRelationServiceImpl implements CpsPromoterRelationServic
 
         // 4. 更新下级关系记录
         Long grandparentMemberId = parent.getParentMemberId();
-        CpsPromoterRelationDO updateDO = CpsPromoterRelationDO.builder()
-                .id(child.getId())
-                .parentMemberId(parentMemberId)
-                .grandparentMemberId(grandparentMemberId)
-                .bindTime(LocalDateTime.now())
-                .build();
-        promoterRelationMapper.updateById(updateDO);
+        int updated = promoterRelationMapper.bindIfUnbound(
+                child.getId(), parentMemberId, grandparentMemberId, LocalDateTime.now());
+        if (updated != 1) {
+            CpsPromoterRelationDO current = promoterRelationMapper.selectByMemberId(memberId);
+            return current != null && Objects.equals(current.getParentMemberId(), parentMemberId);
+        }
 
         // 5. 原子递增上级的团队人数统计
         promoterRelationMapper.incrTeamCountL1(parentMemberId, 1);

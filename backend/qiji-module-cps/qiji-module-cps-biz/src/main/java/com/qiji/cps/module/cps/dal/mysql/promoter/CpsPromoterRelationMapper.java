@@ -12,6 +12,7 @@ import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Update;
 
 import java.util.List;
+import java.time.LocalDateTime;
 
 /**
  * CPS 推广员分销关系 Mapper
@@ -58,6 +59,22 @@ public interface CpsPromoterRelationMapper extends BaseMapperX<CpsPromoterRelati
                 .eqIfPresent(CpsPromoterRelationDO::getPromoterStatus, reqVO.getPromoterStatus())
                 .orderByDesc(CpsPromoterRelationDO::getId));
     }
+
+
+    @Update("""
+            UPDATE cps_promoter_relation
+            SET parent_member_id = #{parentMemberId},
+                grandparent_member_id = #{grandparentMemberId},
+                bind_time = #{bindTime},
+                update_time = NOW()
+            WHERE id = #{id}
+              AND parent_member_id IS NULL
+              AND deleted = 0
+            """)
+    int bindIfUnbound(@Param("id") Long id,
+                      @Param("parentMemberId") Long parentMemberId,
+                      @Param("grandparentMemberId") Long grandparentMemberId,
+                      @Param("bindTime") LocalDateTime bindTime);
 
     @Update("""
             UPDATE cps_promoter_relation
