@@ -1,0 +1,46 @@
+name: AgenticCPS Runtime Smoke (isolated)
+
+on:
+  push:
+    branches: [develop]
+    paths: ['.github/workflows/cps-runtime-smoke.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  smoke:
+    name: Docker runtime, admin and H5 smoke
+    runs-on: ubuntu-22.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download validated Java JAR
+        uses: actions/download-artifact@v4
+        with:
+          repository: menghaoran214-lang/AgenticCPS
+          run-id: 40348880700
+          github-token: ${{ github.token }}
+          name: agenticcps-java-server
+          path: backend/script/docker/backend
+      - name: Download validated admin assets
+        uses: actions/download-artifact@v4
+        with:
+          repository: menghaoran214-lang/AgenticCPS
+          run-id: 40348880700
+          github-token: ${{ github.token }}
+          name: agenticcps-admin-vue3
+          path: backend/script/docker/frontend/dist
+      - name: Download validated mobile H5 assets
+        uses: actions/download-artifact@v4
+        with:
+          repository: menghaoran214-lang/AgenticCPS
+          run-id: 40350592394
+          github-token: ${{ github.token }}
+          name: agenticcps-mobile-h5
+          path: backend/script/docker/frontend/mall-h5
+      - name: Run isolated Docker smoke
+        shell: bash
+        run: bash script/ci/cps-runtime-smoke.sh
