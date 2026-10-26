@@ -106,7 +106,11 @@ if [[ "${BUILD_BACKEND}" -eq 1 ]]; then
   cp -f "${BACKEND_ROOT}/sql/mysql/ruoyi-vue-pro.sql" "${SCRIPT_DIR}/mysql/init/00-ruoyi-vue-pro.sql"
   cp -f "${BACKEND_ROOT}/sql/mysql/quartz.sql" "${SCRIPT_DIR}/mysql/init/05-quartz.sql"
   cp -f "${BACKEND_ROOT}/sql/module/cps-all-in-one.sql" "${SCRIPT_DIR}/mysql/init/10-cps-all-in-one.sql"
-  cp -f "${BACKEND_ROOT}/sql/module/ai-all.sql" "${SCRIPT_DIR}/mysql/init/15-ai-all.sql"
+  if [[ -f "${BACKEND_ROOT}/sql/module/ai-all.sql" ]]; then
+    cp -f "${BACKEND_ROOT}/sql/module/ai-all.sql" "${SCRIPT_DIR}/mysql/init/15-ai-all.sql"
+  else
+    echo "  [WARN] ai-all.sql is absent in upstream; core CPS can be packaged, but AI default roles/data are NOT initialized." >&2
+  fi
   echo "  [OK] 后端 JAR 与数据库初始化脚本已归集"
 fi
 
