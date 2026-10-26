@@ -193,4 +193,25 @@ public class CpsSplitCalculatorTest {
                 calculator.calculateSplit(1000L, illegalRule, null, null, null));
     }
 
+
+    @Test
+    @DisplayName("Station pilot: one direct agent receives a share of settled commission")
+    void stationPilotSingleAgentSplitConservesCommission() {
+        CpsSplitRuleDO rule = CpsSplitRuleDO.builder()
+                .platformShareRate(new BigDecimal("0.20"))
+                .selfRebateRate(new BigDecimal("0.75"))
+                .parentRebateRate(new BigDecimal("0.25"))
+                .grandparentRebateRate(BigDecimal.ZERO).build();
+        CpsPromoterRelationDO buyer = CpsPromoterRelationDO.builder()
+                .memberId(103L).parentMemberId(102L).promoterStatus(1).build();
+        CpsPromoterRelationDO station = CpsPromoterRelationDO.builder()
+                .memberId(102L).promoterStatus(1).build();
+        CpsSplitAllocation split = calculator.calculateSplit(10000L, rule, buyer, station, null);
+        assertEquals(6000L, split.getSelfRebateCent());
+        assertEquals(2000L, split.getParentRebateCent());
+        assertEquals(0L, split.getGrandparentRebateCent());
+        assertEquals(2000L, split.getPlatformTotalIncomeCent());
+        assertEquals(10000L, split.getSelfRebateCent() + split.getParentRebateCent()
+                + split.getGrandparentRebateCent() + split.getPlatformTotalIncomeCent());
+    }
 }

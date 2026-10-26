@@ -10,10 +10,8 @@
         </view>
 
         <view class="qr-box">
-          <view class="qr-mock">
-            <text class="qr-icon">📱</text>
-            <text class="qr-tip">扫码立即加入</text>
-          </view>
+          <l-painter v-if="state.inviteLink" :key="state.inviteLink" :board="qrBoard" />
+          <text v-else class="qr-tip">可分享下方邀请码</text>
         </view>
 
         <view class="invite-code-box">
@@ -41,15 +39,15 @@
         <view class="step-item">
           <view class="step-num">2</view>
           <view class="step-text">
-            <text class="step-h">首单自动锁粉终身绑定</text>
-            <text class="step-p">新客通过您的链接进入或完成首单，系统自动锁定上下级推广关系。</text>
+            <text class="step-h">登录后确认推荐关系</text>
+            <text class="step-p">新客通过链接进入，登录后绑定推荐关系；已绑定其他推荐人的用户不会被覆盖。</text>
           </view>
         </view>
         <view class="step-item">
           <view class="step-num">3</view>
           <view class="step-text">
             <text class="step-h">持续获得多级出单提成</text>
-            <text class="step-p">下级及二级团队每一次购物出单，您都将按规则获得佣金提成。</text>
+            <text class="step-p">订单经联盟结算并完成返利审核后，按分佣规则入账；退款会冲回相应收益。</text>
           </view>
         </view>
       </view>
@@ -58,22 +56,34 @@
 </template>
 
 <script setup>
-  import { reactive, onMounted } from 'vue';
+  import { reactive, computed, onMounted } from 'vue';
   import sheep from '@/sheep';
   import CpsPromoterApi from '@/sheep/api/cps/promoter';
+  import { buildInviteLink } from '@/sheep/helper/cpsInviteCore';
 
   const state = reactive({
+    inviteLink: '',
     summary: {
       inviteCode: '',
       promoterLevel: 0,
     },
   });
 
+  const qrBoard = computed(() => ({
+    css: { width: '240rpx', height: '240rpx', background: '#ffffff', padding: '16rpx', boxSizing: 'border-box' },
+    views: [{ type: 'qrcode', text: state.inviteLink, css: { width: '208rpx', height: '208rpx' } }],
+  }));
+
   async function loadSummary() {
     try {
       const res = await CpsPromoterApi.getSummary();
       if (res && res.code === 0 && res.data) {
         state.summary = res.data;
+        let base = sheep.$store('app').platform?.share?.linkAddress || '';
+        // #ifdef H5
+        base = window.location.href;
+        // #endif
+        state.inviteLink = buildInviteLink(base, state.summary.inviteCode);
       }
     } catch (e) {
       console.error(e);
@@ -92,7 +102,11 @@
 
   function copyLink() {
     if (!state.summary.inviteCode) return;
-    const link = `${window.location.origin}/#/pages/cps/goods?inviteCode=${state.summary.inviteCode}`;
+    const link = state.inviteLink;
+    if (!link) {
+      sheep.$helper.toast('暂无法生成推广链接，请分享邀请码');
+      return;
+    }
     uni.setClipboardData({
       data: link,
       success: () => {

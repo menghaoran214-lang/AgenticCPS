@@ -427,4 +427,61 @@ class CpsRebateAssetServiceImplTest {
                 .totalRebate(BigDecimal.ZERO).withdrawnAmount(BigDecimal.ZERO)
                 .status(1).version(0).build();
     }
+
+    @Test
+    void stationRefundReversesBuyerAndFrozenAgentShareExactlyOnce() {
+        verifyStationRefund(true);
+    }
+
+    @Test
+    void stationRefundCreatesAgentDebtAfterCommissionWasWithdrawn() {
+        verifyStationRefund(false);
+    }
+
+    private void verifyStationRefund(boolean frozen) {
+        CpsRebateRecordDO buyer = CpsRebateRecordDO.builder()
+                .id(11L).orderId(22L).memberId(33L).platformCode("taobao").platformOrderId("P22")
+                .rebateAmount(new BigDecimal("60.00")).rebateType(CpsRebateTypeEnum.REBATE.getType())
+                .rebateStatus(CpsRebateStatusEnum.RECEIVED.getStatus()).build();
+        CpsRebateRecordDO agent = CpsRebateRecordDO.builder()
+                .id(12L).orderId(22L).memberId(44L).platformCode("taobao").platformOrderId("P22")
+                .rebateAmount(new BigDecimal("20.00")).rebateType(CpsRebateTypeEnum.REBATE.getType())
+                .rebateStatus(frozen ? CpsRebateStatusEnum.PENDING.getStatus() : CpsRebateStatusEnum.RECEIVED.getStatus())
+                .freezeRecordId(frozen ? 99L : null).build();
+        when(rebateRecordMapper.selectByOrderIdAndType(22L, CpsRebateTypeEnum.REBATE.getType())).thenReturn(buyer);
+        when(rebateRecordMapper.selectListByOrderId(22L)).thenReturn(List.of(buyer, agent));
+        when(accountMapper.selectForUpdateByMemberId(33L)).thenReturn(account(33L, 6000, 0, 0));
+        when(accountMapper.selectForUpdateByMemberId(44L)).thenReturn(account(44L, frozen ? 0 : 300, frozen ? 2000 : 0, 0));
+        when(accountMapper.updateById(any(CpsRebateAccountDO.class))).thenReturn(1);
+        if (frozen) {
+            when(freezeRecordMapper.selectById(99L)).thenReturn(CpsFreezeRecordDO.builder()
+                    .id(99L).memberId(44L).amountCent(2000L).status(CpsFreezeStatusEnum.FROZEN.getStatus()).build());
+            when(freezeRecordMapper.updateById(any(CpsFreezeRecordDO.class))).thenReturn(1);
+        }
+
+        service.reverseOrderRebate(22L, "station-refund-22");
+
+        ArgumentCaptor<CpsRebateAssetLedgerDO> ledgers = ArgumentCaptor.forClass(CpsRebateAssetLedgerDO.class);
+        verify(ledgerMapper, times(2)).insert(ledgers.capture());
+        CpsRebateAssetLedgerDO buyerLedger = ledgers.getAllValues().stream()
+                .filter(value -> Long.valueOf(33L).equals(value.getMemberId())).findFirst().orElseThrow();
+        CpsRebateAssetLedgerDO agentLedger = ledgers.getAllValues().stream()
+                .filter(value -> Long.valueOf(44L).equals(value.getMemberId())).findFirst().orElseThrow();
+        assertEquals(-6000L, buyerLedger.getAvailableChangeCent());
+        assertEquals(frozen ? -2000L : 0L, agentLedger.getFrozenChangeCent());
+        assertEquals(frozen ? 0L : -300L, agentLedger.getAvailableChangeCent());
+        assertEquals(frozen ? 0L : 1700L, agentLedger.getDebtChangeCent());
+        verify(rebateRecordMapper, times(2)).insert(any(CpsRebateRecordDO.class));
+        if (frozen) {
+            verifyNoInteractions(debtMapper);
+        } else {
+            verify(debtMapper).insert(argThat((CpsRebateDebtDO debt) ->
+                    Long.valueOf(44L).equals(debt.getMemberId()) && debt.getOutstandingDebtCent() == 1700L));
+        }
+
+        when(ledgerMapper.selectByBusinessAndIdempotencyKey("ORDER_REFUND", "station-refund-22")).thenReturn(buyerLedger);
+        service.reverseOrderRebate(22L, "station-refund-22");
+        verify(ledgerMapper, times(2)).insert(any(CpsRebateAssetLedgerDO.class));
+        verify(accountMapper, times(2)).updateById(any(CpsRebateAccountDO.class));
+    }
 }

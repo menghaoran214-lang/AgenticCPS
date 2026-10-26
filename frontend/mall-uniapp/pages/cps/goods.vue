@@ -305,6 +305,7 @@
   import { showAuthModal } from '@/sheep/hooks/useModal';
   import { resetPagination } from '@/sheep/helper/utils';
   import CpsGoodsApi from '@/sheep/api/cps/goods';
+  import cpsInvite from '@/sheep/helper/cpsInvite';
   import { trackCpsEvent } from '@/sheep/helper/cpsAnalytics';
   import {
     createPromotionAction,
@@ -515,6 +516,12 @@
     if (state.linkLoading) return;
     state.linkLoading = true;
     try {
+      const inviteStatus = await cpsInvite.bindPending();
+      if (inviteStatus === 'retry') {
+        sheep.$helper.toast('推荐关系确认失败，请稍后重试');
+        return;
+      }
+      if (inviteStatus === 'rejected') sheep.$helper.toast('邀请码未绑定，将按已有推荐关系结算');
       const { code, data } = await CpsGoodsApi.generateLink({
         platformCode: item.platformCode || state.platformCode,
         goodsId: item.goodsId,
@@ -601,6 +608,8 @@
   }
 
   onLoad((options = {}) => {
+    cpsInvite.capture(options.inviteCode);
+    cpsInvite.bindPending();
     state.recentKeywords = uni.getStorageSync(RECENT_KEY) || [];
     if (options.platformCode) {
       state.platformCode = decodeURIComponent(options.platformCode);

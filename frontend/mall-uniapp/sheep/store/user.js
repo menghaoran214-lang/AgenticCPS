@@ -8,6 +8,7 @@ import UserApi from '@/sheep/api/member/user';
 import PayWalletApi from '@/sheep/api/pay/wallet';
 import OrderApi from '@/sheep/api/trade/order';
 import CouponApi from '@/sheep/api/promotion/coupon';
+import cpsInvite from '@/sheep/helper/cpsInvite';
 
 // 默认用户信息
 const defaultUserInfo = {
@@ -181,6 +182,8 @@ const user = defineStore({
         showAuthModal('changeMobile');
       }
 
+      // CPS 购物邀请在会员会话校验后绑定，商城原有推广关系独立保留。
+      await cpsInvite.bindPending();
       // 绑定推广员
       $share.bindBrokerageUser();
     },
