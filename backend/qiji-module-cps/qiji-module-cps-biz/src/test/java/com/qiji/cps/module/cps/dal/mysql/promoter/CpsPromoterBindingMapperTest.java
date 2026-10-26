@@ -16,6 +16,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 
+import javax.sql.DataSource;
 import java.time.LocalDateTime;
 import java.util.concurrent.*;
 import static org.junit.jupiter.api.Assertions.*;
@@ -34,10 +35,12 @@ class CpsPromoterBindingMapperTest extends BaseDbUnitTest {
     }
 
     @Resource private CpsPromoterRelationMapper mapper;
-    @Resource private JdbcTemplate jdbc;
+    @Resource private DataSource dataSource;
+    private JdbcTemplate jdbc;
 
     @BeforeEach
     void createFixture() {
+        jdbc = new JdbcTemplate(dataSource);
         jdbc.execute("""
                 CREATE TABLE cps_promoter_relation (
                     id BIGINT PRIMARY KEY, member_id BIGINT, parent_member_id BIGINT,
