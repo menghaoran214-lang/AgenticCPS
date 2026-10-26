@@ -3,8 +3,16 @@ name: AgenticCPS Build Check
 on:
   push:
     branches: [develop]
+    paths:
+      - 'backend/**'
+      - 'frontend/admin-vue3/**'
+      - '.github/workflows/cps-build-check.yml'
   pull_request:
     branches: [master]
+    paths:
+      - 'backend/**'
+      - 'frontend/admin-vue3/**'
+      - '.github/workflows/cps-build-check.yml'
   workflow_dispatch:
 
 permissions:
