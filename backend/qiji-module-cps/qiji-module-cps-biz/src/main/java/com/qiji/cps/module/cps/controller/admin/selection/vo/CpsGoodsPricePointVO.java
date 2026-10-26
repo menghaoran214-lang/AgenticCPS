@@ -22,6 +22,9 @@ public class CpsGoodsPricePointVO {
     @Schema(description = "快照时间")
     private LocalDateTime snapshotTime;
 
+    @Schema(description = "价格维持截止时间（若价格未变动则顺延）")
+    private LocalDateTime endTime;
+
     @Schema(description = "券后价（元）", example = "29.90")
     private BigDecimal actualPrice;
 

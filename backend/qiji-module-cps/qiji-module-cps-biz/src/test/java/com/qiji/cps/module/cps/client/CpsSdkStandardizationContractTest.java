@@ -12,6 +12,7 @@ import com.qiji.cps.module.cps.client.dto.CpsPromotionLinkResult;
 import com.qiji.cps.module.cps.client.dto.CpsVendorConfig;
 import com.qiji.cps.module.cps.client.official.douyin.DouyinOfficialVendorClient;
 import com.qiji.cps.module.cps.client.official.jd.JdOfficialVendorClient;
+import com.qiji.cps.module.cps.client.official.meituan.MeituanOfficialVendorClient;
 import com.qiji.cps.module.cps.client.official.pdd.PddOfficialVendorClient;
 import com.qiji.cps.module.cps.client.official.taobao.TaobaoOfficialVendorClient;
 import org.junit.jupiter.api.Test;
@@ -120,11 +121,10 @@ class CpsSdkStandardizationContractTest {
     }
 
     @Test
-    void officialSkeletonsRemainLimitedAndMigratedJdExposesBusinessCapabilities() {
+    void officialSkeletonsRemainLimitedAndMigratedOfficialClientsExposeBusinessCapabilities() {
         List<CpsApiVendorClient> skeletons = List.of(
                 new TaobaoOfficialVendorClient(),
-                new PddOfficialVendorClient(),
-                new DouyinOfficialVendorClient()
+                new PddOfficialVendorClient()
         );
 
         for (CpsApiVendorClient skeleton : skeletons) {
@@ -132,12 +132,19 @@ class CpsSdkStandardizationContractTest {
                     skeleton.getPlatformCode());
         }
 
-        CpsApiVendorClient jd = new JdOfficialVendorClient();
-        assertTrue(jd.getCapabilities().containsAll(Set.of(
-                CpsVendorCapability.GOODS_SEARCH,
-                CpsVendorCapability.PROMOTION_LINK,
-                CpsVendorCapability.ORDER_QUERY,
-                CpsVendorCapability.CONNECTION_TEST)));
+        List<CpsApiVendorClient> fullOfficialClients = List.of(
+                new JdOfficialVendorClient(),
+                new DouyinOfficialVendorClient(),
+                new MeituanOfficialVendorClient()
+        );
+
+        for (CpsApiVendorClient officialClient : fullOfficialClients) {
+            assertTrue(officialClient.getCapabilities().containsAll(Set.of(
+                    CpsVendorCapability.GOODS_SEARCH,
+                    CpsVendorCapability.PROMOTION_LINK,
+                    CpsVendorCapability.ORDER_QUERY,
+                    CpsVendorCapability.CONNECTION_TEST)), officialClient.getPlatformCode());
+        }
     }
 
     private static final class CouponVendor extends StubVendorClient implements CpsCouponInfoVendorClient {

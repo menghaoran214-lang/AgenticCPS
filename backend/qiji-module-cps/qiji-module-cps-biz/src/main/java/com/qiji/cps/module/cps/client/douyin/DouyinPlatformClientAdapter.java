@@ -31,6 +31,13 @@ public class DouyinPlatformClientAdapter implements CpsPlatformClient {
     @Resource
     private CpsPlatformClientFactory factory;
 
+    public DouyinPlatformClientAdapter() {
+    }
+
+    public DouyinPlatformClientAdapter(CpsPlatformClientFactory factory) {
+        this.factory = factory;
+    }
+
     @Override
     public String getPlatformCode() {
         return CpsPlatformCodeEnum.DOUYIN.getCode();

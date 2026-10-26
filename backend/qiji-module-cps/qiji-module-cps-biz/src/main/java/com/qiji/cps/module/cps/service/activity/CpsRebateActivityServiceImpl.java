@@ -20,6 +20,7 @@ import com.qiji.cps.module.cps.client.dto.CpsVendorConfig;
 import com.qiji.cps.module.cps.client.haodanku.activity.HaodankuActivityVendorClient;
 import com.qiji.cps.module.cps.client.haodanku.activity.HdkActivityClient;
 import com.qiji.cps.module.cps.client.jutuike.JutuikeUnionVendorClient;
+import com.qiji.cps.module.cps.client.official.meituan.MeituanOfficialVendorClient;
 import com.qiji.cps.module.cps.dal.dataobject.adzone.CpsAdzoneDO;
 import com.qiji.cps.module.cps.dal.dataobject.activity.CpsRebateActivityDO;
 import com.qiji.cps.module.cps.dal.dataobject.platform.CpsPlatformDO;
@@ -66,11 +67,13 @@ public class CpsRebateActivityServiceImpl implements CpsRebateActivityService {
     private static final String SOURCE_DATAOKE = "dataoke";
     private static final String SOURCE_HAODANKU = "haodanku";
     private static final String SOURCE_JUTUIKE = "jutuike";
+    private static final String SOURCE_OFFICIAL = "official";
     private static final String VENDOR_DATAOKE = "dataoke";
     private static final String VENDOR_HAODANKU = "haodanku";
     private static final String VENDOR_JUTUIKE = "jutuike";
     private static final String VENDOR_OFFICIAL = "official";
     private static final String PLATFORM_DIDI = "didi";
+    private static final String PLATFORM_MEITUAN = "meituan";
     private static final String PLATFORM_TAOBAO = "taobao";
     private static final String PLATFORM_ELEME = "eleme";
     private static final String DTK_EXTERNAL_PREFIX = "dtk:";
@@ -110,6 +113,9 @@ public class CpsRebateActivityServiceImpl implements CpsRebateActivityService {
 
     @Resource
     private DidiOfficialVendorClient didiOfficialVendorClient;
+
+    @Resource
+    private MeituanOfficialVendorClient meituanOfficialVendorClient;
 
     @Resource
     private CpsAdzoneService adzoneService;
@@ -246,6 +252,11 @@ public class CpsRebateActivityServiceImpl implements CpsRebateActivityService {
         if (PLATFORM_DIDI.equalsIgnoreCase(firstText(activity.getPlatformCode(), ""))) {
             return generateDidiActivityLink(activity, reqVO, memberId);
         }
+        if (PLATFORM_MEITUAN.equalsIgnoreCase(firstText(activity.getPlatformCode(), ""))
+                && (SOURCE_OFFICIAL.equalsIgnoreCase(firstText(activity.getSourceType(), ""))
+                || "meituan".equalsIgnoreCase(activity.getSourceType()))) {
+            return generateMeituanActivityLink(activity, reqVO, memberId);
+        }
         if ("url".equals(activity.getJumpType())) {
             String promotionUrl = replaceUrlPlaceholders(activity.getJumpUrl(), reqVO);
             if (!isSafeExternalUrl(promotionUrl)) {
@@ -298,6 +309,54 @@ public class CpsRebateActivityServiceImpl implements CpsRebateActivityService {
                 : "当前链接没有可信会员归因标识，下单后可通过订单号申请找回";
         return buildExternalPromotion(activity, reqVO, actualAdzoneId, promotionUrl, null, null,
                 "滴滴联盟官方推广链接已生成", attributionStatus, attributionMessage);
+    }
+
+    private CpsRebateActivityPromotionRespVO generateMeituanActivityLink(CpsRebateActivityDO activity,
+                                                                         CpsRebateActivityPromotionReqVO reqVO,
+                                                                         Long memberId) {
+        String actId = firstText(activity.getPromotionActivityId(),
+                metadataText(activity, "activity_id"), activity.getExternalActivityId());
+        String jumpUrl = activity.getJumpUrl();
+        if (!StringUtils.hasText(actId) && !StringUtils.hasText(jumpUrl)) {
+            return buildFailedPromotion(activity, reqVO, reqVO.getAdzoneId(), "美团活动缺少有效的官方活动 ID 或链接");
+        }
+        CpsVendorConfig config = platformClientFactory.getVendorConfig(VENDOR_OFFICIAL, PLATFORM_MEITUAN);
+        if (config == null) {
+            return buildFailedPromotion(activity, reqVO, reqVO.getAdzoneId(), "未配置美团联盟官方供应商，无法生成推广链接");
+        }
+        String actualAdzoneId = firstText(reqVO.getAdzoneId(), config.getDefaultAdzoneId());
+        CpsTransferRecordDO sidRecord = memberId == null ? null
+                : createPendingSidRecord(activity, memberId, actualAdzoneId, VENDOR_OFFICIAL, PLATFORM_MEITUAN);
+        String sourceId = sidRecord == null ? firstText(reqVO.getChannelTag(), actualAdzoneId)
+                : sidRecord.getAttributionToken();
+
+        CpsPromotionLinkRequest request = new CpsPromotionLinkRequest();
+        if (StringUtils.hasText(jumpUrl)) {
+            request.setItemLink(jumpUrl);
+        } else {
+            request.setGoodsId("act:" + actId);
+        }
+        request.setAdzoneId(actualAdzoneId);
+        request.setExternalId(sourceId);
+
+        CpsPromotionLinkResult linkResult = meituanOfficialVendorClient.generatePromotionLink(request, config);
+        String promotionUrl = firstSafePromotionUrl(linkResult);
+        if (!StringUtils.hasText(promotionUrl)) {
+            return buildFailedPromotion(activity, reqVO, actualAdzoneId, "美团联盟官方推广链接暂不可用");
+        }
+        if (sidRecord != null) {
+            transferRecordMapper.updateById(CpsTransferRecordDO.builder().id(sidRecord.getId())
+                    .promotionUrl(promotionUrl).status(1).build());
+        }
+        String wxMiniPath = linkResult.getExtraFields() != null ? (String) linkResult.getExtraFields().get("wxMiniPath") : null;
+        String deeplink = linkResult.getExtraFields() != null ? (String) linkResult.getExtraFields().get("deeplink") : linkResult.getMobileUrl();
+        String attributionStatus = sidRecord != null ? ATTRIBUTION_MEMBER_TRACKED
+                : StringUtils.hasText(sourceId) ? ATTRIBUTION_CHANNEL_TRACKED : ATTRIBUTION_UNTRACKED;
+        String attributionMessage = sidRecord != null ? "已使用可信会员归因标识，订单同步后可自动绑定会员"
+                : StringUtils.hasText(sourceId) ? "当前链接仅支持渠道跟踪，不能自动绑定具体会员"
+                : "当前链接没有可信会员归因标识，下单后可通过订单号申请找回";
+        return buildExternalPromotion(activity, reqVO, actualAdzoneId, promotionUrl, wxMiniPath, deeplink,
+                "美团联盟官方推广链接已生成", attributionStatus, attributionMessage);
     }
 
     private CpsRebateActivityPromotionRespVO generateJutuikeActivityLink(CpsRebateActivityDO activity,

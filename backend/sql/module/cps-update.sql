@@ -1635,6 +1635,17 @@ WHERE NOT EXISTS (
   SELECT 1 FROM `system_schema_version` WHERE `module` = 'cps' AND `version` = 'v2.1.3' AND `schema_update_time` = '2026-10-22 14:42:48'
 );
 
+-- ============================================================
+-- 修改时间：2026-10-26 11:54:01
+-- 目的：初始化抖音联盟官方OpenAPI平台配置与供应商接入元数据
+-- ============================================================
+INSERT INTO `system_schema_version` (`module`, `version`, `schema_update_time`, `script_source`, `description`, `status`, `tenant_id`, `deleted`, `creator`, `updater`)
+SELECT 'cps', 'v2.1.5', '2026-10-26 11:54:01', 'cps-update.sql', '初始化抖音联盟官方OpenAPI平台配置与供应商接入元数据', 'SUCCESS', 0, b'0', 'system', 'system'
+WHERE NOT EXISTS (
+  SELECT 1 FROM `system_schema_version` WHERE `module` = 'cps' AND `version` = 'v2.1.5' AND `schema_update_time` = '2026-10-26 11:54:01'
+);
+
+
 SET FOREIGN_KEY_CHECKS = 1;
 -- ============================================================
 -- Modified: 2026-08-12 18:35:00
@@ -2081,4 +2092,90 @@ INSERT INTO `system_schema_version` (`module`, `version`, `schema_update_time`, 
 SELECT 'cps', 'v2.1.3', '2026-10-22 14:45:00', 'cps-update.sql', '新增会员提现账户管理表(cps_withdraw_account)与提现安全风控审计支持', 'SUCCESS', 0, b'0', 'system', 'system'
 WHERE NOT EXISTS (
   SELECT 1 FROM `system_schema_version` WHERE `module` = 'cps' AND `version` = 'v2.1.3' AND `schema_update_time` = '2026-10-22 14:45:00'
+);
+
+-- ============================================================
+-- 修改时间：2026-10-26 11:00:00
+-- 目的：优化选品商品价格存储，仅价格变动时新增快照记录，不变动时顺延记录价格维持时间段（end_time）
+-- 1. cps_goods_price_snapshot 增加 end_time (价格维持截止时间)
+-- ============================================================
+
+ALTER TABLE `cps_goods_price_snapshot`
+  ADD COLUMN `end_time` datetime NULL DEFAULT NULL COMMENT '价格维持截止时间（未变动时的最近确认时间）' AFTER `snapshot_time`;
+
+-- 记录数据库结构版本号
+INSERT INTO `system_schema_version` (`module`, `version`, `schema_update_time`, `script_source`, `description`, `status`, `tenant_id`, `deleted`, `creator`, `updater`)
+SELECT 'cps', 'v2.1.4', '2026-10-26 11:00:00', 'cps-update.sql', '优化选品商品价格存储，仅价格变动时新增快照记录，不变动时顺延记录价格维持时间段（end_time）', 'SUCCESS', 0, b'0', 'system', 'system'
+WHERE NOT EXISTS (
+  SELECT 1 FROM `system_schema_version` WHERE `module` = 'cps' AND `version` = 'v2.1.4' AND `schema_update_time` = '2026-10-26 11:00:00'
+);
+
+
+
+-- ============================================================
+-- 修改时间：2026-10-26 11:53:00
+-- 目的：初始化抖音联盟平台与官方 OpenAPI 供应商配置（支持精选联盟选品、抖客转链与订单同步）
+-- 说明：插入 douyin 平台与 official 供应商基础配置，如已存在则跳过，可安全重复执行
+-- ============================================================
+INSERT INTO `cps_platform` (`platform_code`, `platform_name`, `platform_logo`, `app_key`, `app_secret`, `api_base_url`, `auth_token`, `default_adzone_id`, `platform_service_rate`, `sort`, `status`, `extra_config`, `remark`, `creator`, `create_time`, `updater`, `update_time`, `deleted`, `tenant_id`, `active_vendor_code`, `supported_vendors`)
+SELECT 'douyin', '抖音联盟', NULL, NULL, NULL, 'https://openapi-fxg.jinritemai.com', NULL, NULL, 0.0000, 80, 0, NULL, '请先在抖店开放平台创建应用并配置官方 AppKey、AppSecret，账号具备抖客/达人权限后再启用', 'system', '2026-10-26 11:53:00', 'system', '2026-10-26 11:53:00', b'0', 1, 'official', 'official'
+WHERE NOT EXISTS (
+  SELECT 1 FROM `cps_platform`
+  WHERE `tenant_id` = 1 AND `platform_code` = 'douyin' AND `deleted` = b'0'
+);
+
+UPDATE `cps_platform`
+ SET `supported_vendors` = CONCAT_WS(',', NULLIF(TRIM(BOTH ',' FROM COALESCE(`supported_vendors`, '')), ''), 'official'),
+     `update_time` = '2026-10-26 11:53:00'
+ WHERE `tenant_id` = 1
+   AND `platform_code` = 'douyin'
+   AND `deleted` = b'0'
+   AND FIND_IN_SET('official', REPLACE(COALESCE(`supported_vendors`, ''), ' ', '')) = 0;
+
+INSERT INTO `cps_api_vendor` (`vendor_code`, `vendor_name`, `vendor_type`, `platform_code`, `app_key`, `app_secret`, `api_base_url`, `auth_token`, `default_adzone_id`, `extra_config`, `priority`, `status`, `remark`, `creator`, `create_time`, `updater`, `update_time`, `deleted`, `tenant_id`)
+SELECT 'official', '抖音联盟官方', 'official', 'douyin', '', '', 'https://openapi-fxg.jinritemai.com', NULL, NULL, '{"searchPath":"/buyin/kolMaterialsProductsSearch","convertPath":"/buyin/doukeCommandParseAndShare","orderPath":"/buyin/doukeOrderList"}', 100, 0, '抖音电商官方 OpenAPI 接入，支持精选联盟选品、抖客转链与订单同步', 'system', '2026-10-26 11:53:00', 'system', '2026-10-26 11:53:00', b'0', 1
+WHERE NOT EXISTS (
+  SELECT 1 FROM `cps_api_vendor`
+  WHERE `tenant_id` = 1 AND `vendor_code` = 'official' AND `platform_code` = 'douyin' AND `deleted` = b'0'
+);
+
+-- 记录数据库结构版本号
+INSERT INTO `system_schema_version` (`module`, `version`, `schema_update_time`, `script_source`, `description`, `status`, `tenant_id`, `deleted`, `creator`, `updater`)
+SELECT 'cps', 'v2.1.5', '2026-10-26 11:53:00', 'cps-update.sql', '初始化抖音联盟官方OpenAPI平台配置与供应商接入元数据', 'SUCCESS', 0, b'0', 'system', 'system'
+WHERE NOT EXISTS (
+  SELECT 1 FROM `system_schema_version` WHERE `module` = 'cps' AND `version` = 'v2.1.5' AND `schema_update_time` = '2026-10-26 11:53:00'
+);
+
+-- ============================================================
+-- 修改时间：2026-10-26 12:00:00
+-- 目的：初始化美团联盟官方平台配置与API Gateway供应商接入元数据（支持外卖/闪购/优选/到店卡券搜索、转链与订单同步）
+-- 说明：插入 meituan 平台与 official 供应商基础配置，如已存在则跳过，可安全重复执行
+-- ============================================================
+INSERT INTO `cps_platform` (`platform_code`, `platform_name`, `platform_logo`, `app_key`, `app_secret`, `api_base_url`, `auth_token`, `default_adzone_id`, `platform_service_rate`, `sort`, `status`, `extra_config`, `remark`, `creator`, `create_time`, `updater`, `update_time`, `deleted`, `tenant_id`, `active_vendor_code`, `supported_vendors`)
+SELECT 'meituan', '美团联盟', NULL, NULL, NULL, 'https://openapi.meituan.com', NULL, NULL, 0.0000, 85, 0, NULL, '美团联盟官方API Gateway接入，请配置服务商appKey、appSecret与默认推广位SID后再启用', 'system', '2026-10-26 12:00:00', 'system', '2026-10-26 12:00:00', b'0', 1, 'official', 'official'
+WHERE NOT EXISTS (
+  SELECT 1 FROM `cps_platform`
+  WHERE `tenant_id` = 1 AND `platform_code` = 'meituan' AND `deleted` = b'0'
+);
+
+UPDATE `cps_platform`
+ SET `supported_vendors` = CONCAT_WS(',', NULLIF(TRIM(BOTH ',' FROM COALESCE(`supported_vendors`, '')), ''), 'official'),
+     `update_time` = '2026-10-26 12:00:00'
+ WHERE `tenant_id` = 1
+   AND `platform_code` = 'meituan'
+   AND `deleted` = b'0'
+   AND FIND_IN_SET('official', REPLACE(COALESCE(`supported_vendors`, ''), ' ', '')) = 0;
+
+INSERT INTO `cps_api_vendor` (`vendor_code`, `vendor_name`, `vendor_type`, `platform_code`, `app_key`, `app_secret`, `api_base_url`, `auth_token`, `default_adzone_id`, `extra_config`, `priority`, `status`, `remark`, `creator`, `create_time`, `updater`, `update_time`, `deleted`, `tenant_id`)
+SELECT 'official', '美团联盟官方', 'official', 'meituan', '', '', 'https://openapi.meituan.com', NULL, NULL, '{"searchPath":"/cps_open/common/api/v1/query_coupon","convertPath":"/cps_open/common/api/v1/get_referral_link","orderPath":"/cps_open/common/api/v1/query_order","platform":1,"bizLine":1,"linkType":1}', 100, 0, '美团开放平台官方 API Gateway (Shepherd鉴权) 接入，支持外卖/闪购/优选/到店卡券搜索、转链与订单同步', 'system', '2026-10-26 12:00:00', 'system', '2026-10-26 12:00:00', b'0', 1
+WHERE NOT EXISTS (
+  SELECT 1 FROM `cps_api_vendor`
+  WHERE `tenant_id` = 1 AND `vendor_code` = 'official' AND `platform_code` = 'meituan' AND `deleted` = b'0'
+);
+
+-- 记录数据库结构版本号
+INSERT INTO `system_schema_version` (`module`, `version`, `schema_update_time`, `script_source`, `description`, `status`, `tenant_id`, `deleted`, `creator`, `updater`)
+SELECT 'cps', 'v2.1.6', '2026-10-26 12:00:00', 'cps-update.sql', '初始化美团联盟官方平台配置与API Gateway供应商接入元数据', 'SUCCESS', 0, b'0', 'system', 'system'
+WHERE NOT EXISTS (
+  SELECT 1 FROM `system_schema_version` WHERE `module` = 'cps' AND `version` = 'v2.1.6' AND `schema_update_time` = '2026-10-26 12:00:00'
 );

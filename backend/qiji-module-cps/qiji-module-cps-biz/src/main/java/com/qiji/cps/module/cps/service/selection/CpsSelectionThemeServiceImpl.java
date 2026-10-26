@@ -62,6 +62,7 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
@@ -1503,9 +1504,12 @@ public class CpsSelectionThemeServiceImpl implements CpsSelectionThemeService {
                 count++;
             }
 
+            LocalDateTime snapTime = snap.getSnapshotTime();
+            LocalDateTime endTime = snap.getEndTime() != null ? snap.getEndTime() : snapTime;
             historyList.add(CpsGoodsPricePointVO.builder()
                     .id(snap.getId())
-                    .snapshotTime(snap.getSnapshotTime())
+                    .snapshotTime(snapTime)
+                    .endTime(endTime)
                     .actualPrice(actual)
                     .originalPrice(orig)
                     .couponPrice(coup)
@@ -1557,6 +1561,8 @@ public class CpsSelectionThemeServiceImpl implements CpsSelectionThemeService {
     }
 
     private void recordInitialPriceSnapshot(CpsSelectionThemeItemDO item) {
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime snapTime = item.getSnapshotTime() != null ? item.getSnapshotTime() : now;
         CpsGoodsPriceSnapshotDO snapshot = CpsGoodsPriceSnapshotDO.builder()
                 .selectionItemId(item.getId())
                 .masterId(0L)
@@ -1573,7 +1579,8 @@ public class CpsSelectionThemeServiceImpl implements CpsSelectionThemeService {
                 .monthSales(item.getMonthSales())
                 .shopName(item.getShopName())
                 .activityTag(item.getActivityTag())
-                .snapshotTime(item.getSnapshotTime() != null ? item.getSnapshotTime() : LocalDateTime.now())
+                .snapshotTime(snapTime)
+                .endTime(now)
                 .rawData(item.getRawData())
                 .build();
         priceSnapshotMapper.insert(snapshot);
@@ -1618,25 +1625,64 @@ public class CpsSelectionThemeServiceImpl implements CpsSelectionThemeService {
 
         LocalDateTime now = LocalDateTime.now();
 
-        CpsGoodsPriceSnapshotDO snapshot = CpsGoodsPriceSnapshotDO.builder()
-                .selectionItemId(item.getId())
-                .masterId(0L)
-                .sourceMappingId(0L)
-                .platformCode(item.getPlatformCode())
-                .vendorCode(item.getVendorCode() != null ? item.getVendorCode() : "")
-                .externalGoodsId(item.getGoodsId())
-                .goodsSign(item.getGoodsSign() != null ? item.getGoodsSign() : "")
-                .originalPrice(toCent(originalPrice))
-                .actualPrice(toCent(actualPrice))
-                .couponPrice(toCent(couponPrice))
-                .commissionRate(commissionRate)
-                .commissionAmount(toCent(commissionAmount))
-                .monthSales(monthSales)
-                .shopName(shopName)
-                .activityTag(activityTag)
-                .snapshotTime(now)
-                .build();
-        priceSnapshotMapper.insert(snapshot);
+        Integer targetActualCent = toCent(actualPrice);
+        Integer targetOriginalCent = toCent(originalPrice);
+        Integer targetCouponCent = toCent(couponPrice);
+        Integer targetCommissionCent = toCent(commissionAmount);
+
+        // 获取该商品最近一次的价格快照
+        CpsGoodsPriceSnapshotDO latestSnapshot = item.getId() != null ?
+                priceSnapshotMapper.selectLatestBySelectionItemId(item.getId()) : null;
+        if (latestSnapshot == null && StringUtils.hasText(item.getPlatformCode()) && StringUtils.hasText(item.getGoodsId())) {
+            latestSnapshot = priceSnapshotMapper.selectLatestByExternalGoods(item.getPlatformCode(), item.getGoodsId());
+        }
+
+        boolean priceChanged = isPriceChanged(latestSnapshot, targetActualCent, targetOriginalCent, targetCouponCent, commissionRate, targetCommissionCent);
+
+        Long snapshotId;
+        LocalDateTime snapshotStartTime;
+        LocalDateTime snapshotEndTime = now;
+
+        if (latestSnapshot != null && !priceChanged) {
+            // 价格未变动：不插入新快照，顺延记录当前价格维持截止时间 (endTime) 并刷新最新辅助信息
+            latestSnapshot.setEndTime(now);
+            if (monthSales != null) {
+                latestSnapshot.setMonthSales(monthSales);
+            }
+            if (StringUtils.hasText(shopName)) {
+                latestSnapshot.setShopName(shopName);
+            }
+            if (StringUtils.hasText(activityTag)) {
+                latestSnapshot.setActivityTag(activityTag);
+            }
+            priceSnapshotMapper.updateById(latestSnapshot);
+            snapshotId = latestSnapshot.getId();
+            snapshotStartTime = latestSnapshot.getSnapshotTime();
+        } else {
+            // 价格首次记录或发生变动：插入新的一条快照，记录新价格的开始时间与初始维持时间
+            CpsGoodsPriceSnapshotDO snapshot = CpsGoodsPriceSnapshotDO.builder()
+                    .selectionItemId(item.getId())
+                    .masterId(0L)
+                    .sourceMappingId(0L)
+                    .platformCode(item.getPlatformCode())
+                    .vendorCode(item.getVendorCode() != null ? item.getVendorCode() : "")
+                    .externalGoodsId(item.getGoodsId())
+                    .goodsSign(item.getGoodsSign() != null ? item.getGoodsSign() : "")
+                    .originalPrice(targetOriginalCent)
+                    .actualPrice(targetActualCent)
+                    .couponPrice(targetCouponCent)
+                    .commissionRate(commissionRate)
+                    .commissionAmount(targetCommissionCent)
+                    .monthSales(monthSales)
+                    .shopName(shopName)
+                    .activityTag(activityTag)
+                    .snapshotTime(now)
+                    .endTime(now)
+                    .build();
+            priceSnapshotMapper.insert(snapshot);
+            snapshotId = snapshot.getId();
+            snapshotStartTime = now;
+        }
 
         item.setActualPrice(actualPrice);
         item.setOriginalPrice(originalPrice);
@@ -1649,8 +1695,9 @@ public class CpsSelectionThemeServiceImpl implements CpsSelectionThemeService {
         itemMapper.updateById(item);
 
         return CpsGoodsPricePointVO.builder()
-                .id(snapshot.getId())
-                .snapshotTime(now)
+                .id(snapshotId)
+                .snapshotTime(snapshotStartTime)
+                .endTime(snapshotEndTime)
                 .actualPrice(actualPrice)
                 .originalPrice(originalPrice)
                 .couponPrice(couponPrice)
@@ -1660,6 +1707,40 @@ public class CpsSelectionThemeServiceImpl implements CpsSelectionThemeService {
                 .shopName(shopName)
                 .activityTag(activityTag)
                 .build();
+    }
+
+    private boolean isPriceChanged(CpsGoodsPriceSnapshotDO snapshot,
+                                   Integer actualPrice,
+                                   Integer originalPrice,
+                                   Integer couponPrice,
+                                   BigDecimal commissionRate,
+                                   Integer commissionAmount) {
+        if (snapshot == null) {
+            return true;
+        }
+        if (!Objects.equals(snapshot.getActualPrice(), actualPrice)) {
+            return true;
+        }
+        if (!Objects.equals(snapshot.getOriginalPrice(), originalPrice)) {
+            return true;
+        }
+        if (!Objects.equals(snapshot.getCouponPrice(), couponPrice)) {
+            return true;
+        }
+        if (snapshot.getCommissionRate() == null && commissionRate != null) {
+            return true;
+        }
+        if (snapshot.getCommissionRate() != null && commissionRate == null) {
+            return true;
+        }
+        if (snapshot.getCommissionRate() != null && commissionRate != null
+                && snapshot.getCommissionRate().compareTo(commissionRate) != 0) {
+            return true;
+        }
+        if (!Objects.equals(snapshot.getCommissionAmount(), commissionAmount)) {
+            return true;
+        }
+        return false;
     }
 
     private CpsSelectionThemeDO getOrCreatePriceTrackingTheme() {

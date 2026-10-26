@@ -37,4 +37,27 @@ public interface CpsGoodsPriceSnapshotMapper extends BaseMapperX<CpsGoodsPriceSn
                 .orderByAsc(CpsGoodsPriceSnapshotDO::getSnapshotTime)
                 .orderByAsc(CpsGoodsPriceSnapshotDO::getId));
     }
+
+    default CpsGoodsPriceSnapshotDO selectLatestBySelectionItemId(Long selectionItemId) {
+        if (selectionItemId == null) {
+            return null;
+        }
+        return selectOne(new LambdaQueryWrapperX<CpsGoodsPriceSnapshotDO>()
+                .eq(CpsGoodsPriceSnapshotDO::getSelectionItemId, selectionItemId)
+                .orderByDesc(CpsGoodsPriceSnapshotDO::getSnapshotTime)
+                .orderByDesc(CpsGoodsPriceSnapshotDO::getId)
+                .last("LIMIT 1"));
+    }
+
+    default CpsGoodsPriceSnapshotDO selectLatestByExternalGoods(String platformCode, String externalGoodsId) {
+        if (platformCode == null || externalGoodsId == null) {
+            return null;
+        }
+        return selectOne(new LambdaQueryWrapperX<CpsGoodsPriceSnapshotDO>()
+                .eq(CpsGoodsPriceSnapshotDO::getPlatformCode, platformCode)
+                .eq(CpsGoodsPriceSnapshotDO::getExternalGoodsId, externalGoodsId)
+                .orderByDesc(CpsGoodsPriceSnapshotDO::getSnapshotTime)
+                .orderByDesc(CpsGoodsPriceSnapshotDO::getId)
+                .last("LIMIT 1"));
+    }
 }

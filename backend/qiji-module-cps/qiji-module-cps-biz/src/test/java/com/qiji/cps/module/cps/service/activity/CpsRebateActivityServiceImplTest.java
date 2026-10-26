@@ -4,6 +4,7 @@ import com.qiji.cps.framework.common.exception.ServiceException;
 import com.qiji.cps.module.cps.client.CpsPlatformClientFactory;
 import com.qiji.cps.module.cps.client.dataoke.DtkActivityVendorClient;
 import com.qiji.cps.module.cps.client.didi.DidiOfficialVendorClient;
+import com.qiji.cps.module.cps.client.official.meituan.MeituanOfficialVendorClient;
 import com.qiji.cps.module.cps.client.dto.CpsPromotionLinkRequest;
 import com.qiji.cps.module.cps.client.dto.CpsPromotionLinkResult;
 import com.qiji.cps.module.cps.client.dto.CpsVendorConfig;
@@ -71,6 +72,9 @@ class CpsRebateActivityServiceImplTest {
 
     @Mock
     private DidiOfficialVendorClient didiOfficialVendorClient;
+
+    @Mock
+    private MeituanOfficialVendorClient meituanOfficialVendorClient;
 
     @Mock
     private CpsAdzoneService adzoneService;
@@ -541,6 +545,62 @@ class CpsRebateActivityServiceImplTest {
         CpsRebateActivityPromotionRespVO result = service.generatePromotionContent(reqVO);
 
         verify(didiOfficialVendorClient, never()).generatePromotionLink(any(), any());
+        assertEquals("FAILED", result.getLinkStatus());
+        assertTrue(result.getLinkMessage().contains("缺少有效的官方活动 ID"));
+    }
+
+    @Test
+    @DisplayName("generatePromotionContent - 美团官方活动使用官方转链并正确传递 actId")
+    void generatePromotionContent_usesMeituanOfficialActivityLinkWithActId() {
+        CpsRebateActivityDO activity = buildActivity(31L, "美团外卖天天神券", "meituan", "CPS", 99, 1);
+        activity.setSourceType("official");
+        activity.setExternalActivityId("33");
+        activity.setPromotionActivityId("33");
+        when(activityMapper.selectById(31L)).thenReturn(activity);
+
+        CpsVendorConfig config = CpsVendorConfig.builder()
+                .vendorCode("official")
+                .platformCode("meituan")
+                .defaultAdzoneId("mt-adzone-01")
+                .build();
+        when(platformClientFactory.getVendorConfig("official", "meituan")).thenReturn(config);
+        when(meituanOfficialVendorClient.generatePromotionLink(any(CpsPromotionLinkRequest.class), eq(config)))
+                .thenReturn(CpsPromotionLinkResult.builder()
+                        .shortUrl("https://click.meituan.com/t?t=mockShort")
+                        .longUrl("https://click.meituan.com/t?t=mockLong")
+                        .mobileUrl("meituanwaimai://waimai.meituan.com/m?url=mock")
+                        .extraFields(java.util.Map.of("wxMiniPath", "pages/index/index"))
+                        .build());
+
+        CpsRebateActivityPromotionReqVO reqVO = new CpsRebateActivityPromotionReqVO();
+        reqVO.setActivityId(31L);
+        CpsRebateActivityPromotionRespVO result = service.generatePromotionContent(reqVO);
+
+        ArgumentCaptor<CpsPromotionLinkRequest> captor = ArgumentCaptor.forClass(CpsPromotionLinkRequest.class);
+        verify(meituanOfficialVendorClient).generatePromotionLink(captor.capture(), eq(config));
+        assertEquals("act:33", captor.getValue().getGoodsId());
+        assertEquals("SUCCESS", result.getLinkStatus());
+        assertEquals("EXTERNAL_PROMOTION", result.getLinkType());
+        assertEquals("https://click.meituan.com/t?t=mockShort", result.getPromotionUrl());
+        assertEquals("pages/index/index", result.getTpwd());
+        assertTrue(result.getLinkMessage().contains("美团联盟官方推广链接已生成"));
+    }
+
+    @Test
+    @DisplayName("generatePromotionContent - 美团官方活动缺失 actId 与跳转链接时返回友好失败")
+    void generatePromotionContent_rejectsMissingMeituanActivityIdGracefully() {
+        CpsRebateActivityDO activity = buildActivity(32L, "美团外卖天天神券", "meituan", "CPS", 99, 1);
+        activity.setSourceType("official");
+        activity.setPromotionActivityId(null);
+        activity.setExternalActivityId(null);
+        activity.setJumpUrl(null);
+        when(activityMapper.selectById(32L)).thenReturn(activity);
+
+        CpsRebateActivityPromotionReqVO reqVO = new CpsRebateActivityPromotionReqVO();
+        reqVO.setActivityId(32L);
+        CpsRebateActivityPromotionRespVO result = service.generatePromotionContent(reqVO);
+
+        verify(meituanOfficialVendorClient, never()).generatePromotionLink(any(), any());
         assertEquals("FAILED", result.getLinkStatus());
         assertTrue(result.getLinkMessage().contains("缺少有效的官方活动 ID"));
     }

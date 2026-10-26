@@ -1,7 +1,7 @@
 -- ============================================================
 -- CPS联盟返利系统 - 完整数据库建表脚本（All-in-One）
--- Version: 2.1.3
--- Date: 2026-10-22 14:42:48
+-- Version: 2.1.6
+-- Date: 2026-10-26 12:00:00
 -- Description: 新库全量初始化脚本，整合 CPS 核心表、P0 返利兑换、活动中心、选品库、CPX 扩展表、结构版本与更新时间追踪表、菜单与权限。
 -- Maintenance:
 --   1. 本文件只保存新库全量脚本。
@@ -105,7 +105,9 @@ CREATE TABLE `cps_platform` (
 
 -- 唯品会由好单库供应商接入；初始保持禁用，待管理员配置供应商凭证后启用。
 INSERT INTO `cps_platform` (`platform_code`, `platform_name`, `platform_logo`, `app_key`, `app_secret`, `api_base_url`, `auth_token`, `default_adzone_id`, `platform_service_rate`, `sort`, `status`, `extra_config`, `remark`, `creator`, `create_time`, `updater`, `update_time`, `deleted`, `tenant_id`, `active_vendor_code`, `supported_vendors`) VALUES
-('vip', '唯品会', NULL, NULL, NULL, NULL, NULL, NULL, 0.0000, 70, 0, NULL, '请先配置好单库唯品会供应商凭证，确认账号已开通唯品会权限后再启用', 'system', '2026-08-07 17:30:00', 'system', '2026-08-07 17:30:00', b'0', 1, 'haodanku', 'haodanku');
+('vip', '唯品会', NULL, NULL, NULL, NULL, NULL, NULL, 0.0000, 70, 0, NULL, '请先配置好单库唯品会供应商凭证，确认账号已开通唯品会权限后再启用', 'system', '2026-08-07 17:30:00', 'system', '2026-08-07 17:30:00', b'0', 1, 'haodanku', 'haodanku'),
+('douyin', '抖音联盟', NULL, NULL, NULL, 'https://openapi-fxg.jinritemai.com', NULL, NULL, 0.0000, 80, 0, NULL, '请先在抖店开放平台创建应用并配置官方 AppKey、AppSecret，账号具备抖客/达人权限后再启用', 'system', '2026-10-26 11:53:00', 'system', '2026-10-26 11:53:00', b'0', 1, 'official', 'official'),
+('meituan', '美团联盟', NULL, NULL, NULL, 'https://openapi.meituan.com', NULL, NULL, 0.0000, 85, 0, NULL, '美团联盟官方API Gateway接入，请配置服务商appKey、appSecret与默认推广位SID后再启用', 'system', '2026-10-26 12:00:00', 'system', '2026-10-26 12:00:00', b'0', 1, 'official', 'official');
 
 -- ----------------------------
 -- 2. 推广位（PID）管理表
@@ -1175,7 +1177,9 @@ CREATE TABLE `cps_didi_callback_event` (
 
 -- 好单库唯品会配置占位：不内置真实凭证，管理员填写 apikey 后再启用。
 INSERT INTO `cps_api_vendor` (`vendor_code`, `vendor_name`, `vendor_type`, `platform_code`, `app_key`, `app_secret`, `api_base_url`, `auth_token`, `default_adzone_id`, `extra_config`, `priority`, `status`, `remark`, `creator`, `create_time`, `updater`, `update_time`, `deleted`, `tenant_id`) VALUES
-('haodanku', '好单库', 'aggregator', 'vip', '', '', 'https://v2.api.haodanku.com', NULL, NULL, '{"searchPath":"/vip_goods_search","convertPath":"/vip_ratesurl"}', 100, 0, '请配置好单库 apikey 和唯品会 PID；普通账号使用 v2 搜索与转链，v3 订单能力按官方权限开通', 'system', '2026-08-07 17:30:00', 'system', '2026-08-11 16:15:00', b'0', 1);
+('haodanku', '好单库', 'aggregator', 'vip', '', '', 'https://v2.api.haodanku.com', NULL, NULL, '{"searchPath":"/vip_goods_search","convertPath":"/vip_ratesurl"}', 100, 0, '请配置好单库 apikey 和唯品会 PID；普通账号使用 v2 搜索与转链，v3 订单能力按官方权限开通', 'system', '2026-08-07 17:30:00', 'system', '2026-08-11 16:15:00', b'0', 1),
+('official', '抖音联盟官方', 'official', 'douyin', '', '', 'https://openapi-fxg.jinritemai.com', NULL, NULL, '{"searchPath":"/buyin/kolMaterialsProductsSearch","convertPath":"/buyin/doukeCommandParseAndShare","orderPath":"/buyin/doukeOrderList"}', 100, 0, '抖音电商官方 OpenAPI 接入，支持精选联盟选品、抖客转链与订单同步', 'system', '2026-10-26 11:53:00', 'system', '2026-10-26 11:53:00', b'0', 1),
+('official', '美团联盟官方', 'official', 'meituan', '', '', 'https://openapi.meituan.com', NULL, NULL, '{"searchPath":"/cps_open/common/api/v1/query_coupon","convertPath":"/cps_open/common/api/v1/get_referral_link","orderPath":"/cps_open/common/api/v1/query_order","platform":1,"bizLine":1,"linkType":1}', 100, 0, '美团开放平台官方 API Gateway (Shepherd鉴权) 接入，支持外卖/闪购/优选/到店卡券搜索、转链与订单同步', 'system', '2026-10-26 12:00:00', 'system', '2026-10-26 12:00:00', b'0', 1);
 
 -- ----------------------------
 -- 31. CPS平台接入草稿表
@@ -1492,7 +1496,8 @@ CREATE TABLE `cps_goods_price_snapshot` (
   `month_sales` bigint DEFAULT NULL COMMENT '近30天销量',
   `shop_name` varchar(255) DEFAULT NULL COMMENT '店铺',
   `activity_tag` varchar(255) DEFAULT NULL COMMENT '活动标签',
-  `snapshot_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '快照时间',
+  `snapshot_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '快照时间（价格生效开始时间）',
+  `end_time` datetime DEFAULT NULL COMMENT '价格维持截止时间（未变动时的最近确认时间）',
   `raw_data` mediumtext COMMENT '第三方原始快照',
   `creator` varchar(64) DEFAULT '' COMMENT '创建者',
   `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
@@ -2226,9 +2231,9 @@ WHERE NOT EXISTS (
 );
 
 INSERT INTO `system_schema_version` (`module`, `version`, `schema_update_time`, `script_source`, `description`, `status`, `tenant_id`, `deleted`, `creator`, `updater`)
-SELECT 'cps', 'v2.1.1', '2026-10-22 10:48:46', 'cps-all-in-one.sql', 'CPS联盟返利系统全量基线结构（含选品库价格趋势跟踪、结构版本与更新时间追踪表）', 'SUCCESS', 0, b'0', 'system', 'system'
+SELECT 'cps', 'v2.1.4', '2026-10-26 11:00:00', 'cps-all-in-one.sql', 'CPS联盟返利系统全量基线结构（含选品库价格变动趋势跟踪与维持时间段、结构版本与更新时间追踪表）', 'SUCCESS', 0, b'0', 'system', 'system'
 WHERE NOT EXISTS (
-  SELECT 1 FROM `system_schema_version` WHERE `module` = 'cps' AND `version` = 'v2.1.1' AND `schema_update_time` = '2026-10-22 10:48:46'
+  SELECT 1 FROM `system_schema_version` WHERE `module` = 'cps' AND `version` = 'v2.1.4' AND `schema_update_time` = '2026-10-26 11:00:00'
 );
 
 SET FOREIGN_KEY_CHECKS = 1;

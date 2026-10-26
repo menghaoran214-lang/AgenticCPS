@@ -123,6 +123,7 @@ export interface CpsSelectionThemeItemVO {
 export interface CpsGoodsPricePointVO {
   id: number
   snapshotTime: string
+  endTime?: string
   actualPrice: number
   originalPrice?: number
   couponPrice?: number

@@ -3663,6 +3663,15 @@ WHERE NOT EXISTS (SELECT 1 FROM `system_schema_version` WHERE `module` = 'cps' A
 INSERT INTO `system_schema_version` (`module`, `version`, `schema_update_time`, `script_source`, `description`, `status`, `tenant_id`, `deleted`, `creator`, `updater`)
 SELECT 'cps', 'v2.1.3', '2026-10-22 14:42:48', 'cps-update.sql', '新增会员提现账户管理表(cps_withdraw_account)与提现安全风控审计支持', 'SUCCESS', 0, b'0', 'system', 'system'
 WHERE NOT EXISTS (SELECT 1 FROM `system_schema_version` WHERE `module` = 'cps' AND `version` = 'v2.1.3' AND `schema_update_time` = '2026-10-22 14:42:48');
+INSERT INTO `system_schema_version` (`module`, `version`, `schema_update_time`, `script_source`, `description`, `status`, `tenant_id`, `deleted`, `creator`, `updater`)
+SELECT 'cps', 'v2.1.4', '2026-10-26 11:00:00', 'cps-update.sql', '优化选品商品价格存储，仅价格变动时新增快照记录，不变动时顺延记录价格维持时间段（end_time）', 'SUCCESS', 0, b'0', 'system', 'system'
+WHERE NOT EXISTS (SELECT 1 FROM `system_schema_version` WHERE `module` = 'cps' AND `version` = 'v2.1.4' AND `schema_update_time` = '2026-10-26 11:00:00');
+INSERT INTO `system_schema_version` (`module`, `version`, `schema_update_time`, `script_source`, `description`, `status`, `tenant_id`, `deleted`, `creator`, `updater`)
+SELECT 'cps', 'v2.1.5', '2026-10-26 11:54:01', 'cps-update.sql', '初始化抖音联盟官方OpenAPI平台配置与供应商接入元数据', 'SUCCESS', 0, b'0', 'system', 'system'
+WHERE NOT EXISTS (SELECT 1 FROM `system_schema_version` WHERE `module` = 'cps' AND `version` = 'v2.1.5' AND `schema_update_time` = '2026-10-26 11:54:01');
+INSERT INTO `system_schema_version` (`module`, `version`, `schema_update_time`, `script_source`, `description`, `status`, `tenant_id`, `deleted`, `creator`, `updater`)
+SELECT 'cps', 'v2.1.6', '2026-10-26 12:00:00', 'cps-update.sql', '初始化美团联盟官方平台配置与API Gateway供应商接入元数据', 'SUCCESS', 0, b'0', 'system', 'system'
+WHERE NOT EXISTS (SELECT 1 FROM `system_schema_version` WHERE `module` = 'cps' AND `version` = 'v2.1.6' AND `schema_update_time` = '2026-10-26 12:00:00');
 COMMIT;
 
 

@@ -62,7 +62,11 @@ public class CpsGoodsPriceSnapshotDO extends TenantBaseDO {
 
     private String activityTag;
 
+    /** 快照采样/价格生效开始时间 */
     private LocalDateTime snapshotTime;
+
+    /** 价格维持截止时间（未变动时的最近确认时间） */
+    private LocalDateTime endTime;
 
     private String rawData;
 }

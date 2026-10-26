@@ -51,6 +51,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
@@ -914,6 +915,66 @@ class CpsSelectionThemeServiceImplTest {
         verify(itemMapper).updateById(item);
         verify(priceSnapshotMapper).insert(any(CpsGoodsPriceSnapshotDO.class));
     }
+
+    @Test
+    @DisplayName("pullItemPrice - 价格未变动时顺延更新最近快照的维持截止时间且不新增快照")
+    void pullItemPrice_priceUnchanged_updatesEndTimeWithoutInsert() {
+        CpsSelectionThemeItemDO item = CpsSelectionThemeItemDO.builder()
+                .id(201L)
+                .platformCode("taobao")
+                .vendorCode("dataoke")
+                .goodsId("G201")
+                .actualPrice(new BigDecimal("39.90"))
+                .originalPrice(new BigDecimal("99.90"))
+                .couponPrice(new BigDecimal("60.00"))
+                .commissionRate(new BigDecimal("20.00"))
+                .commissionAmount(new BigDecimal("7.98"))
+                .monthSales(5000L)
+                .build();
+        when(itemMapper.selectById(201L)).thenReturn(item);
+
+        LocalDateTime initialTime = LocalDateTime.now().minusHours(2);
+        CpsGoodsPriceSnapshotDO existingSnapshot = CpsGoodsPriceSnapshotDO.builder()
+                .id(888L)
+                .selectionItemId(201L)
+                .actualPrice(3990)
+                .originalPrice(9990)
+                .couponPrice(6000)
+                .commissionRate(new BigDecimal("20.00"))
+                .commissionAmount(798)
+                .monthSales(5000L)
+                .snapshotTime(initialTime)
+                .endTime(initialTime)
+                .build();
+        when(priceSnapshotMapper.selectLatestBySelectionItemId(201L)).thenReturn(existingSnapshot);
+
+        CpsGoodsSquareGoodsRespVO latestGoods = new CpsGoodsSquareGoodsRespVO();
+        latestGoods.setGoodsId("G201");
+        latestGoods.setActualPrice(new BigDecimal("39.90"));
+        latestGoods.setOriginalPrice(new BigDecimal("99.90"));
+        latestGoods.setCouponPrice(new BigDecimal("60.00"));
+        latestGoods.setCommissionRate(new BigDecimal("20.00"));
+        latestGoods.setCommissionAmount(new BigDecimal("7.98"));
+        latestGoods.setMonthSales(5500L);
+
+        when(goodsSquareService.searchGoods(any(CpsGoodsSquareSearchReqVO.class))).thenReturn(
+                CpsGoodsSquareSearchRespVO.builder().list(List.of(latestGoods)).build());
+
+        CpsGoodsPricePointVO point = service.pullItemPrice(201L);
+
+        assertNotNull(point);
+        assertEquals(888L, point.getId());
+        assertEquals(initialTime, point.getSnapshotTime());
+        assertNotNull(point.getEndTime());
+        assertTrue(point.getEndTime().isAfter(initialTime));
+        assertEquals(new BigDecimal("39.90"), point.getActualPrice());
+        assertEquals(5500L, point.getMonthSales());
+
+        verify(priceSnapshotMapper).updateById(existingSnapshot);
+        verify(priceSnapshotMapper, never()).insert(any(CpsGoodsPriceSnapshotDO.class));
+        verify(itemMapper).updateById(item);
+    }
+
 
     @Test
     @DisplayName("getGoodsPriceTrend - 计算历史最高价、最低价、均价与涨跌差值")

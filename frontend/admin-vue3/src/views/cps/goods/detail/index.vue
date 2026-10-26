@@ -152,15 +152,16 @@
 
           <div class="history-table-wrapper">
             <div class="history-header">
-              <span class="history-title">历史价格采样明细（共 {{ priceTrend.historyList.length }} 次）</span>
+              <span class="history-title">历史价格变动明细（共 {{ priceTrend.historyList.length }} 个价格区间）</span>
               <span v-if="priceTrend.lastTrackTime" class="last-time">
                 最近抓取：{{ formatDateTime(priceTrend.lastTrackTime) }}
               </span>
             </div>
             <el-table :data="priceTrend.historyList" size="small" border stripe max-height="220">
-              <el-table-column label="采样时间" min-width="160">
+              <el-table-column label="价格维持时间段" min-width="200">
                 <template #default="{ row }">
-                  {{ formatDateTime(row.snapshotTime) }}
+                  <span>{{ formatDateTime(row.snapshotTime) }}</span>
+                  <span v-if="row.endTime && row.endTime !== row.snapshotTime" class="text-gray-400"> ~ {{ formatDateTime(row.endTime) }}</span>
                 </template>
               </el-table-column>
               <el-table-column label="券后价" width="110">
@@ -363,7 +364,8 @@ import { Echart } from '@/components/Echart'
 import type { EChartsOption } from 'echarts'
 import {
   CpsSelectionThemeApi,
-  type CpsGoodsPriceTrendVO
+  type CpsGoodsPriceTrendVO,
+  type CpsGoodsPricePointVO
 } from '@/api/cps/selectionTheme'
 
 type DateTimeValue = string | number | Date | [number, number, number, number?, number?, number?]
@@ -499,9 +501,26 @@ const trendChartOptions = computed<EChartsOption>(() => {
   if (!priceTrend.value || !priceTrend.value.historyList || priceTrend.value.historyList.length === 0) {
     return {}
   }
-  const dates = priceTrend.value.historyList.map((h) => formatDateTime(h.snapshotTime))
-  const actualPrices = priceTrend.value.historyList.map((h) => h.actualPrice)
-  const originalPrices = priceTrend.value.historyList.map((h) => h.originalPrice || h.actualPrice)
+  const chartPoints: Array<{ time: string; actualPrice: number; originalPrice: number; point: CpsGoodsPricePointVO }> = []
+  priceTrend.value.historyList.forEach((h) => {
+    chartPoints.push({
+      time: formatDateTime(h.snapshotTime),
+      actualPrice: h.actualPrice,
+      originalPrice: h.originalPrice || h.actualPrice,
+      point: h
+    })
+    if (h.endTime && h.endTime !== h.snapshotTime) {
+      chartPoints.push({
+        time: formatDateTime(h.endTime),
+        actualPrice: h.actualPrice,
+        originalPrice: h.originalPrice || h.actualPrice,
+        point: h
+      })
+    }
+  })
+  const dates = chartPoints.map((p) => p.time)
+  const actualPrices = chartPoints.map((p) => p.actualPrice)
+  const originalPrices = chartPoints.map((p) => p.originalPrice)
 
   return {
     tooltip: {
@@ -509,8 +528,12 @@ const trendChartOptions = computed<EChartsOption>(() => {
       formatter: (params: any) => {
         if (!Array.isArray(params) || params.length === 0) return ''
         const date = params[0].name
-        const item = priceTrend.value?.historyList[params[0].dataIndex]
-        let html = `<div style="font-weight: 600; margin-bottom: 4px;">${date}</div>`
+        const item = chartPoints[params[0].dataIndex]?.point
+        let header = `<div style="font-weight: 600; margin-bottom: 4px;">${date}</div>`
+        if (item?.endTime && item.endTime !== item.snapshotTime) {
+          header = `<div style="font-weight: 600; margin-bottom: 4px;">价格维持区间: ${formatDateTime(item.snapshotTime)} ~ ${formatDateTime(item.endTime)}</div>`
+        }
+        let html = header
         params.forEach((p: any) => {
           html += `<div>${p.marker} ${p.seriesName}: ¥${p.value}</div>`
         })

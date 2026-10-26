@@ -24,5 +24,6 @@ public class CpsGoodsPriceSnapshotRespVO {
     private String shopName;
     private String activityTag;
     private LocalDateTime snapshotTime;
+    private LocalDateTime endTime;
     private LocalDateTime createTime;
 }
