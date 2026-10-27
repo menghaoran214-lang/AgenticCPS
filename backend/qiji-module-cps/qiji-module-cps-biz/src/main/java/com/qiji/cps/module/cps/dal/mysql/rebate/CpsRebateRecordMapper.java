@@ -5,6 +5,7 @@ import com.qiji.cps.framework.mybatis.core.mapper.BaseMapperX;
 import com.qiji.cps.framework.mybatis.core.query.LambdaQueryWrapperX;
 import com.qiji.cps.module.cps.controller.admin.rebate.vo.CpsRebateRecordPageReqVO;
 import com.qiji.cps.module.cps.dal.dataobject.rebate.CpsRebateRecordDO;
+import com.qiji.cps.module.cps.enums.CpsSplitRoleEnum;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
@@ -33,12 +34,15 @@ public interface CpsRebateRecordMapper extends BaseMapperX<CpsRebateRecordDO> {
     }
 
     /**
-     * 按订单ID查询返利记录（判断是否已结算过）
+     * 按订单ID查询消费者返利；推广提成不能作为订单主返利，NULL角色兼容历史数据
      */
     default CpsRebateRecordDO selectByOrderIdAndType(Long orderId, String rebateType) {
         return selectOne(new LambdaQueryWrapperX<CpsRebateRecordDO>()
                 .eq(CpsRebateRecordDO::getOrderId, orderId)
                 .eq(CpsRebateRecordDO::getRebateType, rebateType)
+                .and(role -> role.eq(CpsRebateRecordDO::getSplitRole, CpsSplitRoleEnum.SELF.getRole())
+                        .or().isNull(CpsRebateRecordDO::getSplitRole))
+                .orderByAsc(CpsRebateRecordDO::getId)
                 .last("LIMIT 1"));
     }
 
