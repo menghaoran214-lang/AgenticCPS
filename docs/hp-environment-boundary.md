@@ -44,3 +44,36 @@
 5. 不执行生产部署、生产数据迁移或全局 Docker 清理。清理只能针对已核验的本次测试项目。
 
 不要把 GitHub 临时测试用的 18081 端口和凭证路径当作惠普可直接使用的配置。
+
+## 惠普测试配置验证（2026-10-27）
+
+代码 `e7bd8752a6c194f5848a80a31cc52bbeb1335948` 的 [双配置完整验收](https://github.com/menghaoran214-lang/AgenticCPS/actions/runs/40508079171)已通过。普通 CI 与惠普限额配置都在 GitHub 临时 runner 运行，没有在惠普启动服务。
+
+| 服务 | 内存硬上限 MiB | CPU 上限（核心） | 本轮独立峰值 MiB |
+| --- | ---: | ---: | ---: |
+| MySQL | 512 | 0.25 | 276.3 |
+| Redis | 64 | 0.10 | 10.7 |
+| Java 服务 | 1024 | 0.50 | 815.6 |
+| Nginx | 32 | 0.10 | 9.3 |
+| 合计 | 1632 | 0.95 | 1111.9 |
+
+峰值来自各容器 cgroup `memory.peak`；合计不是同一时刻的占用，也不能当成惠普实测。四个容器均无 OOM、无重启；Docker 实际内存/CPU 上限和禁止额外交换空间均已核对。Java 测试堆上限 384 MiB。
+
+启动门槛保持为服务硬上限合计 1632 + 系统余量 768 = **2400 MiB 可用内存**，不会为了让检查通过而按本轮较低峰值放宽。后续只读采样约 1719 MiB，因此当时未满足启动条件。
+
+- 端口固定为 18082 / 48082 / 13308 / 16381，只监听 loopback；没有全局容器名或外部数据卷。
+- 7 项隔离与主机保护测试通过；[31 组 207 项资金等回归](https://github.com/menghaoran214-lang/AgenticCPS/actions/runs/40508079261)通过。
+- 实际接口、模拟上游订单分佣退款、真实浏览器密码登录、二维码解码及会员绑定均通过。
+- 证据产物按 `agenticcps-station-acceptance-ci` / `agenticcps-station-acceptance-hp` 区分，新增 `resources.json`。
+- `script/ci/station_hp_preflight.py` 只读检查设备、目录、develop 分支、工作树、内存和端口，不启动容器。使用 `python3 -B` 避免生成 Python 字节码缓存。
+- 初始夹具脚本在 GitHub 托管 runner 以外仅接受已核验的惠普 hp 配置，并在写测试工作目录前检查门槛。数据库仍要求随机标记匹配，不能指向现有业务数据库。
+- 生成目录 `/.station-ci/` 不纳入 Git，避免误提交测试密码和临时数据。
+
+只读检查入口（在已核验的惠普设备执行）：
+
+```bash
+cd /home/mm/dev/agenticcps-lab
+python3 -B script/ci/station_hp_preflight.py
+```
+
+输出 `ready: false` 或退出码 2 表示不允许据此启动测试栈。检查通过也不等同于自动部署；完整的本机启动入口、产物准备和主机负载验证尚未执行。

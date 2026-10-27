@@ -36,8 +36,8 @@
 
 ## 输出
 
-工作流：`.github/workflows/cps-station-journey.yml`。
-成功后证据位于 `agenticcps-station-acceptance` 产物，包含脱敏业务结果、资金流水及浏览器截图。
+工作流：`.github/workflows/cps-station-journey.yml`。当前分别验证 ci / hp 两个固定配置。
+成功后证据位于 `agenticcps-station-acceptance-ci` 和 `agenticcps-station-acceptance-hp` 产物，包含脱敏业务结果、资金流水、浏览器截图与资源限额证据。
 测试专用密码、token、数据库文件不属于证据产物。
 本轮验收已通过，结果与边界见下方验证记录；后续变更以对应工作流结果为准。
 
@@ -64,3 +64,7 @@ H5 使用 history 路由。邀请链接生成器按实际 URL 生成 `/h5/pages/
 - 测试结束已清理本次容器、数据卷和代理进程。没有生产部署。
 
 本轮真实 MySQL 闭环使用合成的上游已结算订单，覆盖直接入账和退款。实体手机扫码、供应商真实测试订单、真实支付尚未验收；冻结/解冻、提现后欠款已有自动回归，仍需按试点实际配置做人工业务验收。
+
+## 惠普配置云端验证
+
+[2026-10-27 双配置完整验收](https://github.com/menghaoran214-lang/AgenticCPS/actions/runs/40508079171)通过：7 项隔离/主机保护测试、真实接口、浏览器流程和资源检查均成功。hp 配置使用独立端口、CPU/内存硬上限且不允许额外 swap；cgroup 各容器独立峰值合计 1111.9 MiB，无 OOM 或重启。这是云端配置验证，不是惠普已启动或已部署的证明。惠普当前须先满足 2400 MiB 可用内存门槛，详见 [主机边界记录](hp-environment-boundary.md)。
