@@ -11,11 +11,13 @@ from station_journey import BASE, WORK, AGENT, WEB_BUYER, PHONES, connect, query
 
 
 def login_form(page, member, expect_binding=False):
-    if not page.locator('.login-btn-start').is_visible():
-        page.get_by_text('账号登录', exact=True).first.click()
+    page.get_by_text('账号登录', exact=True).first.click()
     inputs = page.locator('.login-wrap input.uni-input-input')
     inputs.nth(0).fill(PHONES[member])
-    inputs.nth(1).fill(os.environ['CPS_STATION_PASSWORD'])
+    try:
+        page.locator('.login-wrap input[type="password"]').fill(os.environ['CPS_STATION_PASSWORD'])
+    except Exception:
+        raise RuntimeError('Password field could not be filled') from None
     page.locator('.agreement-option .radio').first.click()
     with page.expect_response(lambda response: '/member/auth/login' in response.url) as login:
         if expect_binding:
