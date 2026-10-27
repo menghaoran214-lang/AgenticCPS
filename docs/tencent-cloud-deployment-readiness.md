@@ -88,3 +88,14 @@ GitHub 增加：
 - 本轮曾尝试发起云端当前151表备份恢复 + 营销/支付37表联合迁移演练，但远程执行被安全检查阻止，**没有进行该云端演练，也没有修改线上封闭业务库**。不可将 GitHub CI 成功写成该演练成功。
 - 最新云端只读复查：原数据库仍为151张表，四容器健康，网页只监听 `127.0.0.1:18080`，自动备份可用。营销/支付 SQL 已经暂存但未导入业务库。
 - 下一阶段仍需：受控完成151→188张表的临时恢复兼容验证，再决定封闭库迁移；处理预置账户及管理员口令、离机加密备份、正向登录、订单归因、退款和资金守恒 E2E。**生产上线门禁仍关闭。**
+
+
+## 2026-10-28 真实仓库全量初始化演练 + 第6份租户修正
+
+- 已把仓库的 `backend/sql/mysql/ruoyi-vue-pro.sql`、`backend/sql/mysql/quartz.sql`、`backend/sql/module/cps-all-in-one.sql` **实际依次导入 GitHub Actions 一次性 MySQL 8 数据库**，得到 **121张基础表**，与腾讯云此前的初始表数量一致。
+- 之后依次执行会员6、商品9、交易15、营销23和支付14张表，共 **188张表**，原有121张表和数据库初始化记录保留。成功记录：[40558946043](https://github.com/menghaoran214-lang/AgenticCPS/actions/runs/40558946043)。这不是当前腾讯云151表数据库的备份恢复演练。
+- 代码审查发现：`TenantDatabaseInterceptor.computeIgnoreTable` 对没有 `@TenantIgnore` 的 `BaseDO` 实体仍会应用租户 SQL 拦截；`application.yaml` 没有将4张会员基础表列入 `ignore-tables`，因此先前仅因其继承 `BaseDO` 就认定可以省去 `tenant_id` **是错误的**。
+- 已新增版本化**增量**迁移 `backend/sql/migrations/V20261028_06__member_tenant_interceptor_alignment.sql`，仅为 `member_address`、`member_tag`、`member_level`、`member_group` 补充 `tenant_id` 和对应租户索引；不会增加表数。若表中已有真实数据，必须先核对每行归属并阻断迁移，不能直接把旧记录都赋给默认租户1。
+- 修正后重新运行两套独立测试均**通过**：五模块联合 CI [40559218683](https://github.com/menghaoran214-lang/AgenticCPS/actions/runs/40559218683) 检查67张表均具租户字段；仓库**全量121表初始化 + 67表迁移 + V06兼容修正** CI [40559231323](https://github.com/menghaoran214-lang/AgenticCPS/actions/runs/40559231323) 检查原有121张表保留、188张总表、原有数据不变、67张新增表租户字段齐全、支付渠道默认禁用。两次 CI 均已删除临时数据库。
+- **云端真实状态仍为151张表**，上面 V06 及营销、支付37表均未导入。未在腾讯云进行151→188表的备份重放，远程执行曾遇到安全拦截，不得绕过，也不得声称真实支付或登录通过。
+- 上线阻碍仍包括：20个预置后台账号及默认口令风险、离机加密备份未完成、正向认证与真实联动订单/返利冻结/退款/提现 E2E 未通过。公网不得开放。
