@@ -56,7 +56,7 @@ def connect():
             time.sleep(2)
 
 def run_sql_file(cursor,path):
-    raw=path.read_text(encoding="utf8-sig")
+    raw=path.read_text(encoding="utf-8-sig")
     if re.search(r"(?im)^\s*(CREATE\s+DATABASE|DROP\s+DATABASE|USE\s+)",raw):
         raise RuntimeError("Bootstrap SQL cannot switch database: "+path.name)
     if re.search(r"(?im)^\s*DELIMITER\b",raw):
