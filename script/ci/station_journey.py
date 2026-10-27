@@ -249,6 +249,12 @@ def exercise():
         return (api('/app-api/cps/rebate/account', buyer)['data'].get('availableBalance') == 0.6 and
                 api('/app-api/cps/rebate/account', agent)['data'].get('availableBalance') == 0.2)
     wait_for(credited, 'buyer 0.60 and station 0.20 credited from 1.00 commission')
+    settled_order = query(connection, """SELECT order_status,real_rebate,rebate_time,status_version
+            FROM cps_order WHERE id=900001 AND tenant_id=1""")[0]
+    assert settled_order['order_status'] == 'rebate_received', settled_order
+    assert str(settled_order['real_rebate']) == '0.60', settled_order
+    assert settled_order['rebate_time'] is not None, settled_order
+    assert settled_order['status_version'] == 1, settled_order
     balance(buyer, ('0.60', 0, 0))
     balance(agent, ('0.20', 0, 0))
     assert api('/app-api/cps/rebate/account?memberId=900001', buyer)['data']['memberId'] == BUYER
@@ -264,11 +270,15 @@ def exercise():
     before = query(connection, 'SELECT COUNT(*) AS n FROM cps_rebate_asset_ledger WHERE tenant_id=1')[0]['n']
     api('/admin-api/cps/rebate-record/reverse?orderId=900001', admin, method='POST', allow_failure=True)
     assert query(connection, 'SELECT COUNT(*) AS n FROM cps_rebate_asset_ledger WHERE tenant_id=1')[0]['n'] == before
+    refunds = query(connection, """SELECT split_role,rebate_amount FROM cps_rebate_record
+            WHERE order_id=900001 AND tenant_id=1 AND rebate_type='refund' ORDER BY split_role""")
+    assert {(row['split_role'], str(row['rebate_amount'])) for row in refunds} == {
+        ('SELF', '-0.60'), ('PARENT_L1', '-0.20')}, refunds
     findings.append('Buyer and station refund reversal returned balances to zero; repeated refund created no ledger entries')
     ledger = query(connection, """SELECT member_id,business_type,available_change_cent,frozen_change_cent,
             debt_change_cent FROM cps_rebate_asset_ledger WHERE tenant_id=1 ORDER BY id""")
     report = {'mode': 'isolated-mysql-redis-real-http-synthetic-order', 'passed': findings,
-              'ledger': ledger, 'not_tested': ['real affiliate provider', 'real payment', 'physical phone scan']}
+              'ledger': ledger, 'settled_order': settled_order, 'refunds': refunds, 'not_tested': ['real affiliate provider', 'real payment', 'physical phone scan']}
     (WORK / 'evidence/journey.json').write_text(json.dumps(report, indent=2, ensure_ascii=False, default=str), encoding='utf-8')
     connection.close()
     print('PASS: real login, invitation, MySQL settlement, ledger idempotency and refund HTTP journey')
