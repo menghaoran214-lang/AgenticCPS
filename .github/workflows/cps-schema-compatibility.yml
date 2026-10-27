@@ -1,0 +1,55 @@
+name: CPS Module SQL Syntax Probe (isolated)
+
+on:
+  push:
+    branches: [develop]
+    paths:
+      - script/ci/cps_schema_compatibility.py
+      - .github/workflows/cps-schema-compatibility.yml
+      - backend/qiji-module-member/src/test/resources/sql/create_tables.sql
+      - backend/qiji-module-mall/qiji-module-product/src/test/resources/sql/create_tables.sql
+      - backend/qiji-module-mall/qiji-module-trade/src/test/resources/sql/create_tables.sql
+      - backend/qiji-module-mall/qiji-module-promotion/src/test/resources/sql/create_tables.sql
+      - backend/qiji-module-pay/src/test/resources/sql/create_tables.sql
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  isolated-test-ddl:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: ci-only-no-production-data
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -pci-only-no-production-data"
+          --health-interval=10s --health-timeout=5s --health-retries=12
+    env:
+      GITHUB_ACTIONS: "true"
+      CPS_SCHEMA_PROBE_ISOLATED: "1"
+      MYSQL_HOST: 127.0.0.1
+      MYSQL_PORT: "3306"
+      MYSQL_ROOT_PASSWORD: ci-only-no-production-data
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install isolated test dependency
+        run: python -m pip install "pymysql==1.1.2"
+      - name: Validate module TEST SQL compatibility against temporary MySQL database
+        run: python script/ci/cps_schema_compatibility.py
+      - name: Publish non-production syntax report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cps-module-test-schema-syntax
+          path: schema-compatibility-report.json
+          retention-days: 7
+          if-no-files-found: warn
