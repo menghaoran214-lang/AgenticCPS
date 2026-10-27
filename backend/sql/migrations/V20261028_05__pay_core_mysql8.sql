@@ -64,7 +64,7 @@ CREATE TABLE `pay_demo_order` (
   `deleted` bit(1) NOT NULL DEFAULT b'0',
   `tenant_id` bigint NOT NULL DEFAULT 1,
   PRIMARY KEY (`id`),
-  KEY `idx_pay_demo_order_tenant` (``tenant_id``,``deleted``)
+  KEY `idx_pay_demo_order_tenant` (`tenant_id`,`deleted`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE `pay_demo_withdraw` (
@@ -86,7 +86,7 @@ CREATE TABLE `pay_demo_withdraw` (
   `deleted` bit(1) NOT NULL DEFAULT b'0',
   `tenant_id` bigint NOT NULL DEFAULT 1,
   PRIMARY KEY (`id`),
-  KEY `idx_pay_demo_withdraw_tenant` (``tenant_id``,``deleted``)
+  KEY `idx_pay_demo_withdraw_tenant` (`tenant_id`,`deleted`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE `pay_notify_log` (
@@ -302,7 +302,7 @@ CREATE TABLE `pay_wallet_recharge` (
   `deleted` bit(1) NOT NULL DEFAULT b'0',
   `tenant_id` bigint NOT NULL DEFAULT 1,
   PRIMARY KEY (`id`),
-  KEY `idx_pay_wallet_recharge_wallet` (`tenant_id`,`wallet_id`,`status`)
+  KEY `idx_pay_wallet_recharge_wallet` (`tenant_id`,`wallet_id`,`pay_status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE `pay_wallet_recharge_package` (
