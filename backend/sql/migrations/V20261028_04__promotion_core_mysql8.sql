@@ -26,7 +26,7 @@ CREATE TABLE `promotion_article` (
   `deleted` bit(1) NOT NULL DEFAULT b'0',
   `tenant_id` bigint NOT NULL DEFAULT 1,
   PRIMARY KEY (`id`),
-  KEY `idx_promotion_article_tenant` (``tenant_id``,``deleted``)
+  KEY `idx_promotion_article_tenant` (`tenant_id`,`deleted`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE `promotion_article_category` (
@@ -42,7 +42,7 @@ CREATE TABLE `promotion_article_category` (
   `deleted` bit(1) NOT NULL DEFAULT b'0',
   `tenant_id` bigint NOT NULL DEFAULT 1,
   PRIMARY KEY (`id`),
-  KEY `idx_promotion_article_category_tenant` (``tenant_id``,``deleted``)
+  KEY `idx_promotion_article_category_tenant` (`tenant_id`,`deleted`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE `promotion_banner` (
@@ -62,7 +62,7 @@ CREATE TABLE `promotion_banner` (
   `deleted` bit(1) NOT NULL DEFAULT b'0',
   `tenant_id` bigint NOT NULL DEFAULT 1,
   PRIMARY KEY (`id`),
-  KEY `idx_promotion_banner_tenant` (``tenant_id``,``deleted``)
+  KEY `idx_promotion_banner_tenant` (`tenant_id`,`deleted`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE `promotion_bargain_activity` (
@@ -105,7 +105,7 @@ CREATE TABLE `promotion_bargain_help` (
   `deleted` bit(1) NOT NULL DEFAULT b'0',
   `tenant_id` bigint NOT NULL DEFAULT 1,
   PRIMARY KEY (`id`),
-  KEY `idx_promotion_bargain_help_tenant` (``tenant_id``,``deleted``)
+  KEY `idx_promotion_bargain_help_tenant` (`tenant_id`,`deleted`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE `promotion_bargain_record` (
@@ -167,7 +167,7 @@ CREATE TABLE `promotion_combination_product` (
   `deleted` bit(1) NOT NULL DEFAULT b'0',
   `tenant_id` bigint NOT NULL DEFAULT 1,
   PRIMARY KEY (`id`),
-  KEY `idx_promotion_combination_product_tenant` (``tenant_id``,``deleted``)
+  KEY `idx_promotion_combination_product_tenant` (`tenant_id`,`deleted`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE `promotion_combination_record` (
@@ -299,7 +299,7 @@ CREATE TABLE `promotion_discount_product` (
   `deleted` bit(1) NOT NULL DEFAULT b'0',
   `tenant_id` bigint NOT NULL DEFAULT 1,
   PRIMARY KEY (`id`),
-  KEY `idx_promotion_discount_product_tenant` (``tenant_id``,``deleted``)
+  KEY `idx_promotion_discount_product_tenant` (`tenant_id`,`deleted`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE `promotion_diy_page` (
@@ -392,7 +392,7 @@ CREATE TABLE `promotion_point_activity` (
   `deleted` bit(1) NOT NULL DEFAULT b'0',
   `tenant_id` bigint NOT NULL DEFAULT 1,
   PRIMARY KEY (`id`),
-  KEY `idx_promotion_point_activity_tenant` (``tenant_id``,``deleted``)
+  KEY `idx_promotion_point_activity_tenant` (`tenant_id`,`deleted`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE `promotion_point_product` (
@@ -412,7 +412,7 @@ CREATE TABLE `promotion_point_product` (
   `deleted` bit(1) NOT NULL DEFAULT b'0',
   `tenant_id` bigint NOT NULL DEFAULT 1,
   PRIMARY KEY (`id`),
-  KEY `idx_promotion_point_product_tenant` (``tenant_id``,``deleted``)
+  KEY `idx_promotion_point_product_tenant` (`tenant_id`,`deleted`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE `promotion_reward_activity` (
@@ -474,7 +474,7 @@ CREATE TABLE `promotion_seckill_config` (
   `deleted` bit(1) NOT NULL DEFAULT b'0',
   `tenant_id` bigint NOT NULL DEFAULT 1,
   PRIMARY KEY (`id`),
-  KEY `idx_promotion_seckill_config_tenant` (``tenant_id``,``deleted``)
+  KEY `idx_promotion_seckill_config_tenant` (`tenant_id`,`deleted`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE `promotion_seckill_product` (
