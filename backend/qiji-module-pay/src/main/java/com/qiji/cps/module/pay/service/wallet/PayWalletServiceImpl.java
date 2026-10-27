@@ -132,7 +132,7 @@ public class PayWalletServiceImpl implements PayWalletService {
         }
         // 2. 校验退款是否存在
         PayWalletTransactionDO refundTransaction = walletTransactionService.getWalletTransaction(
-                String.valueOf(refundId), PAYMENT_REFUND);
+                walletTransaction.getWalletId(), String.valueOf(refundId), PAYMENT_REFUND);
         if (refundTransaction != null) {
             throw exception(WALLET_REFUND_EXIST);
         }

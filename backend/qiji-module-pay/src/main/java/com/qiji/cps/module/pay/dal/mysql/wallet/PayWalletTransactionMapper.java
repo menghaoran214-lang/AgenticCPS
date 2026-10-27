@@ -55,9 +55,14 @@ public interface PayWalletTransactionMapper extends BaseMapperX<PayWalletTransac
         return selectOne(PayWalletTransactionDO::getNo, no);
     }
 
-    default PayWalletTransactionDO selectByBiz(String bizId, Integer bizType) {
-        return selectOne(PayWalletTransactionDO::getBizId, bizId,
-                PayWalletTransactionDO::getBizType, bizType);
+    default PayWalletTransactionDO selectByBiz(Long walletId, String bizId, Integer bizType) {
+        Objects.requireNonNull(walletId, "walletId");
+        Objects.requireNonNull(bizId, "bizId");
+        Objects.requireNonNull(bizType, "bizType");
+        return selectOne(new LambdaQueryWrapperX<PayWalletTransactionDO>()
+                .eq(PayWalletTransactionDO::getWalletId, walletId)
+                .eq(PayWalletTransactionDO::getBizId, bizId)
+                .eq(PayWalletTransactionDO::getBizType, bizType));
     }
 
 }

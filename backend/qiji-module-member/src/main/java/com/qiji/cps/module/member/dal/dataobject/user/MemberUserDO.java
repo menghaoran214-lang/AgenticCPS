@@ -21,7 +21,7 @@ import java.util.List;
 /**
  * 会员用户 DO
  *
- * uk_mobile 索引：基于 {@link #mobile} 字段
+ * 有效账号唯一键：(tenant_id, active_mobile)。active_mobile 由数据库生成，注销历史不占用手机号。
  *
  * @author AgenticCPS源码
  */

@@ -3676,3 +3676,8 @@ COMMIT;
 
 
 SET FOREIGN_KEY_CHECKS = 1;
+
+-- Member schema update (Asia/Shanghai): 2026-10-28 02:59:35
+INSERT INTO `system_schema_version` (`module`,`version`,`schema_update_time`,`script_source`,`description`,`status`,`tenant_id`)
+SELECT 'member','v2.0.1','2026-10-28 02:59:35','member-update.sql','Active member mobile uniqueness; retain repeated deletion history','SUCCESS',0
+WHERE NOT EXISTS (SELECT 1 FROM `system_schema_version` WHERE `module`='member' AND `version`='v2.0.1');

@@ -54,11 +54,12 @@ public interface PayWalletTransactionService {
     /**
      * 获取钱包流水
      *
+     * @param walletId 钱包编号（必须与唯一键作用域一致）
      * @param bizId 业务编号
      * @param type  业务类型
      * @return 钱包流水
      */
-    PayWalletTransactionDO getWalletTransaction(String bizId, PayWalletBizTypeEnum type);
+    PayWalletTransactionDO getWalletTransaction(Long walletId, String bizId, PayWalletBizTypeEnum type);
 
     /**
      * 获得钱包流水统计

@@ -80,8 +80,8 @@ public class PayWalletTransactionServiceImpl implements PayWalletTransactionServ
     }
 
     @Override
-    public PayWalletTransactionDO getWalletTransaction(String bizId, PayWalletBizTypeEnum type) {
-        return payWalletTransactionMapper.selectByBiz(bizId, type.getType());
+    public PayWalletTransactionDO getWalletTransaction(Long walletId, String bizId, PayWalletBizTypeEnum type) {
+        return payWalletTransactionMapper.selectByBiz(walletId, bizId, type.getType());
     }
 
     @Override

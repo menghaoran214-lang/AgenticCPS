@@ -16,6 +16,7 @@ import com.qiji.cps.module.pay.framework.pay.core.client.dto.transfer.PayTransfe
 import com.qiji.cps.module.pay.framework.pay.core.client.impl.AbstractPayClient;
 import com.qiji.cps.module.pay.framework.pay.core.client.impl.NonePayClientConfig;
 import com.qiji.cps.module.pay.dal.dataobject.order.PayOrderExtensionDO;
+import com.qiji.cps.module.pay.dal.dataobject.order.PayOrderDO;
 import com.qiji.cps.module.pay.dal.dataobject.refund.PayRefundDO;
 import com.qiji.cps.module.pay.dal.dataobject.transfer.PayTransferDO;
 import com.qiji.cps.module.pay.dal.dataobject.wallet.PayWalletTransactionDO;
@@ -113,8 +114,11 @@ public class WalletPayClient extends AbstractPayClient<NonePayClientConfig> {
         }
         // 成功状态
         if (PayOrderStatusEnum.isSuccess(orderExtension.getStatus())) {
-            PayWalletTransactionDO walletTransaction = walletTransactionService.getWalletTransaction(
-                    String.valueOf(orderExtension.getOrderId()), PayWalletBizTypeEnum.PAYMENT);
+            PayOrderDO order = orderService.getOrder(orderExtension.getOrderId());
+            Assert.notNull(order, "支付订单不存在");
+            PayWalletTransactionDO walletTransaction = walletTransactionService.getWalletTransactionByNo(
+                    order.getChannelOrderNo());
+            validateTransaction(walletTransaction, String.valueOf(order.getId()), PayWalletBizTypeEnum.PAYMENT);
             Assert.notNull(walletTransaction, "支付单 {} 钱包流水不能为空", outTradeNo);
             return PayOrderRespDTO.successOf(walletTransaction.getNo(), walletTransaction.getCreator(),
                     walletTransaction.getCreateTime(), outTradeNo, walletTransaction);
@@ -169,8 +173,8 @@ public class WalletPayClient extends AbstractPayClient<NonePayClientConfig> {
         }
         // 退款成功
         if (PayRefundStatusEnum.isSuccess(payRefund.getStatus())) {
-            PayWalletTransactionDO walletTransaction = walletTransactionService.getWalletTransaction(
-                    String.valueOf(payRefund.getId()), PayWalletBizTypeEnum.PAYMENT_REFUND);
+            PayWalletTransactionDO walletTransaction = walletTransactionService.getWalletTransactionByNo(payRefund.getChannelRefundNo());
+            validateTransaction(walletTransaction, String.valueOf(payRefund.getId()), PayWalletBizTypeEnum.PAYMENT_REFUND);
             Assert.notNull(walletTransaction, "支付退款单 {} 钱包流水不能为空", outRefundNo);
             return PayRefundRespDTO.successOf(walletTransaction.getNo(), walletTransaction.getCreateTime(),
                     outRefundNo, walletTransaction);
@@ -227,8 +231,8 @@ public class WalletPayClient extends AbstractPayClient<NonePayClientConfig> {
         }
         // 成功状态
         if (PayTransferStatusEnum.isSuccess(transfer.getStatus())) {
-            PayWalletTransactionDO walletTransaction = walletTransactionService.getWalletTransaction(
-                    String.valueOf(transfer.getId()), PayWalletBizTypeEnum.TRANSFER);
+            PayWalletTransactionDO walletTransaction = walletTransactionService.getWalletTransactionByNo(transfer.getChannelTransferNo());
+            validateTransaction(walletTransaction, transfer.getNo(), PayWalletBizTypeEnum.TRANSFER);
             Assert.notNull(walletTransaction, "转账单 {} 钱包流水不能为空", outTradeNo);
             return PayTransferRespDTO.successOf(walletTransaction.getNo(), walletTransaction.getCreateTime(),
                     outTradeNo, walletTransaction);
@@ -246,6 +250,13 @@ public class WalletPayClient extends AbstractPayClient<NonePayClientConfig> {
         // 其它状态为无效状态
         log.error("[doGetTransfer] 转账单 {} 的状态不正确", outTradeNo);
         throw new IllegalStateException(String.format("转账单[%s] 状态不正确", outTradeNo));
+    }
+
+    private static void validateTransaction(PayWalletTransactionDO transaction, String bizId,
+                                            PayWalletBizTypeEnum type) {
+        Assert.notNull(transaction, "钱包流水不存在");
+        Assert.isTrue(java.util.Objects.equals(transaction.getBizId(), bizId)
+                && java.util.Objects.equals(transaction.getBizType(), type.getType()), "钱包流水业务关联不一致");
     }
 
 }
