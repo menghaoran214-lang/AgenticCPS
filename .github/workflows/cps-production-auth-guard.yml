@@ -1,0 +1,37 @@
+name: CPS Production Authentication Defaults
+
+on:
+  push:
+    branches: [develop]
+    paths:
+      - backend/qiji-server/src/main/resources/application.yaml
+      - backend/qiji-server/src/main/resources/application-prod.yaml
+      - backend/qiji-module-system/src/main/java/com/qiji/cps/module/system/service/sms/SmsCodeServiceImpl.java
+      - script/ci/cps_production_auth_guard.py
+      - .github/workflows/cps-production-auth-guard.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  no-static-production-otp:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install YAML parser
+        run: python -m pip install "PyYAML==6.0.2"
+      - name: Block fixed production SMS codes, disabled captcha and mock authentication
+        run: python script/ci/cps_production_auth_guard.py
+      - name: Upload verification report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cps-production-auth-defaults
+          path: production-auth-config-report.json
+          retention-days: 7
+          if-no-files-found: warn
