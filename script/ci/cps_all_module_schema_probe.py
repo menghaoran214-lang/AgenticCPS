@@ -70,11 +70,26 @@ def main():
             checks["67_unique_expected_tables"]=len(tables)==67 and all(
                 sum(name.startswith(module+"_") for name in tables)==count
                 for module,_,count in MIGRATIONS)
-            cur.execute("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=%s AND column_name='tenant_id'",(db,))
-            checks["67_tenant_columns"]=cur.fetchone()[0]==67
+            # Four member metadata/address models inherit BaseDO rather than TenantBaseDO.
+            # Verify the exact exception set; never silently add a tenant column to deployed tables.
+            without_tenant={"member_address","member_level","member_group","member_tag"}
+            member_do_root=ROOT/"backend/qiji-module-member/src/main/java/com/qiji/cps/module/member/dal/dataobject"
+            paths={"member_address":"address/MemberAddressDO.java",
+                   "member_level":"level/MemberLevelDO.java",
+                   "member_group":"group/MemberGroupDO.java",
+                   "member_tag":"tag/MemberTagDO.java"}
+            checks["four_member_models_inherit_BaseDO"]=all(
+                "extends BaseDO" in (member_do_root/path).read_text(encoding="utf8")
+                and "extends TenantBaseDO" not in (member_do_root/path).read_text(encoding="utf8")
+                for path in paths.values())
+            cur.execute("SELECT table_name FROM information_schema.columns WHERE table_schema=%s AND column_name='tenant_id'",(db,))
+            tenant_scoped={row[0] for row in cur.fetchall()}
+            checks["63_tenant_scoped_and_four_BaseDO_exceptions"]=(
+                len(tenant_scoped)==63 and tables-tenant_scoped==without_tenant)
             for field in BASE_FIELDS:
                 cur.execute("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=%s AND column_name=%s",(db,field))
-                checks["67_"+field+"_columns"]=cur.fetchone()[0]==67
+                expected=63 if field=="tenant_id" else 67
+                checks[str(expected)+"_"+field+"_columns"]=cur.fetchone()[0]==expected
             for table,col in (("pay_order","price"),("pay_refund","refund_price"),
                               ("pay_wallet","balance"),("trade_order","pay_price"),
                               ("promotion_coupon","discount_price")):
