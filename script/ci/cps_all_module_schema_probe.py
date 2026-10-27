@@ -53,7 +53,7 @@ def main():
     db="cps_schema_all_ci_"+secrets.token_hex(7)
     connection=open_local()
     checks={}
-    report={"purpose":"5-migration additive schema integration; no live payments, no real funding",
+    report={"purpose":"five module schemas plus tenant compatibility alignment; no live payments, no real funding",
             "table_counts":{},"checks":checks,"release_approved":False}
     try:
         with connection.cursor() as cur:
@@ -65,31 +65,32 @@ def main():
                 for statement in statements:cur.execute(statement)
                 report["table_counts"][module]=count
                 print("APPLIED_TO_TEMP_DB",module,count,flush=True)
+            # MyBatis TenantDatabaseInterceptor applies tenant filters to these BaseDO
+            # tables unless explicitly ignored. No ignore rule is configured.
+            correction=ROOT/"backend/sql/migrations/V20261028_06__member_tenant_interceptor_alignment.sql"
+            correction_sql=re.sub(r"(?m)^--.*$", "",correction.read_text(encoding="utf8"))
+            alters=[x.strip() for x in correction_sql.split(";") if x.strip()]
+            if len(alters)!=4 or not all(x.startswith("ALTER TABLE `member_") for x in alters):
+                raise AssertionError("Unexpected member tenant compatibility migration")
+            for statement in alters:
+                cur.execute(statement)
+            print("TENANT_ALIGNMENT_APPLIED",len(alters),flush=True)
             cur.execute("SHOW TABLES")
             tables={r[0] for r in cur.fetchall()}
             checks["67_unique_expected_tables"]=len(tables)==67 and all(
                 sum(name.startswith(module+"_") for name in tables)==count
                 for module,_,count in MIGRATIONS)
-            # Four member metadata/address models inherit BaseDO rather than TenantBaseDO.
-            # Verify the exact exception set; never silently add a tenant column to deployed tables.
-            without_tenant={"member_address","member_level","member_group","member_tag"}
-            member_do_root=ROOT/"backend/qiji-module-member/src/main/java/com/qiji/cps/module/member/dal/dataobject"
-            paths={"member_address":"address/MemberAddressDO.java",
-                   "member_level":"level/MemberLevelDO.java",
-                   "member_group":"group/MemberGroupDO.java",
-                   "member_tag":"tag/MemberTagDO.java"}
-            checks["four_member_models_inherit_BaseDO"]=all(
-                "extends BaseDO" in (member_do_root/path).read_text(encoding="utf8")
-                and "extends TenantBaseDO" not in (member_do_root/path).read_text(encoding="utf8")
-                for path in paths.values())
+            # These four entities inherit BaseDO but the framework's SQL interceptor
+            # still requires tenant_id unless @TenantIgnore/ignoreTables is configured.
+            # Version 06 adds tenant_id without altering Java classes.
+            fixed_tables={"member_address","member_level","member_group","member_tag"}
             cur.execute("SELECT table_name FROM information_schema.columns WHERE table_schema=%s AND column_name='tenant_id'",(db,))
-            tenant_scoped={row[0] for row in cur.fetchall()}
-            checks["63_tenant_scoped_and_four_BaseDO_exceptions"]=(
-                len(tenant_scoped)==63 and tables-tenant_scoped==without_tenant)
+            scoped={r[0] for r in cur.fetchall()}
+            checks["tenant_interceptor_all_67_columns"]=scoped==tables
+            checks["four_BaseDO_member_tables_aligned"]=fixed_tables.issubset(scoped)
             for field in BASE_FIELDS:
                 cur.execute("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=%s AND column_name=%s",(db,field))
-                expected=63 if field=="tenant_id" else 67
-                checks[str(expected)+"_"+field+"_columns"]=cur.fetchone()[0]==expected
+                checks["67_"+field+"_columns"]=cur.fetchone()[0]==67
             for table,col in (("pay_order","price"),("pay_refund","refund_price"),
                               ("pay_wallet","balance"),("trade_order","pay_price"),
                               ("promotion_coupon","discount_price")):
