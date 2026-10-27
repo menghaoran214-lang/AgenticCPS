@@ -1,8 +1,16 @@
 # AGENTS.md
 
-Compact operating guidance for agents in `F:\ai\AgenticCPS`.
+Compact operating guidance for this AgenticCPS repository.
 
 This file is intentionally short to reduce fixed prompt/cache tokens. Do not paste or preload long project documents unless the current task needs them. Prefer targeted `rg` lookup and read only the relevant sections of referenced files.
+
+## User Environment Boundary
+
+- For this user's maintenance, the target is the existing Linux HP host `mm-HP-Pavilion-Notebook`, repository `/home/mm/dev/agenticcps-lab`, branch `develop`. A Windows tool workspace is not authorization to move or recreate the application there.
+- GitHub-hosted CI is disposable validation only; a passing CI run is not an HP deployment or production acceptance.
+- Before host changes, verify the device ID/hostname, existing repository/branch, clean or preserved working tree, occupied ports, volumes, and available resources. If these disagree with the target record, stop dependent mutations and investigate; never substitute another machine.
+- Preserve HP services. Do not run generic `docker compose up/down`, production deployment scripts, global cleanup, production SQL, or copy the CI compose configuration directly onto HP. Any host test profile must have verified independent ports, project-scoped names/volumes, resource limits and external-service isolation.
+- Current inventory and pending host prerequisites: [HP environment record](docs/hp-environment-boundary.md). This record is a snapshot; recheck it before starting services.
 
 ## Startup
 
