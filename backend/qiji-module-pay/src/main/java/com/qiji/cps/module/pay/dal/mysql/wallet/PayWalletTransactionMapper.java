@@ -52,6 +52,7 @@ public interface PayWalletTransactionMapper extends BaseMapperX<PayWalletTransac
     }
 
     default PayWalletTransactionDO selectByNo(String no) {
+        Objects.requireNonNull(no, "no");
         return selectOne(PayWalletTransactionDO::getNo, no);
     }
 

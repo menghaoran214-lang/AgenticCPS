@@ -63,7 +63,7 @@ class CpsMysql8ConsistencyTest {
     static SqlSessionTemplate sessions;
     static DataSourceTransactionManager tx;
     static final String MOBILE = "13800000000";
-    static final String[] TABLES = {"member_user", "pay_wallet_transaction", "cps_order",
+    static final String[] TABLES = {"member_user", "pay_wallet_transaction", "pay_order_extension", "cps_order",
             "cps_rebate_account", "cps_rebate_record", "cps_freeze_record", "cps_rebate_debt",
             "cps_rebate_asset_ledger"};
 
@@ -108,11 +108,13 @@ class CpsMysql8ConsistencyTest {
         GlobalConfigUtils.setGlobalConfig(config, global);
         MybatisPlusInterceptor plugin = new MybatisPlusInterceptor();
         plugin.addInnerInterceptor(new TenantLineInnerInterceptor(new TenantDatabaseInterceptor(new TenantProperties())));
+        plugin.addInnerInterceptor(new com.baomidou.mybatisplus.extension.plugins.inner.OptimisticLockerInnerInterceptor());
         config.addInterceptor(plugin);
         for (Class<?> mapper : List.of(MemberUserMapper.class, PayWalletTransactionMapper.class,
                 CpsOrderMapper.class, CpsRebateAccountMapper.class, CpsRebateRecordMapper.class,
                 CpsFreezeRecordMapper.class, CpsRebateDebtMapper.class, CpsRebateAssetLedgerMapper.class))
             config.addMapper(mapper);
+        config.addMapper(com.qiji.cps.module.pay.dal.mysql.order.PayOrderExtensionMapper.class);
         SqlSessionFactory factory = new MybatisSqlSessionFactoryBuilder().build(config);
         sessions = new SqlSessionTemplate(factory);
         tx = new DataSourceTransactionManager(ds);
@@ -125,8 +127,11 @@ class CpsMysql8ConsistencyTest {
         jdbc.execute(m.group());
     }
     static void execute(String sql) {
-        for (String statement : sql.replaceAll("(?m)^\\s*--.*$", "").split(";"))
-            if (!statement.isBlank()) jdbc.execute(statement);
+        jdbc.execute((org.springframework.jdbc.core.ConnectionCallback<Void>) connection -> {
+            org.springframework.jdbc.datasource.init.ScriptUtils.executeSqlScript(connection,
+                    new org.springframework.core.io.ByteArrayResource(sql.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+            return null;
+        });
     }
     @BeforeEach void clean() {
         for (String table : TABLES) jdbc.execute("DELETE FROM " + table);
@@ -273,4 +278,77 @@ class CpsMysql8ConsistencyTest {
         assertEquals(0L, mapper(CpsRebateAccountMapper.class).selectCount(null));
         assertEquals(0L, mapper(CpsRebateAssetLedgerMapper.class).selectCount(null));
     }
+    @Test void paymentJsonTypeHandlerRoundTripsAndRemainsTenantScoped() {
+        var extensions = mapper(com.qiji.cps.module.pay.dal.mysql.order.PayOrderExtensionMapper.class);
+        var row = com.qiji.cps.module.pay.dal.dataobject.order.PayOrderExtensionDO.builder()
+                .no("P-json").orderId(24L).status(0)
+                .channelExtras(Map.of("walletId", "10", "note", "中文")).build();
+        extensions.insert(row);
+        assertEquals(row.getChannelExtras(), extensions.selectByNo("P-json").getChannelExtras());
+        assertEquals("OBJECT", jdbc.queryForObject("SELECT JSON_TYPE(channel_extras) FROM pay_order_extension WHERE id=?", String.class, row.getId()));
+        TenantContextHolder.setTenantId(2L);
+        assertNull(extensions.selectByNo("P-json"));
+    }
+
+    @Test void concurrentWalletInsertsAcceptExactlyOneAndRejectOnlyDuplicateKeys() throws Exception {
+        ExecutorService pool = Executors.newFixedThreadPool(8);
+        CountDownLatch ready = new CountDownLatch(8);
+        CountDownLatch start = new CountDownLatch(1);
+        List<Future<Boolean>> results = new ArrayList<>();
+        try {
+            for (int i = 0; i < 8; i++) {
+                final int index = i;
+                results.add(pool.submit(() -> {
+                    TenantContextHolder.setTenantId(1L);
+                    try {
+                        ready.countDown();
+                        if (!start.await(15, TimeUnit.SECONDS)) throw new IllegalStateException("start timeout");
+                        wallet(10L, "W-concurrent-" + index);
+                        return true;
+                    } catch (RuntimeException ex) {
+                        Throwable cause = ex;
+                        while (cause != null) {
+                            if (cause instanceof java.sql.SQLException sql && sql.getErrorCode() == 1062)
+                                return false;
+                            cause = cause.getCause();
+                        }
+                        throw ex;
+                    } finally { TenantContextHolder.clear(); }
+                }));
+            }
+            assertTrue(ready.await(15, TimeUnit.SECONDS));
+            start.countDown();
+            int successes = 0;
+            for (Future<Boolean> result : results) if (result.get(30, TimeUnit.SECONDS)) successes++;
+            assertEquals(1, successes);
+            assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM pay_wallet_transaction", Integer.class));
+        } finally { start.countDown(); pool.shutdownNow(); }
+    }
+
+    @Test void memberFreshInitializationMatchesUpgradeSchema() throws Exception {
+        if ("1".equals(System.getenv("CPS_MYSQL8_BASELINE"))) return;
+        Path root = Path.of(System.getenv("GITHUB_WORKSPACE"));
+        jdbc.execute("CREATE DATABASE cps_member_init_ci CHARACTER SET utf8mb4");
+        try {
+            var ds = new UnpooledDataSource("com.mysql.cj.jdbc.Driver",
+                    "jdbc:mysql://127.0.0.1:3306/cps_member_init_ci?serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true",
+                    "root", "mapper-ci-only");
+            var fresh = new JdbcTemplate(ds);
+            String system = Files.readString(root.resolve("backend/sql/mysql/ruoyi-vue-pro.sql"));
+            Matcher table = Pattern.compile("CREATE TABLE `system_schema_version`\\s*\\(.*?;", Pattern.DOTALL).matcher(system);
+            assertTrue(table.find()); fresh.execute(table.group());
+            String init = Files.readString(root.resolve("backend/sql/module/member-all.sql"));
+            fresh.execute((org.springframework.jdbc.core.ConnectionCallback<Void>) connection -> {
+                org.springframework.jdbc.datasource.init.ScriptUtils.executeSqlScript(connection,
+                        new org.springframework.core.io.ByteArrayResource(init.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+                return null;
+            });
+            String columns = "SELECT table_name,column_name,column_type,is_nullable,extra,generation_expression FROM information_schema.columns WHERE table_schema=? AND table_name LIKE 'member_%' ORDER BY table_name,ordinal_position";
+            assertEquals(jdbc.queryForList(columns, "cps_mapper_ci"), jdbc.queryForList(columns, "cps_member_init_ci"));
+            String indexes = "SELECT table_name,index_name,non_unique,seq_in_index,column_name FROM information_schema.statistics WHERE table_schema=? AND table_name LIKE 'member_%' ORDER BY table_name,index_name,seq_in_index";
+            assertEquals(jdbc.queryForList(indexes, "cps_mapper_ci"), jdbc.queryForList(indexes, "cps_member_init_ci"));
+            assertEquals("v2.0.1", fresh.queryForObject("SELECT version FROM system_schema_version WHERE module='member'", String.class));
+        } finally { jdbc.execute("DROP DATABASE cps_member_init_ci"); }
+    }
+
 }

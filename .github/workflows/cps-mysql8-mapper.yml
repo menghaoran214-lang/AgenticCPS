@@ -80,6 +80,8 @@ jobs:
           -Dsurefire.failIfNoSpecifiedTests=false
       - name: Require actual passing executions without skipped tests
         run: python3 script/ci/verify_safety_reports.py backend CpsMysql8ConsistencyTest,CpsWalletLookupSafetyTest
+      - name: Rehearse synthetic backup restore without production archives
+        run: python3 script/ci/cps_mysql8_synthetic_restore.py
       - name: Upload baseline and fixed evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -87,6 +89,7 @@ jobs:
           name: cps-real-mysql8-mapper-reports
           path: |
             mysql8-evidence/
+            mysql8-synthetic-restore-report.json
             baseline-mysql8.log
             backend/**/target/surefire-reports/
           retention-days: 7
