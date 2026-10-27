@@ -1,0 +1,54 @@
+name: CPS All-Module MySQL 8 Composition (isolated)
+
+on:
+  push:
+    branches: [develop]
+    paths:
+      - backend/sql/migrations/V20261028_01__member_core_mysql8.sql
+      - backend/sql/migrations/V20261028_02__product_core_mysql8.sql
+      - backend/sql/migrations/V20261028_03__trade_core_mysql8.sql
+      - backend/sql/migrations/V20261028_04__promotion_core_mysql8.sql
+      - backend/sql/migrations/V20261028_05__pay_core_mysql8.sql
+      - script/ci/cps_all_module_schema_probe.py
+      - .github/workflows/cps-all-module-schema-probe.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  mysql8-module-composition:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: isolated-ci-five-module-only
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -pisolated-ci-five-module-only"
+          --health-interval=10s --health-timeout=5s --health-retries=12
+    env:
+      GITHUB_ACTIONS: "true"
+      CPS_67_SCHEMA_ISOLATED: "1"
+      MYSQL_HOST: 127.0.0.1
+      MYSQL_ROOT_PASSWORD: isolated-ci-five-module-only
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install disposable test connector
+        run: python -m pip install "PyMySQL==1.1.2"
+      - name: Create and validate 67 tables from all five migrations
+        run: python script/ci/cps_all_module_schema_probe.py
+      - name: Publish integration report (no credentials)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cps-all-module-mysql8-integration
+          path: all-module-mysql8-ci-report.json
+          retention-days: 7
+          if-no-files-found: warn
