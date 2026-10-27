@@ -17,6 +17,7 @@ import com.qiji.cps.module.cps.enums.CpsFreezeStatusEnum;
 import com.qiji.cps.module.cps.enums.CpsOrderStatusEnum;
 import com.qiji.cps.module.cps.enums.CpsRebateStatusEnum;
 import com.qiji.cps.module.cps.enums.CpsRebateTypeEnum;
+import com.qiji.cps.module.cps.enums.CpsSplitRoleEnum;
 import com.qiji.cps.module.cps.service.freeze.CpsFreezeService;
 import jakarta.annotation.Resource;
 import org.springframework.stereotype.Service;
@@ -718,6 +719,7 @@ public class CpsRebateAssetServiceImpl implements CpsRebateAssetService {
                 .orderAmount(rebate.getOrderAmount()).commissionAmount(rebate.getCommissionAmount())
                 .rebateRate(rebate.getRebateRate()).rebateAmount(rebate.getRebateAmount().negate())
                 .rebateType(CpsRebateTypeEnum.REFUND.getType()).rebateStatus(CpsRebateStatusEnum.REFUNDED.getStatus())
+                .splitRole(rebate.getSplitRole() != null ? rebate.getSplitRole() : CpsSplitRoleEnum.SELF.getRole())
                 .precedingRebateId(rebate.getId()).remark("订单退款由统一资产服务冲正，幂等键=" + idempotencyKey).build();
         rebateRecordMapper.insert(refund);
         CpsRebateRecordDO original = new CpsRebateRecordDO();
