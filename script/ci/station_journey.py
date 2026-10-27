@@ -257,7 +257,13 @@ def exercise():
     assert settled_order['status_version'] == 1, settled_order
     balance(buyer, ('0.60', 0, 0))
     balance(agent, ('0.20', 0, 0))
-    assert api('/app-api/cps/rebate/account?memberId=900001', buyer)['data']['memberId'] == BUYER
+    spoofed = api('/app-api/cps/rebate/account?memberId=900001', buyer)['data']
+    buyer_account_id = query(connection,
+        'SELECT id FROM cps_rebate_account WHERE member_id=%s AND tenant_id=1', (BUYER,))[0]['id']
+    agent_account_id = query(connection,
+        'SELECT id FROM cps_rebate_account WHERE member_id=%s AND tenant_id=1', (AGENT,))[0]['id']
+    assert spoofed['id'] == buyer_account_id and spoofed['id'] != agent_account_id, spoofed
+    assert spoofed['availableBalance'] == 0.6, spoofed
     before = query(connection, 'SELECT COUNT(*) AS n FROM cps_rebate_asset_ledger WHERE tenant_id=1')[0]['n']
     api(f'/admin-api/infra/job/trigger?id={job}', admin, method='PUT')
     time.sleep(3)
