@@ -16,13 +16,15 @@ validate_artifacts() {
     "frontend/mall-h5/index.html" \
     "mysql/init/00-ruoyi-vue-pro.sql" \
     "mysql/init/05-quartz.sql" \
-    "mysql/init/10-cps-all-in-one.sql" \
-    "mysql/init/15-ai-all.sql"; do
+    "mysql/init/10-cps-all-in-one.sql"; do
     if [[ ! -f "${artifact}" ]]; then
       echo "缺少部署文件: ${artifact}" >&2
       missing=1
     fi
   done
+  if [[ ! -f "mysql/init/15-ai-all.sql" ]]; then
+    echo "[WARN] Optional AI role seed SQL is not provided; do not enable AI features until separately initialized." >&2
+  fi
   if [[ "${missing}" -ne 0 ]]; then
     echo "请先在源码仓库执行 build-package.sh 或 build-package.ps1，再复制整个 docker 目录。" >&2
     exit 1
