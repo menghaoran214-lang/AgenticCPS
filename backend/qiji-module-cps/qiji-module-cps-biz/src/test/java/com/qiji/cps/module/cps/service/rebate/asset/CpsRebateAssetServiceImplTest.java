@@ -16,6 +16,7 @@ import com.qiji.cps.module.cps.enums.CpsFreezeStatusEnum;
 import com.qiji.cps.module.cps.enums.CpsOrderStatusEnum;
 import com.qiji.cps.module.cps.enums.CpsRebateStatusEnum;
 import com.qiji.cps.module.cps.enums.CpsRebateTypeEnum;
+import com.qiji.cps.module.cps.enums.CpsSplitRoleEnum;
 import com.qiji.cps.module.cps.service.freeze.CpsFreezeService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -441,11 +442,11 @@ class CpsRebateAssetServiceImplTest {
     private void verifyStationRefund(boolean frozen) {
         CpsRebateRecordDO buyer = CpsRebateRecordDO.builder()
                 .id(11L).orderId(22L).memberId(33L).platformCode("taobao").platformOrderId("P22")
-                .rebateAmount(new BigDecimal("60.00")).rebateType(CpsRebateTypeEnum.REBATE.getType())
+                .splitRole(CpsSplitRoleEnum.SELF.getRole()).rebateAmount(new BigDecimal("60.00")).rebateType(CpsRebateTypeEnum.REBATE.getType())
                 .rebateStatus(CpsRebateStatusEnum.RECEIVED.getStatus()).build();
         CpsRebateRecordDO agent = CpsRebateRecordDO.builder()
                 .id(12L).orderId(22L).memberId(44L).platformCode("taobao").platformOrderId("P22")
-                .rebateAmount(new BigDecimal("20.00")).rebateType(CpsRebateTypeEnum.REBATE.getType())
+                .splitRole(CpsSplitRoleEnum.PARENT_L1.getRole()).rebateAmount(new BigDecimal("20.00")).rebateType(CpsRebateTypeEnum.REBATE.getType())
                 .rebateStatus(frozen ? CpsRebateStatusEnum.PENDING.getStatus() : CpsRebateStatusEnum.RECEIVED.getStatus())
                 .freezeRecordId(frozen ? 99L : null).build();
         when(rebateRecordMapper.selectByOrderIdAndType(22L, CpsRebateTypeEnum.REBATE.getType())).thenReturn(buyer);
@@ -471,7 +472,12 @@ class CpsRebateAssetServiceImplTest {
         assertEquals(frozen ? -2000L : 0L, agentLedger.getFrozenChangeCent());
         assertEquals(frozen ? 0L : -300L, agentLedger.getAvailableChangeCent());
         assertEquals(frozen ? 0L : 1700L, agentLedger.getDebtChangeCent());
-        verify(rebateRecordMapper, times(2)).insert(any(CpsRebateRecordDO.class));
+        ArgumentCaptor<CpsRebateRecordDO> refunds = ArgumentCaptor.forClass(CpsRebateRecordDO.class);
+        verify(rebateRecordMapper, times(2)).insert(refunds.capture());
+        assertEquals(CpsSplitRoleEnum.SELF.getRole(), refunds.getAllValues().get(0).getSplitRole());
+        assertEquals(CpsSplitRoleEnum.PARENT_L1.getRole(), refunds.getAllValues().get(1).getSplitRole());
+        assertEquals(11L, refunds.getAllValues().get(0).getPrecedingRebateId());
+        assertEquals(12L, refunds.getAllValues().get(1).getPrecedingRebateId());
         if (frozen) {
             verifyNoInteractions(debtMapper);
         } else {
