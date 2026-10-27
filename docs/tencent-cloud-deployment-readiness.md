@@ -13,7 +13,7 @@
 
 ## 已证实的上线阻碍
 
-1. **业务表不足**：`cps` 封闭测试库现有 **136 张表**，原有121张包含 CPS 订单、返利、资金流水等；2026-10-28已增量迁入6张正式会员核心表，包括 `member_user` 与 `member_level`。仍缺少 `pay_wallet`、`trade_order`、`trade_cart`、`trade_after_sale`、`promotion_coupon`、`promotion_diy_template`、`promotion_diy_page` 等商城/支付表。商品核心9张表于2026-10-28完成版本化迁移和封闭云端增量部署；交易、营销、支付模块测试 SQL 不能当正式迁移。
+1. **业务表不足**：`cps` 封闭测试库现有 **151 张表**，原有121张包含 CPS 订单、返利、资金流水等；2026-10-28已增量迁入6张正式会员核心表，包括 `member_user` 与 `member_level`。2026-10-28会员6张、商品9张、交易15张核心表均已追加到云端封闭测试库；仍缺少营销及支付模块完整表（如 `pay_wallet`、`promotion_coupon`、`promotion_diy_template`、`promotion_diy_page`）。营销23张和支付14张候选迁移已通过 GitHub CI，但**仅文件暂存，尚未导入业务库**。
 2. **账号初始化风险**：`system_users` 中有 20 个预置用户，其中 12 个与常见公开示例密码匹配；其中包括初始管理员。未经账号清理与重置，不得公开管理入口。检查期间未登录成功、未对用户账户进行修改。
 3. **正式数据库脚本来源**：`backend/sql/mysql/ruoyi-vue-pro.sql`、`backend/sql/mysql/quartz.sql`、`backend/sql/module/cps-all-in-one.sql` 不包含上述模块的完整正式表结构。所依据的框架把会员/商城初始化 SQL 单独提供；官方文档说明其部分模块 SQL 有独立使用授权限制，不能擅自把测试代码或第三方非授权 SQL 当成正式交付。
 4. **尚未验收**：手机号/密码正向登录、实体扫码、真实联盟测试订单、真实结算/退款/提现、完整冻结资金规则、离机备份与恢复。
@@ -66,3 +66,14 @@ GitHub 增加：
 - 操作后4容器健康检查通过；定时备份及巡检正常，数据库/Java仍无公网端口。**并未验证真实商品订单闭环，也未启用外部支付与提现**。
 - 交易模块实际存在 **15 个 Java DO**，上一轮临时测试 SQL 仅8张表，不得直接当正式生产迁移；需按 Java 实体、Mapper 和业务查询制作完整版本。
 - 管理员默认密码及预置账户仍未加固，正向会员登录验收仍未通过，离机备份仍未做，禁止公开上线。
+
+
+## 2026-10-28 交易模块与营销/支付结构新进展
+
+- 交易模块15表（`V20261028_03__trade_core_mysql8.sql`）：GitHub Actions [40552401983](https://github.com/menghaoran214-lang/AgenticCPS/actions/runs/40552401983) 通过；腾讯云在真实136表快照的独立数据库中增量复测 `136→151`，并清理了试验库。原业务库在备份后执行仅新增15表的封闭迁移；操作前确认零订单、零提现、零 CPS 资金流水；备份 `pre-trade-core-20261027T174011Z.sql.gz` 已生成并校验。云端操作清单 `runtime/trade-core-applied-sealed.json`。
+- 根据**37份实际 Java DO 源码**（营销23、支付14）生成并提交候选迁移 `V20261028_04__promotion_core_mysql8.sql` 和 `V20261028_05__pay_core_mysql8.sql`。各字段已经静态对照源码；优惠券等的 LongList/StringList handler 对应字符串，JacksonTypeHandler 对应 JSON。
+- 独立 GitHub Actions [40555205923](https://github.com/menghaoran214-lang/AgenticCPS/actions/runs/40555205923) **成功**：实际在一次性 MySQL 8 创建37表，核验37个 Java DO 字段、租户列、主键、价格整数分、支付应用/渠道默认禁用、支付订单/退款/转账/钱包重复业务键约束，并移除测试数据库。
+- 新版本化候选 SQL 已下载到云端 `runtime/schema-candidates/` 并逐份通过 Git Blob SHA 校验：营销 `1bd144399bbad85c08f1857c2bd578e06cd843cf`，支付 `bdf471450c0212a765a80d7b786626a49a73bece`。**没有在云端运行或导入这37张表**：云端实际业务库仍是151表。
+- **限制**：PayChannel 客户端配置包括支付密钥信息，当前候选是 longtext 类型映射；这**不能替代静态加密、密钥轮换、访问控制和生产通道验收**。PayWallet 与 CPS 自有返利账户、流水分别管理，禁止混账。数据库索引语法和静态字段验证通过，**不代表全部 Mapper、Java运行时、营销结算或真实支付已通过**。
+- 下一步先完成合规来源与业务 SQL 字段级审查、云端备份恢复的只读预检，再单独核准封闭测试库的增量迁移。预置后台账号仍存在默认密码风险；离机备份、正向登录、订单归因、资金守恒、退款及提现验收均未完成，**继续禁止开放公网**。
+
