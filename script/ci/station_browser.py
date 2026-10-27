@@ -11,11 +11,11 @@ from station_journey import BASE, WORK, AGENT, WEB_BUYER, PHONES, connect, query
 
 
 def login_form(page, member, expect_binding=False):
-    account = page.get_by_placeholder('请输入账号')
-    if not account.is_visible():
+    if not page.locator('.login-btn-start').is_visible():
         page.get_by_text('账号登录', exact=True).first.click()
-    account.fill(PHONES[member])
-    page.get_by_placeholder('请输入密码', exact=True).fill(os.environ['CPS_STATION_PASSWORD'])
+    inputs = page.locator('.login-wrap input.uni-input-input')
+    inputs.nth(0).fill(PHONES[member])
+    inputs.nth(1).fill(os.environ['CPS_STATION_PASSWORD'])
     page.locator('.agreement-option .radio').first.click()
     with page.expect_response(lambda response: '/member/auth/login' in response.url) as login:
         if expect_binding:
@@ -40,7 +40,8 @@ def capture_failure(browser, diagnostics):
                 try:
                     state['pages'].append({'url': page.url,
                         'title': page.title(), 'text': page.locator('body').inner_text(timeout=3000)[:4000],
-                        'storage_keys': page.evaluate('Object.keys(localStorage)')})
+                        'storage_keys': page.evaluate('Object.keys(localStorage)'),
+                        'inputs': page.locator('input').evaluate_all('(nodes) => nodes.map(node => ({type:node.type,className:node.className,placeholder:node.placeholder}))')})
                     page.screenshot(path=str(WORK / f'evidence/browser-failure-{index}-{number}.png'), full_page=True, timeout=5000)
                 except Exception:
                     pass
