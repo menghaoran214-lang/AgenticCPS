@@ -13,7 +13,7 @@
 
 ## 已证实的上线阻碍
 
-1. **业务表不足**：目前 `cps` 有 121 张表，包含 CPS 订单、返利、资金流水等，但缺少 `member_user`、`member_level`、`pay_wallet`、`trade_order`、`trade_cart`、`trade_after_sale`、`promotion_coupon`、`promotion_diy_template` 和 `promotion_diy_page` 等。会员、商品、交易、营销、支付五个模块的测试 SQL 合计涉及 40 张不同的表，当前正式初始化脚本均未创建。
+1. **业务表不足**：`cps` 封闭测试库现有 **127 张表**，原有121张包含 CPS 订单、返利、资金流水等；2026-10-28已增量迁入6张正式会员核心表，包括 `member_user` 与 `member_level`。仍缺少 `pay_wallet`、`trade_order`、`trade_cart`、`trade_after_sale`、`promotion_coupon`、`promotion_diy_template`、`promotion_diy_page` 等商城/支付表。商品、交易、营销、支付模块测试 SQL 不能当正式迁移。
 2. **账号初始化风险**：`system_users` 中有 20 个预置用户，其中 12 个与常见公开示例密码匹配；其中包括初始管理员。未经账号清理与重置，不得公开管理入口。检查期间未登录成功、未对用户账户进行修改。
 3. **正式数据库脚本来源**：`backend/sql/mysql/ruoyi-vue-pro.sql`、`backend/sql/mysql/quartz.sql`、`backend/sql/module/cps-all-in-one.sql` 不包含上述模块的完整正式表结构。所依据的框架把会员/商城初始化 SQL 单独提供；官方文档说明其部分模块 SQL 有独立使用授权限制，不能擅自把测试代码或第三方非授权 SQL 当成正式交付。
 4. **尚未验收**：手机号/密码正向登录、实体扫码、真实联盟测试订单、真实结算/退款/提现、完整冻结资金规则、离机备份与恢复。
@@ -30,6 +30,16 @@ GitHub 增加：
 腾讯云先行原型实验已证实：H2 测试 SQL 转换后 5 个模块可以在独立 MySQL 数据库中创建 **41** 张测试表（商品模块源文件另外包含 `product_comment`，其原始 `DROP TABLE ... (columns)` 明显不合法，需要测试专用转换）。成功后已删掉临时库；**没有导入 `cps`**。
 
 这些数据只有“表可创建”意义，尚未验证索引、字段完整性、唯一约束、多租户规则、与 Java 实体的逐字段匹配，更没有验证真实商业资金流程。**禁止将该转换结果作为生产迁移使用。**
+
+
+## 2026-10-28 云端封闭测试库实际迁移记录
+
+- 版本化来源：`backend/sql/migrations/V20261028_01__member_core_mysql8.sql`（Git Blob `d7da7aea0d4f328776d72ad904efe2b7b48c72cc`，提交 `1877850`）；GitHub 的独立 MySQL 8 CI **已通过**。
+- 云端先在空临时库验证全部6张表、字段、唯一性、跨租户、软删除约束，随后在从定时备份恢复的临时库重放，表数 `121 → 127`，恢复库已清理。
+- 对仅本机访问的云端 `cps` **封闭测试库**执行附加式迁移：执行前确认没有订单、提现、资金流水、OAuth 登录令牌或登录日志，且6张新表原本不存在；创建全量数据库备份 `pre-member-core-20261027T172006Z.sql.gz` 并校验后，只新增六表。迁移后的原表仍存在，新表为空，表数为127；执行清单在云端 `/home/cpsops/agenticcps/runtime/member-core-applied-sealed.json`。
+- 对外监听仍仅 `127.0.0.1:18080`，健康检查通过，业务未上线。**这不是一次真实订单/登录/资金 E2E 验收**。
+- 随后拟进行的合成账号登录测试被远程执行安全检查拦截，**没有执行**，不可报告为通过，也不可尝试绕过限制。
+- 账号加固**仍未完成**：`system_users` 为20个预置账号，其中19个为启用状态。需要受控安全处理和验证后才能开放管理入口。现有备份只在同机，离机备份仍待做。
 
 ## 推荐后续顺序
 
