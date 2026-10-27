@@ -9,6 +9,7 @@ on:
       - backend/sql/migrations/V20261028_03__trade_core_mysql8.sql
       - backend/sql/migrations/V20261028_04__promotion_core_mysql8.sql
       - backend/sql/migrations/V20261028_05__pay_core_mysql8.sql
+      - backend/sql/migrations/V20261028_06__member_tenant_interceptor_alignment.sql
       - script/ci/cps_all_module_schema_probe.py
       - .github/workflows/cps-all-module-schema-probe.yml
   workflow_dispatch:
