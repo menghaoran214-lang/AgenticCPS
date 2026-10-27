@@ -154,10 +154,17 @@ class CpsMysql8ConsistencyTest {
         return row;
     }
     PayWalletTransactionDO scoped(long walletId) throws Exception {
-        // Reflection allows the same regression suite to execute on the unfixed baseline.
-        return (PayWalletTransactionDO) PayWalletTransactionMapper.class
-                .getMethod("selectByBiz", Long.class, String.class, Integer.class)
-                .invoke(mapper(PayWalletTransactionMapper.class), walletId, "same-biz", 1);
+        // Exercise the legacy query itself on the baseline, not just a missing signature.
+        try {
+            return (PayWalletTransactionDO) PayWalletTransactionMapper.class
+                    .getMethod("selectByBiz", Long.class, String.class, Integer.class)
+                    .invoke(mapper(PayWalletTransactionMapper.class), walletId, "same-biz", 1);
+        } catch (NoSuchMethodException missing) {
+            if (!"1".equals(System.getenv("CPS_MYSQL8_BASELINE"))) throw missing;
+            return (PayWalletTransactionDO) PayWalletTransactionMapper.class
+                    .getMethod("selectByBiz", String.class, Integer.class)
+                    .invoke(mapper(PayWalletTransactionMapper.class), "same-biz", 1);
+        }
     }
 
     @Test void walletBusinessLookupMatchesWalletAndTenantUniqueKey() throws Exception {
@@ -349,6 +356,29 @@ class CpsMysql8ConsistencyTest {
             assertEquals(jdbc.queryForList(indexes, "cps_mapper_ci"), jdbc.queryForList(indexes, "cps_member_init_ci"));
             assertEquals("v2.0.1", fresh.queryForObject("SELECT version FROM system_schema_version WHERE module='member'", String.class));
         } finally { jdbc.execute("DROP DATABASE cps_member_init_ci"); }
+    }
+
+    @AfterAll static void prepareDeterministicSyntheticRestoreFixture() {
+        if ("1".equals(System.getenv("CPS_MYSQL8_BASELINE"))) return;
+        CpsMysql8ConsistencyTest test = new CpsMysql8ConsistencyTest();
+        test.clean();
+        try {
+            for (int i = 0; i < 3; i++) {
+                MemberUserDO history = test.member("synthetic-history-hash");
+                mapper(MemberUserMapper.class).deleteById(history.getId());
+            }
+            test.member(new BCryptPasswordEncoder(4).encode("synthetic-password"));
+            test.wallet(10L, "W-restore-1");
+            test.wallet(20L, "W-restore-2");
+            var extension = com.qiji.cps.module.pay.dal.dataobject.order.PayOrderExtensionDO.builder()
+                    .no("P-restore-json").orderId(24L).status(0)
+                    .channelExtras(Map.of("walletId", "10", "note", "恢复演练")).build();
+            mapper(com.qiji.cps.module.pay.dal.mysql.order.PayOrderExtensionMapper.class).insert(extension);
+            test.assetService(mapper(CpsRebateAssetLedgerMapper.class))
+                    .creditOrderRebate(test.orderFixture(), "restore-credit-24");
+            TenantContextHolder.setTenantId(2L);
+            test.member("synthetic-other-tenant");
+        } finally { TenantContextHolder.clear(); }
     }
 
 }

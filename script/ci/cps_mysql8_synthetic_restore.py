@@ -44,6 +44,12 @@ def main():
     guard()
     assert sql(SOURCE, "SELECT VERSION()").decode().startswith("8.0.")
     before = fingerprint(SOURCE)
+    # Require meaningful history and asset fixtures, not an empty-schema restore.
+    for table, minimum in (("member_user", 5), ("pay_wallet_transaction", 2),
+                           ("cps_order", 1), ("cps_rebate_account", 1),
+                           ("cps_rebate_asset_ledger", 1), ("pay_order_extension", 1)):
+        assert before[table]["rows"] >= minimum, "Missing synthetic fixture: " + table
+    assert int(sql(SOURCE, "SELECT COUNT(*) FROM member_user WHERE deleted=1")) == 3
     # No --databases: dump must not carry a source CREATE DATABASE/USE target.
     dump = command("mysqldump", ["--single-transaction", "--no-tablespaces",
                    "--set-gtid-purged=OFF", "--skip-comments", "--skip-dump-date", SOURCE])

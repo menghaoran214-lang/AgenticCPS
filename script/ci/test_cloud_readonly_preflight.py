@@ -24,13 +24,14 @@ class PreflightTest(unittest.TestCase):
     def test_plan_uses_entity_ddl_and_tenant_correction(self):
         expected = mod.expected_columns()
         self.assertEqual(len(expected), 67)
+        self.assertIn("active_mobile", expected["member_user"])
         for table in ("member_address", "member_tag", "member_level", "member_group"):
             self.assertIn("tenant_id", expected[table])
 
     def test_index_inventory_includes_unique_keys_and_v06(self):
         indexes = mod.expected_indexes()
-        self.assertEqual(indexes[("member_user", "uk_member_tenant_mobile_deleted")],
-                         (0, ("tenant_id", "mobile", "deleted")))
+        self.assertEqual(indexes[("member_user", "uk_member_tenant_active_mobile")],
+                         (0, ("tenant_id", "active_mobile")))
         self.assertEqual(indexes[("member_address", "idx_member_address_tenant_user")],
                          (1, ("tenant_id", "user_id", "deleted")))
         self.assertGreater(len(indexes), 67)

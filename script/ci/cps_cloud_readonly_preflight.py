@@ -58,6 +58,7 @@ def expected_columns():
     correction = directory / "V20261028_06__member_tenant_interceptor_alignment.sql"
     for table, column in re.findall(r"ALTER TABLE `([a-z_]+)`\s+ADD COLUMN `([a-z_]+)`", correction.read_text(encoding="utf-8")):
         expected[table].add(column)
+    expected["member_user"].add("active_mobile")
     return expected
 
 def expected_indexes():
@@ -69,6 +70,8 @@ def expected_indexes():
     correction = (ROOT / "backend/sql/migrations/V20261028_06__member_tenant_interceptor_alignment.sql").read_text(encoding="utf-8")
     for table, name, columns in re.findall(r"ALTER TABLE \x60([a-z_]+)\x60.*?ADD KEY \x60([a-z_]+)\x60 \(([^)]+)\)", correction, re.S):
         indexes[(table, name)] = (1, tuple(re.findall(r"\x60([a-z_]+)\x60", columns)))
+    indexes.pop(("member_user", "uk_member_tenant_mobile_deleted"))
+    indexes[("member_user", "uk_member_tenant_active_mobile")] = (0, ("tenant_id", "active_mobile"))
     return indexes
 
 def schema_gaps(expected, actual):
@@ -164,6 +167,7 @@ def main():
         "backup": backup, "checks": checks,
         "candidate_sha256": {path.name: hashlib.sha256(path.read_bytes()).hexdigest()
             for path in sorted((ROOT / "backend/sql/migrations").glob("V20261028_*.sql"))},
+        "member_update_sha256": hashlib.sha256((ROOT / "backend/sql/module/member-update.sql").read_bytes()).hexdigest(),
         "cloud_restore_rehearsal_verified": False, "positive_login_verified": False,
         "financial_e2e_verified": False, "go_live_approved": False}
     print(json.dumps(report, indent=2, ensure_ascii=False))

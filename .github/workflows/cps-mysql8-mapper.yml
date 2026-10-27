@@ -64,7 +64,12 @@ jobs:
           root=ET.parse(p).getroot()
           failed={x.attrib['name'] for x in root.findall('testcase') if x.find('failure') is not None or x.find('error') is not None}
           required={'walletBusinessLookupMatchesWalletAndTenantUniqueKey','repeatedDeleteAndReregisterKeepsAllHistoryAndOnlyOneActiveMobile'}
-          assert required <= failed, failed
+          assert required == failed, failed
+          for case in root.findall('testcase'):
+              if case.attrib['name'] in required:
+                  detail=ET.tostring(case, encoding='unicode')
+                  expected='TooManyResultsException' if case.attrib['name'].startswith('wallet') else 'DuplicateKeyException'
+                  assert expected in detail, detail
           print('Baseline reproduced both targeted failures:', sorted(failed))
           PY
           mkdir -p mysql8-evidence/baseline
@@ -80,6 +85,8 @@ jobs:
           -Dsurefire.failIfNoSpecifiedTests=false
       - name: Require actual passing executions without skipped tests
         run: python3 script/ci/verify_safety_reports.py backend CpsMysql8ConsistencyTest,CpsWalletLookupSafetyTest
+      - name: Verify restore environment boundaries
+        run: python3 -m unittest discover -s script/ci -p test_mysql8_synthetic_restore.py -v
       - name: Rehearse synthetic backup restore without production archives
         run: python3 script/ci/cps_mysql8_synthetic_restore.py
       - name: Upload baseline and fixed evidence
