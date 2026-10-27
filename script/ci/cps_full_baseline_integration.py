@@ -126,10 +126,23 @@ def main():
                     names_expected.add(match[1])
                     cur.execute(stmt)
                 print("MIGRATION_IMPORTED",module,count,flush=True)
+            correction=ROOT/"backend/sql/migrations/V20261028_06__member_tenant_interceptor_alignment.sql"
+            correction_bytes=correction.read_bytes()
+            report["source_files"][correction.as_posix().removeprefix(ROOT.as_posix()+"/")]=hashlib.sha256(correction_bytes).hexdigest()
+            correction_sql=re.sub(r"(?m)^--.*$","",correction_bytes.decode("utf8"))
+            corrections=[x.strip() for x in correction_sql.split(";") if x.strip()]
+            if len(corrections)!=4 or not all(x.startswith("ALTER TABLE `member_") for x in corrections):
+                raise AssertionError("Unexpected tenant interceptor SQL")
+            for statement in corrections:
+                cur.execute(statement)
+            print("TENANT_COMPATIBILITY_ALIGNED",len(corrections),flush=True)
             after=table_names(cur)
             report["tables_after_all_migrations"]=len(after)
             checks["67_unique_module_tables"]=len(names_expected)==67 and after-base==names_expected
             checks["all_original_tables_preserved"]=base.issubset(after) and len(after)==len(base)+67
+            cur.execute("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=%s AND column_name='tenant_id' AND table_name IN ("+
+                        ",".join(["'"+n+"'" for n in sorted(names_expected)])+")",(db,))
+            checks["all_67_new_tables_tenant_scoped_after_v06"]=cur.fetchone()[0]==67
             checks["baseline_rows_unchanged"]=all(table_rows(cur,t)==v for t,v in immutable_counts.items())
             for table in ("member_user","product_spu","trade_order","promotion_coupon","pay_order","pay_refund","pay_wallet","pay_wallet_transaction","pay_transfer"):
                 checks["empty_"+table]=table_rows(cur,table)==0
