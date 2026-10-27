@@ -4,8 +4,16 @@ const validCode = (code) => typeof code === 'string' && /^[A-Za-z0-9]{6,32}$/.te
 
 export function buildInviteLink(base, code) {
   if (!validCode(code) || typeof base !== 'string' || !/^https?:\/\/[^\s/?#]+(?:[/?#]|$)/i.test(base)) return '';
-  const address = base.split('#')[0].split('?')[0];
-  return address + '#/pages/cps/goods?inviteCode=' + encodeURIComponent(code);
+  try {
+    const address = new URL(base);
+    const pageIndex = address.pathname.indexOf('/pages/');
+    const root = pageIndex >= 0 ? address.pathname.slice(0, pageIndex + 1)
+      : address.pathname.endsWith('/') ? address.pathname : address.pathname + '/';
+    const prefix = address.hash.startsWith('#/') ? '#/' : '';
+    return address.origin + root + prefix + 'pages/cps/goods?inviteCode=' + encodeURIComponent(code);
+  } catch (_) {
+    return '';
+  }
 }
 
 // The server resolves the invite code and obtains member identity from its session.
