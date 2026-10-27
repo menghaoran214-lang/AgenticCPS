@@ -18,7 +18,7 @@ def login_form(page, member, expect_binding=False):
         page.locator('.login-wrap input[type="password"]').fill(os.environ['CPS_STATION_PASSWORD'])
     except Exception:
         raise RuntimeError('Password field could not be filled') from None
-    page.locator('.agreement-option .radio').first.click()
+    page.locator('.agreement-option uni-radio').first.click()
     with page.expect_response(lambda response: '/member/auth/login' in response.url) as login:
         if expect_binding:
             with page.expect_response(lambda response: '/cps/promoter/bind' in response.url) as binding:
