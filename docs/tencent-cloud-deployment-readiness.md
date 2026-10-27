@@ -13,7 +13,7 @@
 
 ## 已证实的上线阻碍
 
-1. **业务表不足**：`cps` 封闭测试库现有 **127 张表**，原有121张包含 CPS 订单、返利、资金流水等；2026-10-28已增量迁入6张正式会员核心表，包括 `member_user` 与 `member_level`。仍缺少 `pay_wallet`、`trade_order`、`trade_cart`、`trade_after_sale`、`promotion_coupon`、`promotion_diy_template`、`promotion_diy_page` 等商城/支付表。商品、交易、营销、支付模块测试 SQL 不能当正式迁移。
+1. **业务表不足**：`cps` 封闭测试库现有 **136 张表**，原有121张包含 CPS 订单、返利、资金流水等；2026-10-28已增量迁入6张正式会员核心表，包括 `member_user` 与 `member_level`。仍缺少 `pay_wallet`、`trade_order`、`trade_cart`、`trade_after_sale`、`promotion_coupon`、`promotion_diy_template`、`promotion_diy_page` 等商城/支付表。商品核心9张表于2026-10-28完成版本化迁移和封闭云端增量部署；交易、营销、支付模块测试 SQL 不能当正式迁移。
 2. **账号初始化风险**：`system_users` 中有 20 个预置用户，其中 12 个与常见公开示例密码匹配；其中包括初始管理员。未经账号清理与重置，不得公开管理入口。检查期间未登录成功、未对用户账户进行修改。
 3. **正式数据库脚本来源**：`backend/sql/mysql/ruoyi-vue-pro.sql`、`backend/sql/mysql/quartz.sql`、`backend/sql/module/cps-all-in-one.sql` 不包含上述模块的完整正式表结构。所依据的框架把会员/商城初始化 SQL 单独提供；官方文档说明其部分模块 SQL 有独立使用授权限制，不能擅自把测试代码或第三方非授权 SQL 当成正式交付。
 4. **尚未验收**：手机号/密码正向登录、实体扫码、真实联盟测试订单、真实结算/退款/提现、完整冻结资金规则、离机备份与恢复。
@@ -43,7 +43,7 @@ GitHub 增加：
 
 ## 推荐后续顺序
 
-1. 在 GitHub `develop` 为会员/商城/支付模块准备**合法来源、符合当前源码**的正式 MySQL 8 版本化迁移（需按实体、Mapper、业务 SQL、索引和约束审查）。
+1. 在 GitHub `develop` 为交易/营销/支付模块准备**合法来源、符合当前源码**的正式 MySQL 8 版本化迁移（需按实体、Mapper、业务 SQL、索引和约束审查）。
 2. 使用独立新数据库进行导入、回滚演练和完整业务 E2E；通过后再对封闭云端测试库做有备份的增量迁移。
 3. 安全处理默认后台账号与密码，并验证真实正向登录、禁用用户不能登录、跨租户拒绝。
 4. 测试上游供应商测试订单、返利冻结/解冻、驿站分账、退款、重复事件、提现安全与账务守恒。
@@ -56,3 +56,13 @@ GitHub 增加：
 - 不修改既有真实财务流水、真实用户数据或执行全局 Docker 清理。
 - 不禁用业务验证码，不开启模拟支付/模拟登录，不开放数据库端口。
 - 无验收依据时，不声明“已完整上线”。
+
+## 2026-10-28 商品9张表正式迁移实际记录
+
+- GitHub迁移脚本：`backend/sql/migrations/V20261028_02__product_core_mysql8.sql`，Blob SHA `a2e63bc0ea316f996dcce59fcd47b57286f6a51d`，提交 `f68e803`。依据当前 Java Product*DO（9种实体）及 BaseDO 编制，而非直接引用存在旧字段和语法错误的 H2 测试SQL。
+- GitHub Actions `CPS Product MySQL 8 Migration Probe (isolated)` [40550699365](https://github.com/menghaoran214-lang/AgenticCPS/actions/runs/40550699365) 已通过，涵盖9张表、模型字段、JSON、租户列、索引及 SPU/SKU 关联。
+- 腾讯云对原始 Blob SHA 校验后，在独立临时库创建9张表，确认 JSON 类型、租户字段和当前模型字段，**临时库已清理**。
+- 在仅监听 `127.0.0.1:18080` 的封闭测试库，迁移前核查已有127张表、新表全不存在、无订单/提现/账本/会员/登录记录。创建并校验完整备份 `pre-product-core-20261027T172848Z.sql.gz`，只执行新增商品9表，`127→136`，新表全空。服务器操作清单位于 `runtime/product-core-applied-sealed.json`。
+- 操作后4容器健康检查通过；定时备份及巡检正常，数据库/Java仍无公网端口。**并未验证真实商品订单闭环，也未启用外部支付与提现**。
+- 交易模块实际存在 **15 个 Java DO**，上一轮临时测试 SQL 仅8张表，不得直接当正式生产迁移；需按 Java 实体、Mapper 和业务查询制作完整版本。
+- 管理员默认密码及预置账户仍未加固，正向会员登录验收仍未通过，离机备份仍未做，禁止公开上线。
