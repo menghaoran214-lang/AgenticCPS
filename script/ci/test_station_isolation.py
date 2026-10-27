@@ -11,13 +11,13 @@ spec.loader.exec_module(journey)
 
 class StationIsolationTest(unittest.TestCase):
     def test_only_loopback_test_target_is_allowed(self):
-        journey.require_isolated('http://127.0.0.1:18081', '1')
+        journey.require_isolated(journey.BASE, '1')
         for url in ['https://example.com', 'http://127.0.0.1.evil.test', 'http://user@127.0.0.1:18081',
                     'http://127.0.0.1:18081/production', 'http://192.168.1.10:18081']:
             with self.subTest(url=url), self.assertRaises(ValueError):
                 journey.require_isolated(url, '1')
         with self.assertRaises(ValueError):
-            journey.require_isolated('http://127.0.0.1:18081', '')
+            journey.require_isolated(journey.BASE, '')
 
     def test_isolated_compose_has_no_global_names_or_external_network(self):
         compose = json.loads((ROOT / 'script/ci/compose.station.json').read_text(encoding='utf-8'))

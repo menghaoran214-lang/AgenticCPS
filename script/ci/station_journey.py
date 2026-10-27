@@ -11,10 +11,14 @@ from pathlib import Path
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError
+from station_profiles import get_profile, make_compose, require_loopback
+from station_hp_preflight import require_execution_context
 
 ROOT = Path(__file__).resolve().parents[2]
 WORK = ROOT / '.station-ci'
-BASE = 'http://127.0.0.1:18081'
+PROFILE_NAME = os.environ.get('CPS_STATION_PROFILE', 'ci')
+PROFILE = get_profile(PROFILE_NAME)
+BASE = "http://127.0.0.1:" + str(PROFILE['ports']['web'])
 DATABASE = 'cps_station_ci'
 AGENT, BUYER, OTHER, DISABLED, WEB_BUYER = 900001, 900002, 900003, 900004, 900005
 PHONES = {AGENT: '13800001001', BUYER: '13800001002', OTHER: '13800001003',
@@ -22,10 +26,7 @@ PHONES = {AGENT: '13800001001', BUYER: '13800001002', OTHER: '13800001003',
 
 
 def require_isolated(base, enabled):
-    url = urlsplit(base)
-    if enabled != '1' or url.scheme != 'http' or url.hostname != '127.0.0.1' or url.port != 18081 \
-            or url.username or url.password or url.path or url.query or url.fragment:
-        raise ValueError('Only the explicit, loopback-only station test environment is accepted')
+    require_loopback(base, enabled, PROFILE_NAME)
 
 
 def marker_matches(expected, actual):
@@ -34,8 +35,9 @@ def marker_matches(expected, actual):
 
 def connect():
     require_isolated(BASE, os.environ.get('CPS_STATION_ISOLATED'))
+    require_execution_context(PROFILE_NAME)
     import pymysql
-    connection = pymysql.connect(host='127.0.0.1', port=13307, user='qiji',
+    connection = pymysql.connect(host='127.0.0.1', port=PROFILE['ports']['sql'], user='qiji',
                                  password=os.environ['MYSQL_PASSWORD'], database=DATABASE,
                                  charset='utf8mb4', autocommit=True,
                                  cursorclass=pymysql.cursors.DictCursor)
@@ -50,6 +52,7 @@ def connect():
 
 def init_workspace():
     require_isolated(BASE, os.environ.get('CPS_STATION_ISOLATED'))
+    require_execution_context(PROFILE_NAME, initial=True)
     env_path = WORK / 'runtime.env'
     if env_path.exists():
         raise ValueError('Test credentials already exist; reuse or explicitly stop/reset this test environment')
@@ -63,7 +66,14 @@ def init_workspace():
         'CPS_STATION_NONCE': secrets.token_hex(24),
         'CPS_STATION_PASSWORD': 'A1' + secrets.token_hex(5),
         'CPS_STATION_ISOLATED': '1',
+        'CPS_STATION_PROFILE': PROFILE_NAME,
+        'COMPOSE_PROJECT_NAME': os.environ.get('COMPOSE_PROJECT_NAME') or 'cps-station-hp-' + secrets.token_hex(6),
+        **{'CPS_STATION_' + key.upper() + '_PORT': str(value) for key, value in PROFILE['ports'].items()},
     }
+    if not values['COMPOSE_PROJECT_NAME'].startswith('cps-station-' + PROFILE_NAME + '-'):
+        raise ValueError('Test project name does not match the selected station profile')
+    compose = make_compose(PROFILE_NAME, json.loads((ROOT / 'script/ci/compose.station.json').read_text(encoding='utf-8')))
+    (WORK / 'compose.json').write_text(json.dumps(compose, indent=2), encoding='utf-8')
     env_path.write_text(''.join(f'{key}={value}\n' for key, value in values.items()), encoding='utf-8')
     env_path.chmod(0o600)
     for source, target in [
@@ -156,6 +166,7 @@ def prepare():
 
 def api(path, token=None, payload=None, method=None, tenant=1, allow_failure=False):
     require_isolated(BASE, os.environ.get('CPS_STATION_ISOLATED'))
+    require_execution_context(PROFILE_NAME)
     headers = {'Content-Type': 'application/json', 'tenant-id': str(tenant), 'terminal': '10'}
     if token:
         headers['Authorization'] = 'Bearer ' + token
