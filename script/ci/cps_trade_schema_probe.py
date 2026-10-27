@@ -45,7 +45,7 @@ def model_inventory():
         table=re.search(r"@TableName\(\s*(?:value\s*=\s*)?\"([^\"]+)\"",src)
         if not table or not table[1].startswith("trade_"):
             continue
-        fields=[snake(match[2]) for match in re.findall(r"^ {4}private\s+([\w<>?, .]+)\s+(\w+)\s*;",src,re.M)]
+        fields=[snake(match[1]) for match in re.findall(r"^ {4}private\s+([\w<>?, .]+)\s+(\w+)\s*;",src,re.M)]
         if table[1] in result:raise AssertionError("Duplicate TableName")
         result[table[1]]=set(fields)|COMMON
     return result
