@@ -96,3 +96,13 @@ test('invalid codes and malformed persisted values never reach the binding API',
   assert.equal(await s.manager.bindPending(), 'none');
   assert.deepEqual(s.calls, []);
 });
+
+test('history routing produces a real goods path under the configured H5 base', () => {
+  assert.equal(buildInviteLink('https://shop.test/h5/', 'ABCD1234'),
+    'https://shop.test/h5/pages/cps/goods?inviteCode=ABCD1234');
+});
+
+test('history invitation from a nested page keeps only the H5 deployment root', () => {
+  assert.equal(buildInviteLink('https://shop.test/h5/pages/cps/promoter/invite?old=1', 'ABCD1234'),
+    'https://shop.test/h5/pages/cps/goods?inviteCode=ABCD1234');
+});
