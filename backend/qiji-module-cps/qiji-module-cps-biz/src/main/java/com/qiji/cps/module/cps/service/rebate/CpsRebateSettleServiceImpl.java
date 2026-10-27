@@ -397,17 +397,18 @@ public class CpsRebateSettleServiceImpl implements CpsRebateSettleService {
         promoterRelationService.recordTeamStats(order.getMemberId(),
                 allocation.getSelfRebateCent(), allocation.getParentRebateCent(), allocation.getGrandparentRebateCent());
 
-        // 8. 更新订单状态
-        CpsOrderDO.CpsOrderDOBuilder updateBuilder = CpsOrderDO.builder()
-                .id(order.getId())
-                .orderStatus(CpsOrderStatusEnum.SETTLED.getStatus())
-                .realRebate(selfRebateAmount);
-        if (freeze != null) {
-            updateBuilder.rebateFreezeStatus(CpsFreezeStatusEnum.FROZEN.getStatus())
-                    .planUnfreezeTime(freeze.getUnfreezeTime());
-        }
-        if (orderMapper.updateRebateFreezeByStatusVersion(updateBuilder.build(), order.getStatusVersion()) != 1) {
-            throw new IllegalStateException("订单状态已并发变更，回滚本次返利结算: orderId=" + order.getId());
+        // 8. 直接入账由资产服务原子写入到账状态和版本；这里只回写冻结订单。
+        if (shouldFreeze) {
+            CpsOrderDO updateOrder = CpsOrderDO.builder()
+                    .id(order.getId())
+                    .orderStatus(CpsOrderStatusEnum.SETTLED.getStatus())
+                    .realRebate(selfRebateAmount)
+                    .rebateFreezeStatus(CpsFreezeStatusEnum.FROZEN.getStatus())
+                    .planUnfreezeTime(freeze.getUnfreezeTime())
+                    .build();
+            if (orderMapper.updateRebateFreezeByStatusVersion(updateOrder, order.getStatusVersion()) != 1) {
+                throw new IllegalStateException("订单状态已并发变更，回滚本次返利结算: orderId=" + order.getId());
+            }
         }
 
         log.info("[settleOrderMultiLevel] 多级分账结算完成: orderId={}, selfRebate={}, l1Split={}, l2Split={}",

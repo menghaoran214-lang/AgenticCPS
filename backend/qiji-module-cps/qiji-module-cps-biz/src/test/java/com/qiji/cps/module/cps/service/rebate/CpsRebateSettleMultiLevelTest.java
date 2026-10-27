@@ -248,19 +248,19 @@ public class CpsRebateSettleMultiLevelTest {
         when(moneyConverter.centToYuan(4000L)).thenReturn(new BigDecimal("40.00"));
         when(moneyConverter.centToYuan(2400L)).thenReturn(new BigDecimal("24.00"));
 
-        // The real asset service atomically advances the database row to RECEIVED/version 1.
+        // The real asset service atomically advances the database row to REBATE_RECEIVED/version 1.
         // The settlement snapshot still holds version 0; another CAS must fail and roll back.
         CpsOrderDO persisted = mockOrder(orderId, buyerId, new BigDecimal("100.00"));
         when(rebateAssetService.creditOrderRebate(orderId, "order-rebate-credit:" + orderId))
                 .thenAnswer(invocation -> {
-                    persisted.setOrderStatus(CpsOrderStatusEnum.RECEIVED.getStatus());
+                    persisted.setOrderStatus(CpsOrderStatusEnum.REBATE_RECEIVED.getStatus());
                     persisted.setStatusVersion(1);
                     persisted.setRealRebate(new BigDecimal("40.00"));
                     return null;
                 });
 
         assertTrue(settleService.settleOrder(order));
-        assertEquals(CpsOrderStatusEnum.RECEIVED.getStatus(), persisted.getOrderStatus());
+        assertEquals(CpsOrderStatusEnum.REBATE_RECEIVED.getStatus(), persisted.getOrderStatus());
         assertEquals(1, persisted.getStatusVersion());
         assertEquals(new BigDecimal("40.00"), persisted.getRealRebate());
         verify(orderMapper, never()).updateRebateFreezeByStatusVersion(any(), any());
