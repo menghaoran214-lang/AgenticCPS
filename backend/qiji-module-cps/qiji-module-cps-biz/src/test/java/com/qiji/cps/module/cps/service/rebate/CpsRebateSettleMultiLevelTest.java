@@ -225,4 +225,48 @@ public class CpsRebateSettleMultiLevelTest {
         verify(rebateAssetService, never()).createSplitRebateFreeze(any(), any(), any(), any(), any(), anyLong(), anyInt(), any());
         verify(promoterRelationService).recordTeamStats(buyerId, 4000L, 0L, 0L);
     }
+
+    @Test
+    @DisplayName("直接入账完成后保留已到账状态，不使用旧版本再次回写订单")
+    void testDirectCreditPreservesReceivedOrderAndCreditsStation() {
+        Long orderId = 1003L;
+        Long buyerId = 100L;
+        Long parentId = 200L;
+        CpsOrderDO order = mockOrder(orderId, buyerId, new BigDecimal("100.00"));
+        when(orderMapper.selectForUpdateById(orderId)).thenReturn(order);
+        MemberUserRespDTO member = new MemberUserRespDTO();
+        member.setId(buyerId);
+        member.setLevelId(1L);
+        when(memberUserApi.getUser(buyerId)).thenReturn(member);
+        when(splitRuleService.matchSplitRule("taobao", 1L)).thenReturn(mockRule());
+        when(promoterRelationService.getOrCreateRelation(buyerId)).thenReturn(
+                CpsPromoterRelationDO.builder().memberId(buyerId).parentMemberId(parentId)
+                        .promoterStatus(1).build());
+        when(promoterRelationService.getOrCreateRelation(parentId)).thenReturn(
+                CpsPromoterRelationDO.builder().memberId(parentId).promoterStatus(1).build());
+        when(moneyConverter.yuanToCent(new BigDecimal("100.00"))).thenReturn(10000L);
+        when(moneyConverter.centToYuan(4000L)).thenReturn(new BigDecimal("40.00"));
+        when(moneyConverter.centToYuan(2400L)).thenReturn(new BigDecimal("24.00"));
+
+        // The real asset service atomically advances the database row to RECEIVED/version 1.
+        // The settlement snapshot still holds version 0; another CAS must fail and roll back.
+        CpsOrderDO persisted = mockOrder(orderId, buyerId, new BigDecimal("100.00"));
+        when(rebateAssetService.creditOrderRebate(orderId, "order-rebate-credit:" + orderId))
+                .thenAnswer(invocation -> {
+                    persisted.setOrderStatus(CpsOrderStatusEnum.RECEIVED.getStatus());
+                    persisted.setStatusVersion(1);
+                    persisted.setRealRebate(new BigDecimal("40.00"));
+                    return null;
+                });
+
+        assertTrue(settleService.settleOrder(order));
+        assertEquals(CpsOrderStatusEnum.RECEIVED.getStatus(), persisted.getOrderStatus());
+        assertEquals(1, persisted.getStatusVersion());
+        assertEquals(new BigDecimal("40.00"), persisted.getRealRebate());
+        verify(orderMapper, never()).updateRebateFreezeByStatusVersion(any(), any());
+        verify(rebateAssetService).creditSplitRebate(eq(parentId), eq(orderId), eq("TB_" + orderId),
+                eq("ORDER_SPLIT_CREDIT"), eq("l1:" + orderId), eq(2400L), anyString());
+        verify(rebateAssetService, never()).createOrderRebateFreeze(any(), anyString(), anyInt());
+        verify(promoterRelationService).recordTeamStats(buyerId, 4000L, 2400L, 0L);
+    }
 }
