@@ -178,6 +178,11 @@ wx:
 qiji:
   captcha:
     enable: true # 生产环境默认开启图形验证码，隔离 CI 可通过环境变量覆盖
+  sms-code:
+    # 生产环境必须使用不可预测的六位随机验证码。
+    # 不继承 application.yaml 中仅供本地调试的固定测试验证码。
+    begin-code: 100000
+    end-code: 999999
   security:
     mock-enable: false
   ai:
