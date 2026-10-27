@@ -35,7 +35,7 @@ jobs:
           python-version: '3.12'
       - name: Test isolation guards before any containers start
         run: |
-          python -m unittest discover -s script/ci -p test_station_isolation.py -v
+          python -m unittest discover -s script/ci -p 'test_station_*.py' -v
           python -m py_compile script/ci/station_journey.py script/ci/station_browser.py
       - name: Initialize disposable workspace and random credentials
         run: python script/ci/station_journey.py init
