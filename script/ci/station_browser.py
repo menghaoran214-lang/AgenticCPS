@@ -1,5 +1,6 @@
 """Browser-only acceptance against the disposable real HTTP server; no API response mocks."""
 import json
+from contextlib import contextmanager
 import os
 import time
 from pathlib import Path
@@ -28,6 +29,20 @@ def login_form(page, member, expect_binding=False):
     page.locator('.login-wrap').wait_for(state='hidden', timeout=30000)
 
 
+@contextmanager
+def capture_failure(browser):
+    try:
+        yield
+    except Exception:
+        for index, context in enumerate(browser.contexts):
+            for number, page in enumerate(context.pages):
+                try:
+                    page.screenshot(path=str(WORK / f'evidence/browser-failure-{index}-{number}.png'), full_page=True, timeout=5000)
+                except Exception:
+                    pass
+        raise
+
+
 def run():
     require_isolated(BASE, os.environ.get('CPS_STATION_ISOLATED'))
     connection = connect()
@@ -41,48 +56,49 @@ def run():
                          if urlsplit(route.request.url).hostname == '127.0.0.1' else route.abort())
             return result
 
-        station = context()
-        page = station.new_page()
-        page.goto(BASE + '/h5/#/pages/cps/promoter/invite?tenantId=1')
-        page.locator('.login-wrap').wait_for(state='visible', timeout=30000)
-        login_form(page, AGENT)
-        with page.expect_response(lambda response: '/cps/promoter/summary' in response.url) as summary:
+        with capture_failure(browser):
+            station = context()
+            page = station.new_page()
             page.goto(BASE + '/h5/#/pages/cps/promoter/invite?tenantId=1')
-        code = summary.value.json()['data']['inviteCode']
-        box = page.locator('.qr-box')
-        box.wait_for(state='visible')
-        qr_file = evidence / 'station-qr.png'
-        decoded = ''
-        deadline = time.monotonic() + 20
-        while not decoded and time.monotonic() < deadline:
-            box.screenshot(path=str(qr_file))
-            decoded, _, _ = cv2.QRCodeDetector().detectAndDecode(cv2.imread(str(qr_file)))
-            if not decoded:
-                page.wait_for_timeout(500)
-        assert decoded == BASE + '/h5/#/pages/cps/goods?inviteCode=' + code, 'Rendered QR did not decode to the invite link'
-        page.screenshot(path=str(evidence / 'station-invite.png'), full_page=True)
+            page.locator('.login-wrap').wait_for(state='visible', timeout=30000)
+            login_form(page, AGENT)
+            with page.expect_response(lambda response: '/cps/promoter/summary' in response.url) as summary:
+                page.goto(BASE + '/h5/#/pages/cps/promoter/invite?tenantId=1')
+            code = summary.value.json()['data']['inviteCode']
+            box = page.locator('.qr-box')
+            box.wait_for(state='visible')
+            qr_file = evidence / 'station-qr.png'
+            decoded = ''
+            deadline = time.monotonic() + 20
+            while not decoded and time.monotonic() < deadline:
+                box.screenshot(path=str(qr_file))
+                decoded, _, _ = cv2.QRCodeDetector().detectAndDecode(cv2.imread(str(qr_file)))
+                if not decoded:
+                    page.wait_for_timeout(500)
+            assert decoded == BASE + '/h5/#/pages/cps/goods?inviteCode=' + code, 'Rendered QR did not decode to the invite link'
+            page.screenshot(path=str(evidence / 'station-invite.png'), full_page=True)
 
-        consumer = context()
-        buyer = consumer.new_page()
-        buyer.goto(decoded)
-        # Wait for the real page to persist the invitation before opening a protected page.
-        buyer.wait_for_function("""() => Object.entries(localStorage).some(([key,value]) =>
-            key.includes('cps_pending_invite') && value.includes('code'))""")
-        buyer.goto(BASE + '/h5/#/pages/cps/promoter/index')
-        buyer.locator('.login-wrap').wait_for(state='visible', timeout=30000)
-        login_form(buyer, WEB_BUYER, expect_binding=True)
-        rows = query(connection, 'SELECT parent_member_id FROM cps_promoter_relation WHERE member_id=%s AND tenant_id=1', (WEB_BUYER,))
-        assert rows and rows[0]['parent_member_id'] == AGENT
-        with buyer.expect_response(lambda response: '/cps/promoter/summary' in response.url) as bound_summary:
+            consumer = context()
+            buyer = consumer.new_page()
+            buyer.goto(decoded)
+            # Wait for the real page to persist the invitation before opening a protected page.
+            buyer.wait_for_function("""() => Object.entries(localStorage).some(([key,value]) =>
+                key.includes('cps_pending_invite') && value.includes('code'))""")
             buyer.goto(BASE + '/h5/#/pages/cps/promoter/index')
-        assert bound_summary.value.json()['data']['parentMemberId'] == AGENT
-        buyer.screenshot(path=str(evidence / 'consumer-bound.png'), full_page=True)
-        with page.expect_response(lambda response: '/cps/promoter/team-orders/page' in response.url) as orders:
-            page.goto(BASE + '/h5/#/pages/cps/promoter/orders')
-        assert orders.value.json()['code'] == 0
-        page.get_by_text('CI Station Order', exact=True).first.wait_for(timeout=10000)
-        page.screenshot(path=str(evidence / 'station-orders.png'), full_page=True)
-        browser.close()
+            buyer.locator('.login-wrap').wait_for(state='visible', timeout=30000)
+            login_form(buyer, WEB_BUYER, expect_binding=True)
+            rows = query(connection, 'SELECT parent_member_id FROM cps_promoter_relation WHERE member_id=%s AND tenant_id=1', (WEB_BUYER,))
+            assert rows and rows[0]['parent_member_id'] == AGENT
+            with buyer.expect_response(lambda response: '/cps/promoter/summary' in response.url) as bound_summary:
+                buyer.goto(BASE + '/h5/#/pages/cps/promoter/index')
+            assert bound_summary.value.json()['data']['parentMemberId'] == AGENT
+            buyer.screenshot(path=str(evidence / 'consumer-bound.png'), full_page=True)
+            with page.expect_response(lambda response: '/cps/promoter/team-orders/page' in response.url) as orders:
+                page.goto(BASE + '/h5/#/pages/cps/promoter/orders')
+            assert orders.value.json()['code'] == 0
+            page.get_by_text('CI Station Order', exact=True).first.wait_for(timeout=10000)
+            page.screenshot(path=str(evidence / 'station-orders.png'), full_page=True)
+            browser.close()
     connection.close()
     (evidence / 'browser.json').write_text(json.dumps({
         'passed': ['Real password login form', 'Rendered QR decoded and correct H5 subdirectory preserved',

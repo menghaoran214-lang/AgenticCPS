@@ -28,26 +28,28 @@ jobs:
           fetch-depth: 0
       - name: Reject stale artifacts
         run: |
-          git diff --exit-code cb1d5c650de5bcab7be90ab44c15d076169a815a HEAD -- backend
+          git diff --exit-code 1c67a132389076d73e399be4f80cef78370c8449 HEAD -- backend
           git diff --exit-code 97a98dacd78807916ddf5739924347c2de11a5eb HEAD -- frontend/mall-uniapp frontend/admin-vue3
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
       - name: Test isolation guards before any containers start
-        run: python -m unittest discover -s script/ci -p test_station_isolation.py -v
+        run: |
+          python -m unittest discover -s script/ci -p test_station_isolation.py -v
+          python -m py_compile script/ci/station_journey.py script/ci/station_browser.py
       - name: Initialize disposable workspace and random credentials
         run: python script/ci/station_journey.py init
       - uses: actions/download-artifact@v4
         with:
           repository: menghaoran214-lang/AgenticCPS
-          run-id: 40359226998
+          run-id: 40464028517
           github-token: ${{ github.token }}
           name: agenticcps-java-server
           path: .station-ci/server
       - uses: actions/download-artifact@v4
         with:
           repository: menghaoran214-lang/AgenticCPS
-          run-id: 40359226998
+          run-id: 40464028517
           github-token: ${{ github.token }}
           name: agenticcps-admin-vue3
           path: .station-ci/admin
@@ -58,10 +60,9 @@ jobs:
           github-token: ${{ github.token }}
           name: agenticcps-mobile-h5
           path: .station-ci/h5
-      - name: Install isolated acceptance dependencies
+      - name: Install isolated HTTP acceptance dependencies
         run: |
-          python -m pip install 'pymysql[rsa]==1.1.2' bcrypt==4.3.0 playwright==1.56.0 opencv-python-headless==4.12.0.88
-          python -m playwright install --with-deps chromium
+          python -m pip install 'pymysql[rsa]==1.1.2' bcrypt==4.3.0
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends socat
       - name: Start fresh database, prepare fixtures and launch application
@@ -105,6 +106,10 @@ jobs:
           source .station-ci/runtime.env
           set +a
           python script/ci/station_journey.py exercise
+      - name: Install browser acceptance dependencies after business checks pass
+        run: |
+          python -m pip install playwright==1.56.0 opencv-python-headless==4.12.0.88
+          python -m playwright install --with-deps chromium
       - name: Verify rendered QR and login in mobile browser
         shell: bash
         run: |

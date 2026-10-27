@@ -129,6 +129,14 @@ def prepare():
     page = json.dumps({'style': {'backgroundColor': '#f7f7f7'}, 'components': [], 'data': []})
     query(connection, """INSERT INTO promotion_diy_page(id,template_id,name,property,tenant_id)
             VALUES (900001,900001,%s,%s,1),(900002,900001,%s,%s,1)""", ('首页', page, '我的', page))
+    for table, columns in [
+        ('pay_wallet', 'user_id BIGINT, user_type INT, balance INT DEFAULT 0, freeze_price INT DEFAULT 0, total_expense INT DEFAULT 0, total_recharge INT DEFAULT 0'),
+        ('trade_cart', 'user_id BIGINT, spu_id BIGINT, sku_id BIGINT, count INT, selected BIT'),
+        ('trade_order', 'user_id BIGINT, status INT, comment_status BIT'),
+        ('promotion_coupon', 'user_id BIGINT, status INT'),
+        ('trade_after_sale', 'user_id BIGINT, status INT'),
+    ]:
+        query(connection, f'CREATE TABLE {table} (id BIGINT PRIMARY KEY AUTO_INCREMENT, {columns}, {common})')
     for member_id, mobile in PHONES.items():
         query(connection, """INSERT INTO member_user(id,mobile,password,status,nickname,tenant_id)
                 VALUES (%s,%s,%s,%s,%s,1)""",
@@ -204,6 +212,9 @@ def exercise():
     admin = api('/admin-api/system/auth/login', payload={
         'username': 'admin', 'password': os.environ['CPS_STATION_PASSWORD']})['data']['accessToken']
     agent, buyer, other = login(AGENT), login(BUYER), login(OTHER)
+    for path in ['/pay/wallet/get', '/trade/cart/list', '/trade/order/get-count', '/promotion/coupon/get-unused-count']:
+        api('/app-api' + path, buyer)
+    findings.append('Login follow-up wallet, cart, order count and coupon count endpoints succeeded')
     station = api('/app-api/cps/promoter/summary', agent)['data']
     competitor = api('/app-api/cps/promoter/summary', other)['data']
     invitation = {'inviteCode': station['inviteCode'], 'memberId': AGENT}
@@ -263,8 +274,32 @@ def exercise():
     print('PASS: real login, invitation, MySQL settlement, ledger idempotency and refund HTTP journey')
 
 
+
+def capture_diagnostics():
+    try:
+        connection = connect()
+        report = {}
+        for label, sql in {
+            'orders': "SELECT id,member_id,order_status,rebate_freeze_status,real_rebate,rebate_settle_last_error FROM cps_order WHERE id=900001",
+            'accounts': "SELECT member_id,available_balance,frozen_balance,debt_balance FROM cps_rebate_account WHERE member_id BETWEEN 900001 AND 900005",
+            'rebates': "SELECT id,member_id,order_id,split_role,rebate_amount,rebate_status FROM cps_rebate_record WHERE order_id=900001",
+            'ledgers': "SELECT member_id,business_type,available_change_cent,frozen_change_cent,debt_change_cent FROM cps_rebate_asset_ledger WHERE member_id BETWEEN 900001 AND 900005",
+        }.items():
+            report[label] = query(connection, sql)
+        (WORK / 'evidence/failure-state.json').write_text(json.dumps(report, indent=2, default=str), encoding='utf-8')
+        print('Sanitized synthetic-order diagnostics captured')
+        connection.close()
+    except Exception:
+        print('Diagnostics unavailable; no additional mutations attempted')
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('action', choices=['init', 'prepare', 'exercise'])
     action = parser.parse_args().action
-    {'init': init_workspace, 'prepare': prepare, 'exercise': exercise}[action]()
+    try:
+        {'init': init_workspace, 'prepare': prepare, 'exercise': exercise}[action]()
+    except Exception:
+        if action == 'exercise':
+            capture_diagnostics()
+        raise
