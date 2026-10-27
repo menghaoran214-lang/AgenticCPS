@@ -58,7 +58,7 @@
 只修改 GitHub develop 开发分支并使用 GitHub 托管临时 runner。
 没有连接惠普电脑、启停现有服务、执行生产 SQL、变更生产账号或部署生产环境。
 
-## 本轮最终验证记录
+## 第一轮验证记录（历史基线）
 
 - 代码提交：`cb1d5c650de5bcab7be90ab44c15d076169a815a`。
 - [安全回归](https://github.com/menghaoran214-lang/AgenticCPS/actions/runs/40359227160)：30 个必要套件、202 项后端测试全部通过，包含真实 H2 SQL 的并发抢绑与跨租户拒绝。
@@ -66,3 +66,14 @@
 - [H5 编译与邀请码测试](https://github.com/menghaoran214-lang/AgenticCPS/actions/runs/40357584351)：8 项 Node 测试通过，移动 H5 打包成功。该次构建后前端源码未再变更。
 - 新增用例先复现了禁用账号绕过、并发绑定错误和空冻结天数规则快照异常，修复后整组通过。
 - 上述结果不等同于真实联盟实单、实机扫码或生产环境验收。
+
+## 第二轮隔离闭环验证（2026-10-27）
+
+- [完整验收](https://github.com/menghaoran214-lang/AgenticCPS/actions/runs/40491879977)已通过：真实 MySQL、Redis、密码登录、邀请绑定、一级驿站分佣、重复结算、级联退款、重复退款以及浏览器二维码流程。
+- [安全回归](https://github.com/menghaoran214-lang/AgenticCPS/actions/runs/40491880168)：31 组、207 项通过；[H5 构建](https://github.com/menghaoran214-lang/AgenticCPS/actions/runs/40467739410)：10 项邀请码测试与编译通过。
+- 修复消费者返利角色查询、直接入账订单重复回写、退款角色唯一约束和 history 邀请链接四类问题，均有修复前失败的回归证据。
+- 模拟已结算佣金 1 元，消费者入账 0.60 元、驿站入账 0.20 元；重复结算不增加流水，退款后双方余额归零。仅用于测试，不是正式经营定价。
+- 浏览器实际识别页面二维码，访客进入商品页后保存邀请码，通过真实密码登录完成绑定，并在数据库核对推荐人；驿站可打开团队订单页面查看模拟订单。
+- 只在 GitHub 临时 runner 运行，未部署生产、未启停惠普电脑服务。联盟实单、真实付款、实体手机摄像头和实际冻结策略仍按上方人工清单验收。
+
+详见 [驿站闭环隔离验收](station-isolated-acceptance.md)。
