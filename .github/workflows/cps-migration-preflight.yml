@@ -3,6 +3,14 @@ on:
   push:
     branches: [develop]
     paths:
+      - script/ci/cps_full_baseline_integration.py
+      - script/ci/cps_cloud_readonly_preflight.py
+      - script/ci/test_cloud_readonly_preflight.py
+      - .github/workflows/cps-migration-preflight.yml
+  pull_request:
+    branches: [develop]
+    paths:
+      - script/ci/cps_full_baseline_integration.py
       - script/ci/cps_cloud_readonly_preflight.py
       - script/ci/test_cloud_readonly_preflight.py
       - .github/workflows/cps-migration-preflight.yml
