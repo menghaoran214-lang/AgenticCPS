@@ -59,9 +59,14 @@ def main():
         checks["revoked_admin_token_rejected"] = rejected(
             "/admin-api/system/auth/get-permission-info", token=admin_token)
         with connection.cursor() as cur:
-            cur.execute("SELECT COUNT(*) AS n FROM system_oauth2_access_token WHERE tenant_id=1")
-            remaining = cur.fetchone()["n"]
-        checks["oauth_access_tokens_revoked_in_mysql"] = remaining == 0
+            cur.execute("""SELECT COUNT(*) AS total,
+                SUM(deleted=b'0') AS active,
+                SUM(deleted=b'1') AS revoked
+                FROM system_oauth2_access_token WHERE tenant_id=1""")
+            token_summary = cur.fetchone()
+        # Access tokens are logically deleted; COUNT(*) includes audit history.
+        checks["oauth_active_tokens_revoked_in_mysql"] = int(token_summary["active"] or 0) == 0
+        checks["oauth_revocation_history_preserved"] = int(token_summary["revoked"] or 0) >= 2
         passed = all(checks.values())
         report = {
             "mode": "real HTTP Spring Boot and MySQL/Redis, GitHub-hosted disposable fixture",
