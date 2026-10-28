@@ -29,6 +29,9 @@ jobs:
     env:
       CPS_STATION_ISOLATED: '1'
       CPS_STATION_PROFILE: ${{ matrix.profile }}
+      # Full source-controlled 188-table schema is allowed only in the CI profile.
+      # The hp profile is simulated on a GitHub runner and retains legacy fixtures.
+      CPS_STATION_CANONICAL_SCHEMA: ${{ matrix.profile == 'ci' && '1' || '0' }}
       COMPOSE_PROJECT_NAME: cps-station-${{ matrix.profile }}-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - uses: actions/checkout@v4
@@ -96,6 +99,14 @@ jobs:
           start_proxy qiji-mysql "$CPS_STATION_SQL_PORT" 3306
           sleep 1
           python script/ci/station_journey.py prepare
+          # Fail closed: never silently fall back to fixture tables in canonical CI.
+          if [ "$CPS_STATION_PROFILE" = ci ]; then
+            test "$CPS_STATION_CANONICAL_SCHEMA" = 1
+            test -s .station-ci/evidence/canonical-schema.json
+          else
+            test "$CPS_STATION_CANONICAL_SCHEMA" = 0
+            test ! -e .station-ci/evidence/canonical-schema.json
+          fi
           compose up -d qiji-server admin
           start_proxy qiji-server "$CPS_STATION_SERVER_PORT" 48080
           start_proxy admin "$CPS_STATION_WEB_PORT" 80
