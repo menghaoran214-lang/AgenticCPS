@@ -49,6 +49,9 @@ const loginOut = async () => {
 const toProfile = async () => {
   push('/user/profile')
 }
+const toDocument = () => {
+  window.open('https://doc.iocoder.cn/')
+}
 </script>
 
 <template>
@@ -64,6 +67,10 @@ const toProfile = async () => {
         <ElDropdownItem>
           <Icon icon="ep:tools" />
           <div @click="toProfile">{{ t('common.profile') }}</div>
+        </ElDropdownItem>
+        <ElDropdownItem>
+          <Icon icon="ep:menu" />
+          <div @click="toDocument">{{ t('common.document') }}</div>
         </ElDropdownItem>
         <ElDropdownItem divided>
           <Icon icon="ep:lock" />
