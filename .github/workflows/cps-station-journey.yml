@@ -4,6 +4,9 @@ on:
   push:
     branches: [develop]
     paths: ['script/ci/station_*', 'script/ci/test_station_*', 'script/ci/compose.station.json', '.github/workflows/cps-station-journey.yml']
+  pull_request:
+    branches: [develop]
+    paths: ['.github/workflows/cps-station-journey.yml', 'backend/**', 'script/ci/station_*', 'script/ci/test_station_*']
   workflow_dispatch:
 
 permissions:
@@ -33,7 +36,7 @@ jobs:
           fetch-depth: 0
       - name: Reject stale artifacts
         run: |
-          git diff --exit-code 33b599b40cd4bf8e1b42822cda8e2122a4f3f978 HEAD -- backend
+          git diff --exit-code f3067e9e170c74514a7ef3446fb84d5242f24fd6 HEAD -- backend
           git diff --exit-code 6ed4d05208bcc1cb614c46dfb18052cbb2859d90 HEAD -- frontend/mall-uniapp frontend/admin-vue3
       - uses: actions/setup-python@v5
         with:
@@ -47,14 +50,14 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           repository: menghaoran214-lang/AgenticCPS
-          run-id: 40465923243
+          run-id: 40708221684
           github-token: ${{ github.token }}
           name: agenticcps-java-server
           path: .station-ci/server
       - uses: actions/download-artifact@v4
         with:
           repository: menghaoran214-lang/AgenticCPS
-          run-id: 40464028517
+          run-id: 40708221684
           github-token: ${{ github.token }}
           name: agenticcps-admin-vue3
           path: .station-ci/admin
