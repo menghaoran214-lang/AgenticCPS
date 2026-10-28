@@ -33,6 +33,7 @@ jobs:
     env:
       CPS_STATION_ISOLATED: '1'
       CPS_STATION_PROFILE: ci
+      CPS_STATION_CANONICAL_SCHEMA: '1'
       COMPOSE_PROJECT_NAME: cps-station-ci-${{ github.run_id }}-${{ github.run_attempt }}
       MAVEN_OPTS: '-Xmx3g -XX:MaxMetaspaceSize=768m'
     steps:
@@ -53,6 +54,7 @@ jobs:
           test "$GITHUB_ACTIONS" = true
           test "$RUNNER_ENVIRONMENT" = github-hosted
           test "$CPS_STATION_PROFILE" = ci
+          test "$CPS_STATION_CANONICAL_SCHEMA" = 1
           case "$COMPOSE_PROJECT_NAME" in cps-station-ci-*) ;; *) exit 1 ;; esac
           python -m unittest discover -s script/ci -p 'test_station_*.py' -v
           python -m py_compile script/ci/station_journey.py script/ci/cps_fresh_http_auth_probe.py
