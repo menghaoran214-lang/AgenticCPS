@@ -1,0 +1,72 @@
+name: CPS 151 to 188 Incremental Migration (isolated)
+
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - script/ci/cps_151_to_188_isolated.py
+      - script/ci/cps_full_baseline_integration.py
+      - backend/sql/mysql/ruoyi-vue-pro.sql
+      - backend/sql/mysql/quartz.sql
+      - backend/sql/module/cps-all-in-one.sql
+      - backend/sql/module/member-update.sql
+      - backend/sql/migrations/**
+      - .github/workflows/cps-151-to-188-isolated.yml
+  push:
+    branches: [develop]
+    paths:
+      - script/ci/cps_151_to_188_isolated.py
+      - script/ci/cps_full_baseline_integration.py
+      - backend/sql/mysql/ruoyi-vue-pro.sql
+      - backend/sql/mysql/quartz.sql
+      - backend/sql/module/cps-all-in-one.sql
+      - backend/sql/module/member-update.sql
+      - backend/sql/migrations/**
+      - .github/workflows/cps-151-to-188-isolated.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  incremental-schema:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: local-github-runner-test-only
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -plocal-github-runner-test-only"
+          --health-interval=10s --health-timeout=5s --health-retries=18
+    env:
+      GITHUB_ACTIONS: 'true'
+      CPS_FULL_BASELINE_CI: '1'
+      CPS_151_TO_188_ISOLATED: '1'
+      MYSQL_HOST: '127.0.0.1'
+      MYSQL_PORT: '3306'
+      MYSQL_ROOT_PASSWORD: local-github-runner-test-only
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned test-only MySQL client
+        run: python -m pip install "PyMySQL==1.1.2"
+      - name: Require GitHub-hosted runner and disposable MySQL
+        run: |
+          test "$RUNNER_ENVIRONMENT" = "github-hosted"
+          test "$MYSQL_HOST" = "127.0.0.1"
+          test "$CPS_151_TO_188_ISOLATED" = "1"
+      - name: Reconstruct 151 table repository baseline and rehearse additive migration
+        run: python script/ci/cps_151_to_188_isolated.py
+      - name: Preserve aggregate-only migration evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cps-151-to-188-isolated-results
+          path: cps-151-to-188-ci-report.json
+          if-no-files-found: warn
+          retention-days: 7
