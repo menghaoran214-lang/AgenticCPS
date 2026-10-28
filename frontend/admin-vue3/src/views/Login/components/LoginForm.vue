@@ -89,27 +89,15 @@
       <el-col :span="24" class="px-10px">
         <el-form-item>
           <el-row :gutter="5" justify="space-between" style="width: 100%">
-            <el-col :span="8">
+            <el-col :span="24">
               <XButton
                 :title="t('login.btnMobile')"
                 class="w-full"
                 @click="setLoginState(LoginStateEnum.MOBILE)"
               />
             </el-col>
-            <el-col :span="8">
-              <XButton
-                :title="t('login.btnQRCode')"
-                class="w-full"
-                @click="setLoginState(LoginStateEnum.QR_CODE)"
-              />
-            </el-col>
-            <el-col :span="8">
-              <XButton
-                :title="t('login.btnRegister')"
-                class="w-full"
-                @click="setLoginState(LoginStateEnum.REGISTER)"
-              />
-            </el-col>
+  
+  
           </el-row>
         </el-form-item>
       </el-col>
