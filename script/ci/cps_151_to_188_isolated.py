@@ -52,7 +52,7 @@ def statements(path):
 
 
 def rows(cursor, table):
-    if not re.fullmatch(r"[a-z][a-z0-9_]*", table):
+    if not re.fullmatch(r"[A-Za-z0-9_]+", table):
         raise ValueError("Invalid table identifier")
     cursor.execute("SELECT * FROM " + BT + table + BT)
     return sorted(repr(row) for row in cursor.fetchall())
