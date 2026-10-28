@@ -48,7 +48,39 @@ def statements(path):
     if re.search(r"(?im)^\s*(?:USE|CREATE DATABASE|DROP DATABASE|DELIMITER)\b", source):
         raise ValueError("Unexpected database redirection or client directive")
     source = re.sub(r"(?m)^\s*--[^\n]*$", "", source)
-    return [part.strip() for part in source.split(";") if part.strip()]
+    # Preserve semicolons inside quoted SQL values (e.g. schema-version descriptions).
+    parts, current, quote = [], [], None
+    i = 0
+    while i < len(source):
+        ch = source[i]
+        if quote is not None:
+            current.append(ch)
+            if ch == "\\" and i + 1 < len(source):
+                i += 1
+                current.append(source[i])
+            elif ch == quote:
+                if i + 1 < len(source) and source[i + 1] == quote:
+                    i += 1
+                    current.append(source[i])
+                else:
+                    quote = None
+        elif ch in ("'", '"', BT):
+            quote = ch
+            current.append(ch)
+        elif ch == ";":
+            command = "".join(current).strip()
+            if command:
+                parts.append(command)
+            current = []
+        else:
+            current.append(ch)
+        i += 1
+    if quote is not None:
+        raise ValueError("Unterminated quoted SQL value")
+    trailing = "".join(current).strip()
+    if trailing:
+        parts.append(trailing)
+    return parts
 
 
 def rows(cursor, table):
