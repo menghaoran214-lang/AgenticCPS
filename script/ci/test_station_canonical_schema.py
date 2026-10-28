@@ -30,8 +30,19 @@ class CanonicalSchemaTest(unittest.TestCase):
         with patch.dict(os.environ, {"CPS_STATION_CANONICAL_SCHEMA": "1",
                                      "GITHUB_ACTIONS": "true",
                                      "RUNNER_ENVIRONMENT": "github-hosted"}):
-            with patch.object(station, "query", side_effect=AssertionError("fixture DDL executed")):
-                station.create_fixture_table(None, "CREATE TABLE member_user (id bigint)")
+            # A unit test must model CI explicitly even when the matrix is exercising
+            # the separate HP resource profile on a GitHub-hosted runner.
+            with patch.object(station, "PROFILE_NAME", "ci"):
+                with patch.object(station, "query", side_effect=AssertionError("fixture DDL executed")):
+                    station.create_fixture_table(None, "CREATE TABLE member_user (id bigint)")
+
+    def test_canonical_mode_rejects_hp_profile_even_on_github(self):
+        with patch.dict(os.environ, {"CPS_STATION_CANONICAL_SCHEMA": "1",
+                                     "GITHUB_ACTIONS": "true",
+                                     "RUNNER_ENVIRONMENT": "github-hosted"}):
+            with patch.object(station, "PROFILE_NAME", "hp"):
+                with self.assertRaises(ValueError):
+                    station.canonical_schema_enabled()
 
     def test_legacy_fixture_remains_unchanged(self):
         with patch.dict(os.environ, {"CPS_STATION_CANONICAL_SCHEMA": "0"}):
