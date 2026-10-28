@@ -62,12 +62,12 @@ def main():
             cur.execute("SELECT COUNT(*) AS n FROM system_oauth2_access_token WHERE tenant_id=1")
             remaining = cur.fetchone()["n"]
         checks["oauth_access_tokens_revoked_in_mysql"] = remaining == 0
-        assert all(checks.values()), "An HTTP authentication / authorization gate failed"
+        passed = all(checks.values())
         report = {
             "mode": "real HTTP Spring Boot and MySQL/Redis, GitHub-hosted disposable fixture",
             "checks": checks,
             "test_count": len(checks),
-            "passed": True,
+            "passed": passed,
             "source_artifact": "built from the exact checked-out PR commit in this workflow",
             "mocked_or_not_tested": [
                 "External SMS and social OAuth",
@@ -81,6 +81,9 @@ def main():
         }
         (WORK / "evidence/auth-http.json").write_text(
             json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf8")
+        print("AUTH_HTTP_CHECKS", json.dumps(checks, sort_keys=True), flush=True)
+        if not passed:
+            raise AssertionError("HTTP authorization gate failed; see sanitized AUTH_HTTP_CHECKS")
         print("PASS: disposable HTTP login, user type isolation, tenant mismatch, logout and DB revocation")
     finally:
         connection.close()
