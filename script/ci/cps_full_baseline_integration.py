@@ -75,6 +75,12 @@ def table_rows(cursor, table):
     cursor.execute("SELECT COUNT(*) FROM "+BT+table+BT)
     return cursor.fetchone()[0]
 
+def tenant_history_safe(counts):
+    """Never infer default tenant 1 for preexisting member rows."""
+    names = ("member_address", "member_tag", "member_level", "member_group")
+    return set(counts) == set(names) and all(type(counts[t]) is int and counts[t] == 0 for t in names)
+
+
 def main():
     check_environment()
     db="agenticcps_full_baseline_ci_"+secrets.token_hex(5)
@@ -109,6 +115,8 @@ def main():
             # Snapshot identities/row counts before adding module schemas.
             immutable_counts={name:table_rows(cur,name) for name in CHECK_EXISTING}
             names_expected=set()
+            staged_151=set()
+            stage_151_seed_rows={}
             for module,file,count in ADDITIONS:
                 path=ROOT/"backend/sql/migrations"/file
                 blob=path.read_bytes()
@@ -126,6 +134,38 @@ def main():
                     names_expected.add(match[1])
                     cur.execute(stmt)
                 print("MIGRATION_IMPORTED",module,count,flush=True)
+                if module == "trade":
+                    # Model the actual cloud state: canonical 121 objects followed by
+                    # member 6, product 9, and trade 15, before promotion/pay additions.
+                    staged_151=table_names(cur)
+                    report["cloud_equivalent_stage_objects"]=len(staged_151)
+                    checks["121_to_151_phase_boundary"]=(
+                        len(base)==121 and len(staged_151)==151
+                        and len(staged_151-base)==30
+                        and (staged_151-base)==names_expected)
+                    cur.execute(
+                        "SELECT table_type, COUNT(*) FROM information_schema.tables "
+                        "WHERE table_schema=%s GROUP BY table_type", (db,))
+                    stage_types=dict(cur.fetchall())
+                    checks["cloud_equivalent_150_tables_one_view"]=(
+                        stage_types.get("BASE TABLE")==150
+                        and stage_types.get("VIEW")==1)
+                    stage_151_seed_rows={name:table_rows(cur,name) for name in CHECK_EXISTING}
+                    checks["original_seed_rows_unchanged_at_151"]=stage_151_seed_rows==immutable_counts
+                    member_counts={name:table_rows(cur,name) for name in
+                                   ("member_address","member_tag","member_level","member_group")}
+                    checks["tenant_alignment_history_empty_at_151"]=tenant_history_safe(member_counts)
+                    checks["nonempty_tenant_history_fails_closed"]=not tenant_history_safe({
+                        "member_address":1, "member_tag":0, "member_level":0, "member_group":0})
+                    if not all(checks[k] for k in (
+                        "121_to_151_phase_boundary",
+                        "cloud_equivalent_150_tables_one_view",
+                        "original_seed_rows_unchanged_at_151",
+                        "tenant_alignment_history_empty_at_151",
+                        "nonempty_tenant_history_fails_closed",
+                    )):
+                        raise AssertionError("Simulated 151-object cloud upgrade gate rejected")
+                    print("CLOUD_EQUIVALENT_151_OBJECT_STAGE_CHECKED=YES",flush=True)
             correction=ROOT/"backend/sql/migrations/V20261028_06__member_tenant_interceptor_alignment.sql"
             correction_bytes=correction.read_bytes()
             report["source_files"][correction.as_posix().removeprefix(ROOT.as_posix()+"/")]=hashlib.sha256(correction_bytes).hexdigest()
@@ -140,6 +180,12 @@ def main():
             report["tables_after_all_migrations"]=len(after)
             checks["67_unique_module_tables"]=len(names_expected)==67 and after-base==names_expected
             checks["all_original_tables_preserved"]=base.issubset(after) and len(after)==len(base)+67
+            checks["151_to_188_additive_only"]=bool(staged_151) and staged_151.issubset(after) and (after-staged_151)==names_expected-staged_151 and len(after-staged_151)==37
+            checks["151_seed_rows_preserved_at_188"]=stage_151_seed_rows=={
+                name:table_rows(cur,name) for name in CHECK_EXISTING}
+            cur.execute("SELECT table_type, COUNT(*) FROM information_schema.tables WHERE table_schema=%s GROUP BY table_type",(db,))
+            final_types=dict(cur.fetchall())
+            checks["188_objects_187_tables_one_view"]=final_types.get("BASE TABLE")==187 and final_types.get("VIEW")==1
             cur.execute("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=%s AND column_name='tenant_id' AND table_name IN ("+
                         ",".join(["'"+n+"'" for n in sorted(names_expected)])+")",(db,))
             checks["all_67_new_tables_tenant_scoped_after_v06"]=cur.fetchone()[0]==67
