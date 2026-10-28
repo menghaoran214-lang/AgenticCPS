@@ -12,7 +12,7 @@ from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError
 from station_profiles import get_profile, make_compose, require_loopback
-from station_hp_preflight import require_execution_context
+from station_hp_preflight import require_execution_context, github_hosted
 
 ROOT = Path(__file__).resolve().parents[2]
 WORK = ROOT / '.station-ci'
@@ -24,6 +24,62 @@ AGENT, BUYER, OTHER, DISABLED, WEB_BUYER = 900001, 900002, 900003, 900004, 90000
 PHONES = {AGENT: '13800001001', BUYER: '13800001002', OTHER: '13800001003',
           DISABLED: '13800001004', WEB_BUYER: '13800001005'}
 
+
+
+# Canonical SQL is an opt-in on GitHub-hosted disposable CI runners ONLY.
+# The existing station journey's smaller schema remains available for legacy tests.
+CANONICAL_MIGRATIONS = (
+    'V20261028_01__member_core_mysql8.sql',
+    'V20261028_02__product_core_mysql8.sql',
+    'V20261028_03__trade_core_mysql8.sql',
+    'V20261028_04__promotion_core_mysql8.sql',
+    'V20261028_05__pay_core_mysql8.sql',
+    'V20261028_06__member_tenant_interceptor_alignment.sql',
+)
+
+
+def canonical_schema_enabled():
+    value = os.environ.get('CPS_STATION_CANONICAL_SCHEMA', '0')
+    if value not in ('0', '1'):
+        raise ValueError('Unexpected canonical schema profile')
+    if value == '1' and (PROFILE_NAME != 'ci' or not github_hosted()):
+        raise ValueError('Full 188-table test requires disposable GitHub-hosted CI')
+    return value == '1'
+
+
+def create_fixture_table(connection, ddl):
+    if not canonical_schema_enabled():
+        query(connection, ddl)
+
+
+def verify_canonical_schema(connection):
+    # 188 source-controlled tables/views plus the one-time randomized CI marker.
+    count = query(connection, "SELECT COUNT(*) AS n FROM information_schema.tables WHERE table_schema=DATABASE()")
+    if count[0]['n'] != 189:
+        raise AssertionError('Not a complete 188-object schema in marked isolated test DB')
+    required = [('member_user', 'active_mobile'), ('member_address', 'tenant_id'),
+                ('member_tag', 'tenant_id'), ('member_level', 'tenant_id'),
+                ('member_group', 'tenant_id'), ('trade_order', 'no'),
+                ('promotion_diy_page', 'template_id'), ('pay_wallet', 'balance')]
+    for table, column in required:
+        n = query(connection, """SELECT COUNT(*) AS n FROM information_schema.columns
+                WHERE table_schema=DATABASE() AND table_name=%s AND column_name=%s""",
+                (table, column))
+        if n[0]['n'] != 1:
+            raise AssertionError('Canonical schema missing reviewed module column')
+    for table in ('pay_app', 'pay_channel'):
+        n = query(connection, 'SELECT COUNT(*) AS n FROM ' + table)
+        if n[0]['n'] != 0:
+            raise AssertionError('Canonical payment channel/app must be empty')
+    (WORK / 'evidence/canonical-schema.json').write_text(
+        json.dumps({'scope': 'GitHub-hosted disposable database, source-controlled migrations',
+                    'baseline_object_count': 188,
+                    'marker_objects': 1,
+                    'member_v201_and_v06_columns_verified': True,
+                    'payment_channels_and_apps_empty': True,
+                    'cloud_database_accessed': False,
+                    'production_ready': False}, indent=2) + '\n',
+        encoding='utf-8')
 
 def require_isolated(base, enabled):
     require_loopback(base, enabled, PROFILE_NAME)
@@ -53,6 +109,7 @@ def connect():
 def init_workspace():
     require_isolated(BASE, os.environ.get('CPS_STATION_ISOLATED'))
     require_execution_context(PROFILE_NAME, initial=True)
+    canonical = canonical_schema_enabled()
     env_path = WORK / 'runtime.env'
     if env_path.exists():
         raise ValueError('Test credentials already exist; reuse or explicitly stop/reset this test environment')
@@ -82,6 +139,14 @@ def init_workspace():
         ('backend/sql/module/cps-all-in-one.sql', '10-cps.sql'),
     ]:
         shutil.copyfile(ROOT / source, WORK / 'mysql-init' / target)
+    if canonical:
+        # MySQL entrypoint executes source-controlled migrations in lexical order.
+        # CI-only, and only in a newly created disposable volume (never cloud/HP).
+        for position, filename in enumerate(CANONICAL_MIGRATIONS, start=20):
+            shutil.copyfile(ROOT / 'backend/sql/migrations' / filename,
+                            WORK / 'mysql-init' / f'{position}-{filename}')
+        shutil.copyfile(ROOT / 'backend/sql/module/member-update.sql',
+                        WORK / 'mysql-init/26-member-v201.sql')
     nonce = values['CPS_STATION_NONCE']
     (WORK / 'mysql-init/99-isolated-marker.sql').write_text(
         'CREATE TABLE ci_station_marker(id INT PRIMARY KEY, nonce VARCHAR(64) NOT NULL);\n'
@@ -98,11 +163,14 @@ def query(connection, sql, parameters=()):
 
 def prepare():
     connection = connect()
+    canonical = canonical_schema_enabled()
+    if canonical:
+        verify_canonical_schema(connection)
     import bcrypt
     password_hash = bcrypt.hashpw(os.environ['CPS_STATION_PASSWORD'].encode(), bcrypt.gensalt()).decode()
     # CI fixture tables cover missing upstream member/decorate schemas only.
     # These are deliberately outside production initialization SQL.
-    query(connection, """
+    create_fixture_table(connection, """
         CREATE TABLE member_user (
             id BIGINT PRIMARY KEY AUTO_INCREMENT, mobile VARCHAR(11) NOT NULL, password VARCHAR(100) NOT NULL,
             status TINYINT NOT NULL DEFAULT 0, register_ip VARCHAR(32) DEFAULT '127.0.0.1', register_terminal INT,
@@ -116,7 +184,7 @@ def prepare():
             deleted BIT DEFAULT 0, tenant_id BIGINT NOT NULL DEFAULT 1,
             UNIQUE KEY ci_member_mobile(tenant_id,mobile))
         """)
-    query(connection, """
+    create_fixture_table(connection, """
         CREATE TABLE member_level (
             id BIGINT PRIMARY KEY, name VARCHAR(64), level INT, experience INT,
             discount_percent INT, icon VARCHAR(512), background_url VARCHAR(512), status TINYINT DEFAULT 0,
@@ -127,10 +195,10 @@ def prepare():
     common = """creator VARCHAR(64) DEFAULT '', updater VARCHAR(64) DEFAULT '',
                 create_time DATETIME DEFAULT CURRENT_TIMESTAMP, update_time DATETIME DEFAULT CURRENT_TIMESTAMP,
                 deleted BIT DEFAULT 0, tenant_id BIGINT NOT NULL DEFAULT 1"""
-    query(connection, f"""CREATE TABLE promotion_diy_template (
+    create_fixture_table(connection, f"""CREATE TABLE promotion_diy_template (
             id BIGINT PRIMARY KEY, name VARCHAR(64), used BIT DEFAULT 0, used_time DATETIME,
             remark VARCHAR(255), preview_pic_urls VARCHAR(512), property TEXT, {common})""")
-    query(connection, f"""CREATE TABLE promotion_diy_page (
+    create_fixture_table(connection, f"""CREATE TABLE promotion_diy_page (
             id BIGINT PRIMARY KEY, template_id BIGINT, name VARCHAR(64), remark VARCHAR(255),
             preview_pic_urls VARCHAR(512), property TEXT, {common})""")
     query(connection, """INSERT INTO promotion_diy_template(id,name,used,property,tenant_id)
@@ -146,7 +214,7 @@ def prepare():
         ('promotion_coupon', 'user_id BIGINT, status INT'),
         ('trade_after_sale', 'user_id BIGINT, status INT'),
     ]:
-        query(connection, f'CREATE TABLE {table} (id BIGINT PRIMARY KEY AUTO_INCREMENT, {columns}, {common})')
+        create_fixture_table(connection, f'CREATE TABLE {table} (id BIGINT PRIMARY KEY AUTO_INCREMENT, {columns}, {common})')
     for member_id, mobile in PHONES.items():
         query(connection, """INSERT INTO member_user(id,mobile,password,status,nickname,tenant_id)
                 VALUES (%s,%s,%s,%s,%s,1)""",
