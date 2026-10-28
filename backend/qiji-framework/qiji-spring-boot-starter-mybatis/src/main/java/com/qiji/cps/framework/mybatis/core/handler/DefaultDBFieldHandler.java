@@ -33,14 +33,14 @@ public class DefaultDBFieldHandler implements MetaObjectHandler {
                 baseDO.setUpdateTime(current);
             }
 
-            Long userId = SecurityFrameworkUtils.getLoginUserId();
-            // 当前登录用户不为空，创建人为空，则当前登录用户为创建人
-            if (Objects.nonNull(userId) && Objects.isNull(baseDO.getCreator())) {
-                baseDO.setCreator(userId.toString());
+            // 登录前的认证/注册写入没有 SecurityContext；使用保留的 0 表示系统动作。
+            // 不得将空值写入审计字段：正式 MySQL 8 结构强制 creator/updater NOT NULL。
+            String actor = currentActor();
+            if (Objects.isNull(baseDO.getCreator())) {
+                baseDO.setCreator(actor);
             }
-            // 当前登录用户不为空，更新人为空，则当前登录用户为更新人
-            if (Objects.nonNull(userId) && Objects.isNull(baseDO.getUpdater())) {
-                baseDO.setUpdater(userId.toString());
+            if (Objects.isNull(baseDO.getUpdater())) {
+                baseDO.setUpdater(actor);
             }
         }
     }
@@ -53,11 +53,16 @@ public class DefaultDBFieldHandler implements MetaObjectHandler {
             setFieldValByName("updateTime", LocalDateTime.now(), metaObject);
         }
 
-        // 当前登录用户不为空，更新人为空，则当前登录用户为更新人
+        // 密码登录成功后的最后登录时间更新仍在 Token 签发前执行。
+        // 未登录时也必须填写审计值，而不是向 NOT NULL 的 updater 列写入 NULL。
         Object modifier = getFieldValByName("updater", metaObject);
-        Long userId = SecurityFrameworkUtils.getLoginUserId();
-        if (Objects.nonNull(userId) && Objects.isNull(modifier)) {
-            setFieldValByName("updater", userId.toString(), metaObject);
+        if (Objects.isNull(modifier)) {
+            setFieldValByName("updater", currentActor(), metaObject);
         }
+    }
+
+    private static String currentActor() {
+        Long userId = SecurityFrameworkUtils.getLoginUserId();
+        return userId == null ? "0" : userId.toString();
     }
 }

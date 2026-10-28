@@ -16,7 +16,9 @@ from station_hp_preflight import github_hosted
 def rejected(path, *, token=None, payload=None, tenant=1, method=None):
     response = api(path, token=token, payload=payload, tenant=tenant,
                    method=method, allow_failure=True)
-    assert response.get("code") != 0, (path, "unexpected success")
+    code = response.get("code")
+    # A server-side 500 is NOT a successful denial of an unauthenticated request.
+    assert isinstance(code, int) and code not in (0, 500), (path, "missing business rejection")
     return True
 
 
