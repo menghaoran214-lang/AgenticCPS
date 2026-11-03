@@ -1,0 +1,128 @@
+name: MySQL 投放任务 SQL 校验
+
+on:
+  pull_request:
+    paths:
+      - 'backend/sql/**'
+      - '.github/workflows/mysql-publish-sql-verify.yml'
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: cps_publish_sql_check
+        ports:
+          - '3306:3306'
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 准备最小依赖表
+        run: |
+          mysql -h127.0.0.1 -uroot -proot cps_publish_sql_check <<'SQL'
+          CREATE TABLE `system_menu` (
+            `id` bigint NOT NULL AUTO_INCREMENT,
+            `name` varchar(64) NOT NULL DEFAULT '',
+            `permission` varchar(128) NOT NULL DEFAULT '',
+            `type` tinyint NOT NULL DEFAULT 0,
+            `sort` int NOT NULL DEFAULT 0,
+            `parent_id` bigint NOT NULL DEFAULT 0,
+            `path` varchar(255) NOT NULL DEFAULT '',
+            `icon` varchar(255) NOT NULL DEFAULT '',
+            `component` varchar(255) NOT NULL DEFAULT '',
+            `component_name` varchar(255) NOT NULL DEFAULT '',
+            `status` tinyint NOT NULL DEFAULT 0,
+            `visible` bit(1) NOT NULL DEFAULT b'1',
+            `keep_alive` bit(1) NOT NULL DEFAULT b'1',
+            `always_show` bit(1) NOT NULL DEFAULT b'1',
+            `creator` varchar(64) DEFAULT '',
+            `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            `updater` varchar(64) DEFAULT '',
+            `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            `deleted` bit(1) NOT NULL DEFAULT b'0',
+            PRIMARY KEY (`id`)
+          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+          CREATE TABLE `system_role_menu` (
+            `id` bigint NOT NULL AUTO_INCREMENT,
+            `role_id` bigint NOT NULL,
+            `menu_id` bigint NOT NULL,
+            `creator` varchar(64) DEFAULT '',
+            `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            `updater` varchar(64) DEFAULT '',
+            `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            `deleted` bit(1) NOT NULL DEFAULT b'0',
+            `tenant_id` bigint NOT NULL DEFAULT 0,
+            PRIMARY KEY (`id`)
+          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+          CREATE TABLE `infra_job` (
+            `id` bigint NOT NULL AUTO_INCREMENT,
+            `name` varchar(32) NOT NULL,
+            `status` tinyint NOT NULL,
+            `handler_name` varchar(64) NOT NULL,
+            `handler_param` varchar(255) DEFAULT NULL,
+            `cron_expression` varchar(32) NOT NULL,
+            `retry_count` int NOT NULL DEFAULT 0,
+            `retry_interval` int NOT NULL DEFAULT 0,
+            `monitor_timeout` int NOT NULL DEFAULT 0,
+            `creator` varchar(64) DEFAULT '',
+            `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            `updater` varchar(64) DEFAULT '',
+            `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            `deleted` bit(1) NOT NULL DEFAULT b'0',
+            PRIMARY KEY (`id`)
+          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+          CREATE TABLE `system_schema_version` (
+            `id` bigint NOT NULL AUTO_INCREMENT,
+            `module` varchar(64) NOT NULL,
+            `version` varchar(32) NOT NULL,
+            `schema_update_time` datetime NOT NULL,
+            `script_source` varchar(128) DEFAULT '',
+            `description` varchar(512) DEFAULT '',
+            `status` varchar(32) DEFAULT '',
+            `tenant_id` bigint NOT NULL DEFAULT 0,
+            `deleted` bit(1) NOT NULL DEFAULT b'0',
+            `creator` varchar(64) DEFAULT '',
+            `updater` varchar(64) DEFAULT '',
+            PRIMARY KEY (`id`)
+          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+          SQL
+
+      - name: 导入投放任务增量脚本
+        run: |
+          awk '/^-- 修改时间：2026-11-04 00:50:00/ {flag=1} flag' backend/sql/module/cps-update.sql > /tmp/publish_migration.sql
+          test -s /tmp/publish_migration.sql
+          mysql -h127.0.0.1 -uroot -proot cps_publish_sql_check < /tmp/publish_migration.sql
+
+      - name: 校验表结构与数据
+        run: |
+          mysql -h127.0.0.1 -uroot -proot cps_publish_sql_check -e "
+            SELECT COUNT(*) AS publish_task_table FROM information_schema.tables
+              WHERE table_schema='cps_publish_sql_check' AND table_name='cps_publish_task';
+            SELECT COUNT(*) AS publish_log_table FROM information_schema.tables
+              WHERE table_schema='cps_publish_sql_check' AND table_name='cps_publish_log';
+            SELECT COUNT(*) AS unique_keys FROM information_schema.statistics
+              WHERE table_schema='cps_publish_sql_check' AND table_name='cps_publish_log'
+                AND index_name='uk_idempotent_key' AND non_unique=0;
+            SELECT COUNT(*) AS menus FROM system_menu WHERE id BETWEEN 6310 AND 6317;
+            SELECT COUNT(*) AS job FROM infra_job WHERE handler_name='cpsPublishDispatchJob';
+            SELECT COUNT(*) AS version_row FROM system_schema_version WHERE module='cps' AND version='v2.1.7';
+          "
+
+      - name: 校验基线脚本可重复执行
+        run: |
+          mysql -h127.0.0.1 -uroot -proot cps_publish_sql_check < /tmp/publish_migration.sql
+          mysql -h127.0.0.1 -uroot -proot cps_publish_sql_check -e "
+            SELECT COUNT(*) AS menus_after_rerun FROM system_menu WHERE id BETWEEN 6310 AND 6317;
+            SELECT COUNT(*) AS job_after_rerun FROM infra_job WHERE handler_name='cpsPublishDispatchJob';
+          "

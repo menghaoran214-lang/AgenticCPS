@@ -32,9 +32,11 @@ public class CpsMcpToolRiskRegistry implements com.qiji.cps.module.ai.service.ca
                 "cps_recommend_by_scene", "cps_purchase_decision", "cps_list_selection_themes",
                 "cps_promotion_strategy_advice", "cps_explain_rebate", "cps_get_rebate_balance",
                 "cps_query_exchange_status", "cpx_list_tasks", "cpx_get_task_detail",
-                "cpx_query_conversions", "cpx_recommend_tasks_by_scene", "cpx_search_articles");
+                "cpx_query_conversions", "cpx_recommend_tasks_by_scene", "cpx_search_articles",
+                "cps_list_publish_tasks");
         register(risks, CpsMcpToolRisk.ATTRIBUTION_WRITE,
-                "cps_generate_link", "cps_recommend_from_selection_theme", "cpx_generate_tracking_link");
+                "cps_generate_link", "cps_recommend_from_selection_theme", "cpx_generate_tracking_link",
+                "cps_schedule_publish_task");
         register(risks, CpsMcpToolRisk.ASSET_WRITE, "cps_create_token_exchange");
         RISKS = Collections.unmodifiableMap(risks);
     }

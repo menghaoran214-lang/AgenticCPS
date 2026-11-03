@@ -48,6 +48,8 @@ public class CpsMcpToolConfiguration {
             CpsGetRebateBalanceToolFunction getRebateBalanceToolFunction,
             CpsCreateTokenExchangeToolFunction createTokenExchangeToolFunction,
             CpsQueryExchangeStatusToolFunction queryExchangeStatusToolFunction,
+            CpsListPublishTasksToolFunction listPublishTasksToolFunction,
+            CpsSchedulePublishTaskToolFunction schedulePublishTaskToolFunction,
             @Qualifier("cpx_list_tasks") CpxListTasksToolFunction listTasksToolFunction,
             CpxGetTaskDetailToolFunction getTaskDetailToolFunction,
             CpxGenerateTrackingLinkToolFunction generateTrackingLinkToolFunction,
@@ -131,6 +133,14 @@ public class CpsMcpToolConfiguration {
                 FunctionToolCallback.builder("cps_query_exchange_status", queryExchangeStatusToolFunction)
                         .description("查询返利兑换 Token 订单状态")
                         .inputType(CpsQueryExchangeStatusToolFunction.Request.class)
+                        .build(),
+                FunctionToolCallback.builder("cps_list_publish_tasks", listPublishTasksToolFunction)
+                        .description("查询 CPS 投放任务看板，包含投放渠道、目标人群、调度状态与上下次投放时间")
+                        .inputType(CpsListPublishTasksToolFunction.Request.class)
+                        .build(),
+                FunctionToolCallback.builder("cps_schedule_publish_task", schedulePublishTaskToolFunction)
+                        .description("起草一条 CPS 投放任务（群发/定时群发），只创建草稿，需运营在后台确认上线")
+                        .inputType(CpsSchedulePublishTaskToolFunction.Request.class)
                         .build(),
                 FunctionToolCallback.builder("cpx_list_tasks", listTasksToolFunction)
                         .description("查询已发布 CPX/CPS 任务列表")

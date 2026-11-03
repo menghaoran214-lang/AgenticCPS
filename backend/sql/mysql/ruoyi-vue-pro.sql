@@ -3681,3 +3681,8 @@ SET FOREIGN_KEY_CHECKS = 1;
 INSERT INTO `system_schema_version` (`module`,`version`,`schema_update_time`,`script_source`,`description`,`status`,`tenant_id`)
 SELECT 'member','v2.0.1','2026-10-28 02:59:35','member-update.sql','Active member mobile uniqueness; retain repeated deletion history','SUCCESS',0
 WHERE NOT EXISTS (SELECT 1 FROM `system_schema_version` WHERE `module`='member' AND `version`='v2.0.1');
+
+-- CPS schema update (Asia/Shanghai): 2026-11-04 00:50:00
+INSERT INTO `system_schema_version` (`module`, `version`, `schema_update_time`, `script_source`, `description`, `status`, `tenant_id`, `deleted`, `creator`, `updater`)
+SELECT 'cps', 'v2.1.7', '2026-11-04 00:50:00', 'cps-update.sql', '新增CPS投放任务模块(cps_publish_task/cps_publish_log)、投放调度定时任务与后台菜单权限', 'SUCCESS', 0, b'0', 'system', 'system'
+WHERE NOT EXISTS (SELECT 1 FROM `system_schema_version` WHERE `module` = 'cps' AND `version` = 'v2.1.7' AND `schema_update_time` = '2026-11-04 00:50:00');
