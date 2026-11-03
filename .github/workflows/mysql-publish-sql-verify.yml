@@ -106,23 +106,22 @@ jobs:
 
       - name: 校验表结构与数据
         run: |
-          mysql -h127.0.0.1 -uroot -proot cps_publish_sql_check -e "
-            SELECT COUNT(*) AS publish_task_table FROM information_schema.tables
-              WHERE table_schema='cps_publish_sql_check' AND table_name='cps_publish_task';
-            SELECT COUNT(*) AS publish_log_table FROM information_schema.tables
-              WHERE table_schema='cps_publish_sql_check' AND table_name='cps_publish_log';
-            SELECT COUNT(*) AS unique_keys FROM information_schema.statistics
-              WHERE table_schema='cps_publish_sql_check' AND table_name='cps_publish_log'
-                AND index_name='uk_idempotent_key' AND non_unique=0;
-            SELECT COUNT(*) AS menus FROM system_menu WHERE id BETWEEN 6310 AND 6317;
-            SELECT COUNT(*) AS job FROM infra_job WHERE handler_name='cpsPublishDispatchJob';
-            SELECT COUNT(*) AS version_row FROM system_schema_version WHERE module='cps' AND version='v2.1.7';
-          "
+          set -euo pipefail
+          q() { mysql -N -B -h127.0.0.1 -uroot -proot cps_publish_sql_check -e "$1"; }
+          test "$(q "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='cps_publish_sql_check' AND table_name='cps_publish_task'")" = 1
+          test "$(q "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='cps_publish_sql_check' AND table_name='cps_publish_log'")" = 1
+          test "$(q "SELECT COUNT(*) FROM information_schema.statistics WHERE table_schema='cps_publish_sql_check' AND table_name='cps_publish_log' AND index_name='uk_idempotent_key' AND non_unique=0")" = 3
+          test "$(q "SELECT COUNT(*) FROM system_menu WHERE id BETWEEN 6310 AND 6317")" = 8
+          test "$(q "SELECT COUNT(*) FROM infra_job WHERE handler_name='cpsPublishDispatchJob'")" = 1
+          test "$(q "SELECT COUNT(*) FROM system_schema_version WHERE module='cps' AND version='v2.1.7'")" = 1
+          echo PUBLISH_SQL_ASSERTIONS=PASS
 
       - name: 校验基线脚本可重复执行
         run: |
+          set -euo pipefail
+          q() { mysql -N -B -h127.0.0.1 -uroot -proot cps_publish_sql_check -e "$1"; }
           mysql -h127.0.0.1 -uroot -proot cps_publish_sql_check < /tmp/publish_migration.sql
-          mysql -h127.0.0.1 -uroot -proot cps_publish_sql_check -e "
-            SELECT COUNT(*) AS menus_after_rerun FROM system_menu WHERE id BETWEEN 6310 AND 6317;
-            SELECT COUNT(*) AS job_after_rerun FROM infra_job WHERE handler_name='cpsPublishDispatchJob';
-          "
+          test "$(q "SELECT COUNT(*) FROM system_menu WHERE id BETWEEN 6310 AND 6317")" = 8
+          test "$(q "SELECT COUNT(*) FROM infra_job WHERE handler_name='cpsPublishDispatchJob'")" = 1
+          test "$(q "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='cps_publish_sql_check' AND table_name='cps_publish_task'")" = 1
+          echo PUBLISH_SQL_RERUN_ASSERTIONS=PASS

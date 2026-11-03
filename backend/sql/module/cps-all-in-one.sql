@@ -2326,7 +2326,7 @@ CREATE TABLE IF NOT EXISTS `cps_publish_task` (
   `target_type`             varchar(32)   NOT NULL DEFAULT 'SPECIFIED' COMMENT '目标人群类型: SPECIFIED 指定会员 REBATE_MEMBER 返利会员',
   `target_ids`              text                  COMMENT '指定会员ID，逗号分隔',
   `content_template`        text                  COMMENT '消息模板，占位符 {member_id}、{task_name}、{url}',
-  `link_template`           varchar(1024)         DEFAULT NULL COMMENT '推广链接模板，占位符 {member_id}',
+  `link_template`           varchar(1024)         DEFAULT NULL COMMENT '推广链接，必须是完整 HTTP(S) 地址，不接受归因占位符',
   `template_code`           varchar(64)            DEFAULT NULL COMMENT '渠道模板编码',
   `cron_expression`         varchar(64)            DEFAULT NULL COMMENT 'Cron 表达式(Spring 6 位)，为空表示只手工触发',
   `start_time`              datetime               DEFAULT NULL COMMENT '投放开始时间',
@@ -2385,7 +2385,10 @@ INSERT INTO `system_menu` (`id`, `name`, `permission`, `type`, `sort`, `parent_i
 (6316, '投放任务下线', 'cps:publish-task:offline', 3, 6, 6310, '', '', '', '', 0, b'1', b'1', b'1', '1', '2026-11-04 00:50:00', '1', '2026-11-04 00:50:00', b'0'),
 (6317, '投放任务立即执行', 'cps:publish-task:dispatch', 3, 7, 6310, '', '', '', '', 0, b'1', b'1', b'1', '1', '2026-11-04 00:50:00', '1', '2026-11-04 00:50:00', b'0');
 
-INSERT INTO `infra_job` (`id`, `name`, `status`, `handler_name`, `handler_param`, `cron_expression`, `retry_count`, `retry_interval`, `monitor_timeout`, `creator`, `create_time`, `updater`, `update_time`, `deleted`) SELECT 41, 'CPS投放任务调度 Job', 1, 'cpsPublishDispatchJob', NULL, '0 * * * * ?', 0, 0, 0, '1', '2026-11-04 00:50:00', '1', '2026-11-04 00:50:00', b'0'
+INSERT INTO `infra_job` (`name`, `status`, `handler_name`, `handler_param`, `cron_expression`,
+                         `retry_count`, `retry_interval`, `monitor_timeout`, `creator`, `updater`, `deleted`)
+SELECT 'CPS投放任务调度', 1, 'cpsPublishDispatchJob', NULL,
+       '0 * * * * ?', 0, 0, 900, 'system', 'system', b'0'
 WHERE NOT EXISTS (
   SELECT 1 FROM `infra_job` WHERE `handler_name` = 'cpsPublishDispatchJob' AND `deleted` = b'0'
 );
@@ -2394,8 +2397,7 @@ WHERE NOT EXISTS (
 INSERT INTO `system_role_menu` (`role_id`, `menu_id`, `creator`, `create_time`, `updater`, `update_time`, `deleted`, `tenant_id`)
 SELECT rm.`role_id`, m.`menu_id`, '1', '2026-11-04 00:50:00', '1', '2026-11-04 00:50:00', b'0', rm.`tenant_id`
 FROM `system_role_menu` rm
-JOIN (SELECT 6200 AS `source_menu_id`
-      UNION ALL SELECT 6310
+JOIN (SELECT 6310 AS `menu_id`
       UNION ALL SELECT 6311
       UNION ALL SELECT 6312
       UNION ALL SELECT 6313

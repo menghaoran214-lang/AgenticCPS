@@ -2279,8 +2279,10 @@ SELECT 6317, '投放任务立即执行', 'cps:publish-task:dispatch', 3, 7, 6310
 WHERE NOT EXISTS (SELECT 1 FROM `system_menu` WHERE `id` = 6317);
 
 -- 每分钟扫描到期投放任务并执行
-INSERT INTO `infra_job` (`id`, `name`, `status`, `handler_name`, `handler_param`, `cron_expression`, `retry_count`, `retry_interval`, `monitor_timeout`, `creator`, `create_time`, `updater`, `update_time`, `deleted`)
-SELECT 41, 'CPS投放任务调度 Job', 1, 'cpsPublishDispatchJob', NULL, '0 * * * * ?', 0, 0, 0, '1', '2026-11-04 00:50:00', '1', '2026-11-04 00:50:00', b'0'
+INSERT INTO `infra_job` (`name`, `status`, `handler_name`, `handler_param`, `cron_expression`,
+                         `retry_count`, `retry_interval`, `monitor_timeout`, `creator`, `updater`, `deleted`)
+SELECT 'CPS投放任务调度', 1, 'cpsPublishDispatchJob', NULL,
+       '0 * * * * ?', 0, 0, 900, 'system', 'system', b'0'
 WHERE NOT EXISTS (
   SELECT 1 FROM `infra_job` WHERE `handler_name` = 'cpsPublishDispatchJob' AND `deleted` = b'0'
 );

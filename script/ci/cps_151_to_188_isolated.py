@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Rehearse the source-controlled 151 -> 188 CPS migration in a disposable CI MySQL 8.
+"""Rehearse the source-controlled 153 -> 190 CPS migration in a disposable CI MySQL 8.
+
+Object counts follow the source-controlled schema: the baseline grew from 121 to 123
+when the CPS publish-task module added cps_publish_task / cps_publish_log.
 
 This is NOT a Tencent backup restore, a production migration, a credential test,
 or a release approval. No network endpoint beyond the local CI MySQL is accepted.
@@ -228,14 +231,14 @@ def main():
             for _, path in BASELINE:
                 run_sql_file(cur, path)
             base = table_names(cur)
-            checks["canonical_baseline_is_121"] = len(base) == 121
-            if not checks["canonical_baseline_is_121"]:
+            checks["canonical_baseline_is_123"] = len(base) == 123
+            if not checks["canonical_baseline_is_123"]:
                 raise AssertionError("Unexpected baseline schema")
             added_30 = apply_new_tables(cur, ("member", "product", "trade"), base)
             before = table_names(cur)
-            checks["synthetic_151_baseline"] = len(before) == 151 and len(added_30) == 30
-            if not checks["synthetic_151_baseline"]:
-                raise AssertionError("Expected exactly 151 tables before migration")
+            checks["synthetic_153_baseline"] = len(before) == 153 and len(added_30) == 30
+            if not checks["synthetic_153_baseline"]:
+                raise AssertionError("Expected exactly 153 tables before migration")
             checks["member_ownership_nonempty_gate"] = test_nonempty_member_gate(cur)
             for name_protected in PROTECTED:
                 if rows(cur, name_protected):
@@ -248,7 +251,7 @@ def main():
                 raise AssertionError("Promotion / payment table inventory mismatch")
             apply_v06_and_member_v201(cur)
             after = table_names(cur)
-            checks["188_tables_no_drop"] = len(after) == 188 and after == before | created_37
+            checks["190_tables_no_drop"] = len(after) == 190 and after == before | created_37
             after_fingerprints = fingerprints(cur, before)
             checks["all_original_rows_preserved"] = all(
                 after_fingerprints[t] == baseline_fingerprints[t]
@@ -256,7 +259,7 @@ def main():
             )
             changed_schema = set(TENANT_FIX) | {"member_user"}
             after_schemas = schemas(cur, before)
-            checks["other_146_schemas_unchanged"] = all(
+            checks["other_148_schemas_unchanged"] = all(
                 after_schemas[t] == baseline_schemas[t]
                 for t in before - changed_schema
             )
@@ -300,10 +303,10 @@ def main():
     report["passed"] = bool(checks) and all(checks.values())
     (ROOT / "cps-151-to-188-ci-report.json").write_text(
         json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    print("151_TO_188_SCHEMA_GATE", json.dumps(checks, sort_keys=True), flush=True)
+    print("153_TO_190_SCHEMA_GATE", json.dumps(checks, sort_keys=True), flush=True)
     if not report["passed"]:
-        raise SystemExit("151->188 synthetic schema migration gate failed")
-    print("ISOLATED_151_TO_188_PASS", flush=True)
+        raise SystemExit("153->190 synthetic schema migration gate failed")
+    print("ISOLATED_153_TO_190_PASS", flush=True)
 
 
 if __name__ == "__main__":
