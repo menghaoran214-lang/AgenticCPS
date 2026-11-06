@@ -43,7 +43,7 @@ def canonical_schema_enabled():
     if value not in ('0', '1'):
         raise ValueError('Unexpected canonical schema profile')
     if value == '1' and (PROFILE_NAME != 'ci' or not github_hosted()):
-        raise ValueError('Full 188-table test requires disposable GitHub-hosted CI')
+        raise ValueError('Full 190-table test requires disposable GitHub-hosted CI')
     return value == '1'
 
 
@@ -53,10 +53,10 @@ def create_fixture_table(connection, ddl):
 
 
 def verify_canonical_schema(connection):
-    # 188 source-controlled tables/views plus the one-time randomized CI marker.
+    # 190 source-controlled tables/views plus the one-time randomized CI marker.
     count = query(connection, "SELECT COUNT(*) AS n FROM information_schema.tables WHERE table_schema=DATABASE()")
-    if count[0]['n'] != 189:
-        raise AssertionError('Not a complete 188-object schema in marked isolated test DB')
+    if count[0]['n'] != 191:
+        raise AssertionError('Not a complete 190-object schema in marked isolated test DB')
     required = [('member_user', 'active_mobile'), ('member_address', 'tenant_id'),
                 ('member_tag', 'tenant_id'), ('member_level', 'tenant_id'),
                 ('member_group', 'tenant_id'), ('trade_order', 'no'),
@@ -73,7 +73,7 @@ def verify_canonical_schema(connection):
             raise AssertionError('Canonical payment channel/app must be empty')
     (WORK / 'evidence/canonical-schema.json').write_text(
         json.dumps({'scope': 'GitHub-hosted disposable database, source-controlled migrations',
-                    'baseline_object_count': 188,
+                    'baseline_object_count': 190,
                     'marker_objects': 1,
                     'member_v201_and_v06_columns_verified': True,
                     'payment_channels_and_apps_empty': True,

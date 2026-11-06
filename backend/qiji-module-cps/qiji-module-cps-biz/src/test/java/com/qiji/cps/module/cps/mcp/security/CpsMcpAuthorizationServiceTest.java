@@ -94,7 +94,8 @@ class CpsMcpAuthorizationServiceTest {
                 "cps_list_selection_themes", "cps_recommend_from_selection_theme", "cps_get_rebate_balance",
                 "cps_create_token_exchange", "cps_query_exchange_status", "cpx_list_tasks",
                 "cpx_get_task_detail", "cpx_generate_tracking_link", "cpx_query_conversions",
-                "cpx_recommend_tasks_by_scene", "cpx_search_articles");
+                "cpx_recommend_tasks_by_scene", "cpx_search_articles",
+                "cps_list_publish_tasks", "cps_schedule_publish_task");
 
         assertEquals(registeredTools, registry.getRegisteredTools());
         assertEquals(CpsMcpToolRisk.READ_ONLY, registry.getRisk("cps_search_goods"));

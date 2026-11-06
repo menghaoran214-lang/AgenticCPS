@@ -237,6 +237,8 @@ spring:
             - cps_get_rebate_balance: query exchangeable rebate balance
             - cps_create_token_exchange: create rebate-to-token exchange
             - cps_query_exchange_status: query rebate-to-token exchange status
+            - cps_list_publish_tasks: list CPS publish (broadcast) task board
+            - cps_schedule_publish_task: draft a CPS publish task for human approval
         type: SYNC                     # SpringMVC 使用 SYNC，不支持 ASYNC（WebFlux）
         sse-endpoint: /sse             # SSE 连接端点
         sse-message-endpoint: /mcp/message  # Streamable HTTP 消息端点

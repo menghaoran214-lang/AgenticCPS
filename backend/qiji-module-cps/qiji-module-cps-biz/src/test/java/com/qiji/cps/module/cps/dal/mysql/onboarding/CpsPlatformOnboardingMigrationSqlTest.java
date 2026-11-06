@@ -128,7 +128,7 @@ class CpsPlatformOnboardingMigrationSqlTest {
         String sql = readSql("cps-all-in-one.sql");
         String header = sql.substring(0, sql.indexOf("SET NAMES utf8mb4;"));
 
-        assertTrue(header.contains("-- Date: 2026-07-24"),
+        assertTrue(header.contains("-- Date: 2026-11-04"),
                 "baseline header date must reflect the latest schema and menu change");
         Matcher matcher = CREATE_TABLE_PATTERN.matcher(sql);
         while (matcher.find()) {

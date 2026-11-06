@@ -92,7 +92,11 @@ def run():
                 decoded, _, _ = cv2.QRCodeDetector().detectAndDecode(cv2.imread(str(qr_file)))
                 if not decoded:
                     page.wait_for_timeout(500)
-            assert decoded == BASE + '/h5/pages/cps/goods?inviteCode=' + code, 'Rendered QR did not decode to the invite link'
+            expected = BASE + '/h5/pages/cps/goods?inviteCode=' + code
+            print('QR_DEBUG page_url=' + page.url + ' invite_code=' + code)
+            assert decoded == expected, (
+                'Rendered QR did not decode to the invite link; '
+                f'decoded={decoded!r} expected={expected!r}')
             page.screenshot(path=str(evidence / 'station-invite.png'), full_page=True)
 
             consumer = context()

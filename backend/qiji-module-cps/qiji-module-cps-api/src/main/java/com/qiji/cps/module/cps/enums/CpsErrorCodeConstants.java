@@ -109,4 +109,12 @@ public interface CpsErrorCodeConstants {
     ErrorCode ADZONE_RELATION_REQUIRED = new ErrorCode(1_100_017_006, "推广位类型[{}]必须配置关联信息");
     ErrorCode REBATE_CONFIG_AMOUNT_RANGE_INVALID = new ErrorCode(1_100_017_007, "返利配置最小金额不能大于最大金额");
 
+    // ========== 投放任务 1-100-018-000 ==========
+    ErrorCode PUBLISH_TASK_NOT_EXISTS = new ErrorCode(1_100_018_000, "投放任务不存在");
+    ErrorCode PUBLISH_TASK_CODE_DUPLICATE = new ErrorCode(1_100_018_001, "投放任务编码[{}]已存在");
+    ErrorCode PUBLISH_CHANNEL_NOT_REGISTERED = new ErrorCode(1_100_018_002, "投放渠道[{}]未注册");
+    ErrorCode PUBLISH_TASK_STATUS_INVALID = new ErrorCode(1_100_018_003, "投放任务状态不合法：{}");
+    ErrorCode PUBLISH_CONTENT_TEMPLATE_REQUIRED = new ErrorCode(1_100_018_004, "投放消息模板不能为空");
+    ErrorCode PUBLISH_TASK_CODE_GENERATE_FAILED = new ErrorCode(1_100_018_005, "投放任务编码生成失败");
+
 }

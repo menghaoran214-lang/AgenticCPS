@@ -1,4 +1,4 @@
-"""Fail-closed checks for staging source-controlled 188 objects in disposable HTTP CI."""
+"""Fail-closed checks for staging source-controlled 190 objects in disposable HTTP CI."""
 import os
 import unittest
 from unittest.mock import patch

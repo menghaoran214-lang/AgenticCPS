@@ -2179,3 +2179,138 @@ SELECT 'cps', 'v2.1.6', '2026-10-26 12:00:00', 'cps-update.sql', '初始化美�
 WHERE NOT EXISTS (
   SELECT 1 FROM `system_schema_version` WHERE `module` = 'cps' AND `version` = 'v2.1.6' AND `schema_update_time` = '2026-10-26 12:00:00'
 );
+
+
+-- ============================================================
+
+-- ============================================================
+-- 修改时间：2026-11-04 00:50:00
+-- 目的：新增 CPS 投放任务模块（投放任务 + 投放记录），补齐旺财狗拆解中识别出的「内容触达」能力
+-- 说明：新增两张表、后台菜单与权限、每分钟投放调度定时任务；全部语句可重复执行
+-- ============================================================
+CREATE TABLE IF NOT EXISTS `cps_publish_task` (
+  `id`                      bigint        NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `tenant_id`               bigint        NOT NULL DEFAULT '0' COMMENT '租户ID',
+  `task_code`               varchar(64)   NOT NULL COMMENT '投放任务编码',
+  `task_name`               varchar(128)  NOT NULL COMMENT '投放任务名称',
+  `source_type`             varchar(32)   NOT NULL DEFAULT 'MANUAL' COMMENT '投放内容来源: MANUAL 手工 SELECTION_THEME 选品主题 REBATE_ACTIVITY 活动中心 CPX_TASK 投放任务',
+  `source_id`               bigint                 DEFAULT NULL COMMENT '投放内容来源主键',
+  `channel_code`            varchar(32)   NOT NULL COMMENT '触达渠道: SMS 短信 NOTIFY 站内信 CLIPBOARD 文案看板',
+  `target_type`             varchar(32)   NOT NULL DEFAULT 'SPECIFIED' COMMENT '目标人群类型: SPECIFIED 指定会员 REBATE_MEMBER 返利会员',
+  `target_ids`              text                  COMMENT '指定会员ID，逗号分隔',
+  `content_template`        text                  COMMENT '消息模板，占位符 {member_id}、{task_name}、{url}',
+  `link_template`           varchar(1024)         DEFAULT NULL COMMENT '推广链接，必须是完整 HTTP(S) 地址，不接受归因占位符',
+  `template_code`           varchar(64)            DEFAULT NULL COMMENT '渠道模板编码',
+  `cron_expression`         varchar(64)            DEFAULT NULL COMMENT 'Cron 表达式(Spring 6 位)，为空表示只手工触发',
+  `start_time`              datetime               DEFAULT NULL COMMENT '投放开始时间',
+  `end_time`                datetime               DEFAULT NULL COMMENT '投放结束时间',
+  `frequency_limit_per_day` int          NOT NULL DEFAULT '0' COMMENT '每个会员每日最大投放次数，0 表示不限制',
+  `quiet_start_time`        time                  DEFAULT NULL COMMENT '免打扰开始时间',
+  `quiet_end_time`          time                  DEFAULT NULL COMMENT '免打扰结束时间',
+  `status`                  varchar(16)   NOT NULL DEFAULT 'DRAFT' COMMENT '任务状态: DRAFT 草稿 ONLINE 已上线 OFFLINE 已下线',
+  `last_dispatch_time`      datetime               DEFAULT NULL COMMENT '上次投放时间',
+  `next_dispatch_time`      datetime               DEFAULT NULL COMMENT '下次投放时间',
+  `remark`                  varchar(500)           DEFAULT NULL COMMENT '备注',
+  `creator`                 varchar(64)            DEFAULT '' COMMENT '创建者',
+  `create_time`             datetime     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `updater`                 varchar(64)            DEFAULT '' COMMENT '更新者',
+  `update_time`             datetime     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  `deleted`                 bit(1)        NOT NULL DEFAULT b'0' COMMENT '是否删除',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_task_code` (`tenant_id`, `task_code`, `deleted`),
+  KEY `idx_status_dispatch` (`tenant_id`, `status`, `next_dispatch_time`, `deleted`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='CPS投放任务表';
+
+CREATE TABLE IF NOT EXISTS `cps_publish_log` (
+  `id`               bigint       NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `tenant_id`        bigint       NOT NULL DEFAULT '0' COMMENT '租户ID',
+  `task_id`          bigint       NOT NULL COMMENT '投放任务ID',
+  `task_code`        varchar(64)  NOT NULL COMMENT '投放任务编码',
+  `channel_code`     varchar(32)  NOT NULL COMMENT '触达渠道',
+  `member_id`        bigint       NOT NULL COMMENT '目标会员ID',
+  `idempotent_key`   varchar(160) NOT NULL COMMENT '幂等键: 任务+会员+投放分钟',
+  `content_snapshot` text                 COMMENT '实际发送内容快照',
+  `link_url`         varchar(1024)        DEFAULT NULL COMMENT '实际使用的推广链接',
+  `status`           varchar(16)  NOT NULL DEFAULT 'PROCESSING' COMMENT '投放结果: PROCESSING 占位中 ACCEPTED 渠道已受理 PREVIEW 已生成文案预览 SUCCESS 成功 FAILED 失败 SKIPPED 跳过',
+  `error_msg`        varchar(500)         DEFAULT NULL COMMENT '失败或跳过原因',
+  `sent_at`          datetime    NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '投放时间',
+  `creator`          varchar(64)           DEFAULT '' COMMENT '创建者',
+  `create_time`      datetime    NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `updater`          varchar(64)           DEFAULT '' COMMENT '更新者',
+  `update_time`      datetime    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  `deleted`          bit(1)       NOT NULL DEFAULT b'0' COMMENT '是否删除',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_idempotent_key` (`tenant_id`, `idempotent_key`, `deleted`),
+  KEY `idx_task_member` (`tenant_id`, `task_id`, `member_id`, `sent_at`),
+  KEY `idx_sent_at` (`tenant_id`, `sent_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='CPS投放记录表';
+
+-- 后台菜单与按钮权限
+INSERT INTO `system_menu` (`id`, `name`, `permission`, `type`, `sort`, `parent_id`, `path`, `icon`, `component`, `component_name`, `status`, `visible`, `keep_alive`, `always_show`, `creator`, `create_time`, `updater`, `update_time`, `deleted`)
+SELECT 6310, '投放任务', 'cps:publish-task:query', 2, 35, 6200, 'publish/task', 'ep:message', 'cps/publish/task/index', 'CpsPublishTask', 0, b'1', b'1', b'1', '1', '2026-11-04 00:50:00', '1', '2026-11-04 00:50:00', b'0'
+WHERE NOT EXISTS (SELECT 1 FROM `system_menu` WHERE `id` = 6310);
+
+INSERT INTO `system_menu` (`id`, `name`, `permission`, `type`, `sort`, `parent_id`, `path`, `icon`, `component`, `component_name`, `status`, `visible`, `keep_alive`, `always_show`, `creator`, `create_time`, `updater`, `update_time`, `deleted`)
+SELECT 6311, '投放任务查询', 'cps:publish-task:query', 3, 1, 6310, '', '', '', '', 0, b'1', b'1', b'1', '1', '2026-11-04 00:50:00', '1', '2026-11-04 00:50:00', b'0'
+WHERE NOT EXISTS (SELECT 1 FROM `system_menu` WHERE `id` = 6311);
+
+INSERT INTO `system_menu` (`id`, `name`, `permission`, `type`, `sort`, `parent_id`, `path`, `icon`, `component`, `component_name`, `status`, `visible`, `keep_alive`, `always_show`, `creator`, `create_time`, `updater`, `update_time`, `deleted`)
+SELECT 6312, '投放任务创建', 'cps:publish-task:create', 3, 2, 6310, '', '', '', '', 0, b'1', b'1', b'1', '1', '2026-11-04 00:50:00', '1', '2026-11-04 00:50:00', b'0'
+WHERE NOT EXISTS (SELECT 1 FROM `system_menu` WHERE `id` = 6312);
+
+INSERT INTO `system_menu` (`id`, `name`, `permission`, `type`, `sort`, `parent_id`, `path`, `icon`, `component`, `component_name`, `status`, `visible`, `keep_alive`, `always_show`, `creator`, `create_time`, `updater`, `update_time`, `deleted`)
+SELECT 6313, '投放任务更新', 'cps:publish-task:update', 3, 3, 6310, '', '', '', '', 0, b'1', b'1', b'1', '1', '2026-11-04 00:50:00', '1', '2026-11-04 00:50:00', b'0'
+WHERE NOT EXISTS (SELECT 1 FROM `system_menu` WHERE `id` = 6313);
+
+INSERT INTO `system_menu` (`id`, `name`, `permission`, `type`, `sort`, `parent_id`, `path`, `icon`, `component`, `component_name`, `status`, `visible`, `keep_alive`, `always_show`, `creator`, `create_time`, `updater`, `update_time`, `deleted`)
+SELECT 6314, '投放任务删除', 'cps:publish-task:delete', 3, 4, 6310, '', '', '', '', 0, b'1', b'1', b'1', '1', '2026-11-04 00:50:00', '1', '2026-11-04 00:50:00', b'0'
+WHERE NOT EXISTS (SELECT 1 FROM `system_menu` WHERE `id` = 6314);
+
+INSERT INTO `system_menu` (`id`, `name`, `permission`, `type`, `sort`, `parent_id`, `path`, `icon`, `component`, `component_name`, `status`, `visible`, `keep_alive`, `always_show`, `creator`, `create_time`, `updater`, `update_time`, `deleted`)
+SELECT 6315, '投放任务上线', 'cps:publish-task:publish', 3, 5, 6310, '', '', '', '', 0, b'1', b'1', b'1', '1', '2026-11-04 00:50:00', '1', '2026-11-04 00:50:00', b'0'
+WHERE NOT EXISTS (SELECT 1 FROM `system_menu` WHERE `id` = 6315);
+
+INSERT INTO `system_menu` (`id`, `name`, `permission`, `type`, `sort`, `parent_id`, `path`, `icon`, `component`, `component_name`, `status`, `visible`, `keep_alive`, `always_show`, `creator`, `create_time`, `updater`, `update_time`, `deleted`)
+SELECT 6316, '投放任务下线', 'cps:publish-task:offline', 3, 6, 6310, '', '', '', '', 0, b'1', b'1', b'1', '1', '2026-11-04 00:50:00', '1', '2026-11-04 00:50:00', b'0'
+WHERE NOT EXISTS (SELECT 1 FROM `system_menu` WHERE `id` = 6316);
+
+INSERT INTO `system_menu` (`id`, `name`, `permission`, `type`, `sort`, `parent_id`, `path`, `icon`, `component`, `component_name`, `status`, `visible`, `keep_alive`, `always_show`, `creator`, `create_time`, `updater`, `update_time`, `deleted`)
+SELECT 6317, '投放任务立即执行', 'cps:publish-task:dispatch', 3, 7, 6310, '', '', '', '', 0, b'1', b'1', b'1', '1', '2026-11-04 00:50:00', '1', '2026-11-04 00:50:00', b'0'
+WHERE NOT EXISTS (SELECT 1 FROM `system_menu` WHERE `id` = 6317);
+
+-- 每分钟扫描到期投放任务并执行
+INSERT INTO `infra_job` (`name`, `status`, `handler_name`, `handler_param`, `cron_expression`,
+                         `retry_count`, `retry_interval`, `monitor_timeout`, `creator`, `updater`, `deleted`)
+SELECT 'CPS投放任务调度', 1, 'cpsPublishDispatchJob', NULL,
+       '0 * * * * ?', 0, 0, 900, 'system', 'system', b'0'
+WHERE NOT EXISTS (
+  SELECT 1 FROM `infra_job` WHERE `handler_name` = 'cpsPublishDispatchJob' AND `deleted` = b'0'
+);
+
+-- 将投放任务菜单与按钮授权给已拥有「联盟运营」菜单的角色
+INSERT INTO `system_role_menu` (`role_id`, `menu_id`, `creator`, `create_time`, `updater`, `update_time`, `deleted`, `tenant_id`)
+SELECT rm.`role_id`, m.`menu_id`, '1', '2026-11-04 00:50:00', '1', '2026-11-04 00:50:00', b'0', rm.`tenant_id`
+FROM `system_role_menu` rm
+JOIN (SELECT 6310 AS `menu_id`
+      UNION ALL SELECT 6311
+      UNION ALL SELECT 6312
+      UNION ALL SELECT 6313
+      UNION ALL SELECT 6314
+      UNION ALL SELECT 6315
+      UNION ALL SELECT 6316
+      UNION ALL SELECT 6317) m ON 1 = 1
+WHERE rm.`menu_id` = 6200
+  AND rm.`deleted` = b'0'
+  AND NOT EXISTS (
+    SELECT 1 FROM `system_role_menu` existing
+    WHERE existing.`role_id` = rm.`role_id`
+      AND existing.`menu_id` = m.`menu_id`
+      AND existing.`deleted` = b'0'
+  );
+
+-- 记录数据库结构版本号
+INSERT INTO `system_schema_version` (`module`, `version`, `schema_update_time`, `script_source`, `description`, `status`, `tenant_id`, `deleted`, `creator`, `updater`)
+SELECT 'cps', 'v2.1.7', '2026-11-04 00:50:00', 'cps-update.sql', '新增CPS投放任务模块(cps_publish_task/cps_publish_log)、投放调度定时任务与后台菜单权限', 'SUCCESS', 0, b'0', 'system', 'system'
+WHERE NOT EXISTS (
+  SELECT 1 FROM `system_schema_version` WHERE `module` = 'cps' AND `version` = 'v2.1.7' AND `schema_update_time` = '2026-11-04 00:50:00'
+);
