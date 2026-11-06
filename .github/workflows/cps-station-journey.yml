@@ -39,8 +39,8 @@ jobs:
           fetch-depth: 0
       - name: Reject stale artifacts
         run: |
-          git diff --exit-code e78ac63308616f0ffb00f13419b30b61e9a2b8af HEAD -- backend
-          git diff --exit-code e78ac63308616f0ffb00f13419b30b61e9a2b8af HEAD -- frontend/mall-uniapp frontend/admin-vue3
+          git diff --exit-code 1862bc1e HEAD -- backend
+          git diff --exit-code 1862bc1e HEAD -- frontend/mall-uniapp frontend/admin-vue3
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -53,14 +53,14 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           repository: menghaoran214-lang/AgenticCPS
-          run-id: 41693988634
+          run-id: 42258767518
           github-token: ${{ github.token }}
           name: agenticcps-java-server
           path: .station-ci/server
       - uses: actions/download-artifact@v4
         with:
           repository: menghaoran214-lang/AgenticCPS
-          run-id: 41693988634
+          run-id: 42258767518
           github-token: ${{ github.token }}
           name: agenticcps-admin-vue3
           path: .station-ci/admin
