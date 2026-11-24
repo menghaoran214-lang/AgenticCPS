@@ -98,29 +98,37 @@ jobs:
           ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
           SQL
 
-      - name: 导入投放任务增量脚本
+      - name: 在隔离库中复现旧投放迁移的乱码
         run: |
-          awk '/^-- 修改时间：2026-11-04 00:50:00/ {flag=1} flag' backend/sql/module/cps-update.sql > /tmp/publish_migration.sql
+          set -euo pipefail
+          awk '/^-- 修改时间：2026-11-04 00:50:00/ {publish=1} /^-- 修改时间：2026-11-25 02:09:54/ {publish=0} publish' backend/sql/module/cps-update.sql > /tmp/publish_migration.sql
+          awk '/^-- 修改时间：2026-11-25 02:09:54/ {repair=1} repair' backend/sql/module/cps-update.sql > /tmp/publish_repair.sql
           test -s /tmp/publish_migration.sql
-          mysql -h127.0.0.1 -uroot -proot cps_publish_sql_check < /tmp/publish_migration.sql
+          test -s /tmp/publish_repair.sql
+          mysql -h127.0.0.1 -uroot -proot --default-character-set=latin1 cps_publish_sql_check < /tmp/publish_migration.sql
+          q() { mysql -N -B -h127.0.0.1 -uroot -proot --default-character-set=utf8mb4 cps_publish_sql_check -e "$1"; }
+          test "$(q "SELECT COUNT(*) FROM system_menu WHERE id=6310 AND BINARY name <> '投放任务'")" = 1
+          test "$(q "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA='cps_publish_sql_check' AND TABLE_NAME='cps_publish_task' AND BINARY TABLE_COMMENT <> 'CPS投放任务表'")" = 1
+          echo PUBLISH_SQL_LEGACY_ENCODING_REPRODUCED=PASS
 
-      - name: 校验表结构与数据
+      - name: 修复中文并验证可重复执行
         run: |
           set -euo pipefail
-          q() { mysql -N -B -h127.0.0.1 -uroot -proot cps_publish_sql_check -e "$1"; }
-          test "$(q "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='cps_publish_sql_check' AND table_name='cps_publish_task'")" = 1
-          test "$(q "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='cps_publish_sql_check' AND table_name='cps_publish_log'")" = 1
-          test "$(q "SELECT COUNT(*) FROM information_schema.statistics WHERE table_schema='cps_publish_sql_check' AND table_name='cps_publish_log' AND index_name='uk_idempotent_key' AND non_unique=0")" = 3
-          test "$(q "SELECT COUNT(*) FROM system_menu WHERE id BETWEEN 6310 AND 6317")" = 8
-          test "$(q "SELECT COUNT(*) FROM infra_job WHERE handler_name='cpsPublishDispatchJob'")" = 1
-          test "$(q "SELECT COUNT(*) FROM system_schema_version WHERE module='cps' AND version='v2.1.7'")" = 1
-          echo PUBLISH_SQL_ASSERTIONS=PASS
-
-      - name: 校验基线脚本可重复执行
-        run: |
-          set -euo pipefail
-          q() { mysql -N -B -h127.0.0.1 -uroot -proot cps_publish_sql_check -e "$1"; }
-          mysql -h127.0.0.1 -uroot -proot cps_publish_sql_check < /tmp/publish_migration.sql
+          q() { mysql -N -B -h127.0.0.1 -uroot -proot --default-character-set=utf8mb4 cps_publish_sql_check -e "$1"; }
+          apply_sql() { mysql -h127.0.0.1 -uroot -proot --default-character-set=utf8mb4 cps_publish_sql_check < "$1"; }
+          for attempt in 1 2; do
+            apply_sql /tmp/publish_repair.sql
+            test "$(q "SELECT CONCAT_WS('|', (SELECT GROUP_CONCAT(name ORDER BY id SEPARATOR '|') FROM system_menu WHERE id BETWEEN 6310 AND 6317), (SELECT name FROM infra_job WHERE handler_name='cpsPublishDispatchJob'))")" = '投放任务|投放任务查询|投放任务创建|投放任务更新|投放任务删除|投放任务上线|投放任务下线|投放任务立即执行|CPS投放任务调度'
+            test "$(q "SELECT TABLE_COMMENT FROM information_schema.TABLES WHERE TABLE_SCHEMA='cps_publish_sql_check' AND TABLE_NAME='cps_publish_task'")" = 'CPS投放任务表'
+            test "$(q "SELECT TABLE_COMMENT FROM information_schema.TABLES WHERE TABLE_SCHEMA='cps_publish_sql_check' AND TABLE_NAME='cps_publish_log'")" = 'CPS投放记录表'
+            test "$(q "SELECT COLUMN_COMMENT FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='cps_publish_sql_check' AND TABLE_NAME='cps_publish_task' AND COLUMN_NAME='task_name'")" = '投放任务名称'
+            test "$(q "SELECT COLUMN_COMMENT FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='cps_publish_sql_check' AND TABLE_NAME='cps_publish_log' AND COLUMN_NAME='content_snapshot'")" = '实际发送内容快照'
+            test "$(q "SELECT description FROM system_schema_version WHERE module='cps' AND version='v2.1.7'")" = '新增CPS投放任务模块(cps_publish_task/cps_publish_log)、投放调度定时任务与后台菜单权限'
+            test "$(q "SELECT description FROM system_schema_version WHERE module='cps' AND version='v2.1.8' AND status='SUCCESS'")" = '修复投放任务菜单、调度名称和数据库注释的中文乱码'
+            test "$(q "SELECT COUNT(*) FROM information_schema.statistics WHERE table_schema='cps_publish_sql_check' AND table_name='cps_publish_log' AND index_name='uk_idempotent_key' AND non_unique=0")" = 3
+            echo "PUBLISH_SQL_UTF8_ASSERTIONS_$attempt=PASS"
+          done
+          apply_sql /tmp/publish_migration.sql
           test "$(q "SELECT COUNT(*) FROM system_menu WHERE id BETWEEN 6310 AND 6317")" = 8
           test "$(q "SELECT COUNT(*) FROM infra_job WHERE handler_name='cpsPublishDispatchJob'")" = 1
           test "$(q "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='cps_publish_sql_check' AND table_name='cps_publish_task'")" = 1
