@@ -2314,3 +2314,76 @@ SELECT 'cps', 'v2.1.7', '2026-11-04 00:50:00', 'cps-update.sql', '新增CPS投�
 WHERE NOT EXISTS (
   SELECT 1 FROM `system_schema_version` WHERE `module` = 'cps' AND `version` = 'v2.1.7' AND `schema_update_time` = '2026-11-04 00:50:00'
 );
+
+
+-- ============================================================
+-- 修改时间：2026-11-25 02:09:54
+-- 目标：修复 v2.1.7 迁移因 MySQL 客户端默认 latin1 字符集写入中文乱码的问题
+-- 说明：修正 cps_publish_task/cps_publish_log 表与列注释、后台菜单名称、投放调度任务名称与版本说明，保留列定义、索引与业务数据；可重复执行
+-- ============================================================
+SET NAMES utf8mb4;
+ALTER TABLE `cps_publish_task`
+  MODIFY COLUMN `id` bigint        NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  MODIFY COLUMN `tenant_id` bigint        NOT NULL DEFAULT '0' COMMENT '租户ID',
+  MODIFY COLUMN `task_code` varchar(64)   NOT NULL COMMENT '投放任务编码',
+  MODIFY COLUMN `task_name` varchar(128)  NOT NULL COMMENT '投放任务名称',
+  MODIFY COLUMN `source_type` varchar(32)   NOT NULL DEFAULT 'MANUAL' COMMENT '投放内容来源: MANUAL 手工 SELECTION_THEME 选品主题 REBATE_ACTIVITY 活动中心 CPX_TASK 投放任务',
+  MODIFY COLUMN `source_id` bigint                 DEFAULT NULL COMMENT '投放内容来源主键',
+  MODIFY COLUMN `channel_code` varchar(32)   NOT NULL COMMENT '触达渠道: SMS 短信 NOTIFY 站内信 CLIPBOARD 文案看板',
+  MODIFY COLUMN `target_type` varchar(32)   NOT NULL DEFAULT 'SPECIFIED' COMMENT '目标人群类型: SPECIFIED 指定会员 REBATE_MEMBER 返利会员',
+  MODIFY COLUMN `target_ids` text                  COMMENT '指定会员ID，逗号分隔',
+  MODIFY COLUMN `content_template` text                  COMMENT '消息模板，占位符 {member_id}、{task_name}、{url}',
+  MODIFY COLUMN `link_template` varchar(1024)         DEFAULT NULL COMMENT '推广链接，必须是完整 HTTP(S) 地址，不接受归因占位符',
+  MODIFY COLUMN `template_code` varchar(64)            DEFAULT NULL COMMENT '渠道模板编码',
+  MODIFY COLUMN `cron_expression` varchar(64)            DEFAULT NULL COMMENT 'Cron 表达式(Spring 6 位)，为空表示只手工触发',
+  MODIFY COLUMN `start_time` datetime               DEFAULT NULL COMMENT '投放开始时间',
+  MODIFY COLUMN `end_time` datetime               DEFAULT NULL COMMENT '投放结束时间',
+  MODIFY COLUMN `frequency_limit_per_day` int          NOT NULL DEFAULT '0' COMMENT '每个会员每日最大投放次数，0 表示不限制',
+  MODIFY COLUMN `quiet_start_time` time                  DEFAULT NULL COMMENT '免打扰开始时间',
+  MODIFY COLUMN `quiet_end_time` time                  DEFAULT NULL COMMENT '免打扰结束时间',
+  MODIFY COLUMN `status` varchar(16)   NOT NULL DEFAULT 'DRAFT' COMMENT '任务状态: DRAFT 草稿 ONLINE 已上线 OFFLINE 已下线',
+  MODIFY COLUMN `last_dispatch_time` datetime               DEFAULT NULL COMMENT '上次投放时间',
+  MODIFY COLUMN `next_dispatch_time` datetime               DEFAULT NULL COMMENT '下次投放时间',
+  MODIFY COLUMN `remark` varchar(500)           DEFAULT NULL COMMENT '备注',
+  MODIFY COLUMN `creator` varchar(64)            DEFAULT '' COMMENT '创建者',
+  MODIFY COLUMN `create_time` datetime     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  MODIFY COLUMN `updater` varchar(64)            DEFAULT '' COMMENT '更新者',
+  MODIFY COLUMN `update_time` datetime     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  MODIFY COLUMN `deleted` bit(1)        NOT NULL DEFAULT b'0' COMMENT '是否删除',
+  COMMENT = 'CPS投放任务表';
+ALTER TABLE `cps_publish_log`
+  MODIFY COLUMN `id` bigint       NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  MODIFY COLUMN `tenant_id` bigint       NOT NULL DEFAULT '0' COMMENT '租户ID',
+  MODIFY COLUMN `task_id` bigint       NOT NULL COMMENT '投放任务ID',
+  MODIFY COLUMN `task_code` varchar(64)  NOT NULL COMMENT '投放任务编码',
+  MODIFY COLUMN `channel_code` varchar(32)  NOT NULL COMMENT '触达渠道',
+  MODIFY COLUMN `member_id` bigint       NOT NULL COMMENT '目标会员ID',
+  MODIFY COLUMN `idempotent_key` varchar(160) NOT NULL COMMENT '幂等键: 任务+会员+投放分钟',
+  MODIFY COLUMN `content_snapshot` text                 COMMENT '实际发送内容快照',
+  MODIFY COLUMN `link_url` varchar(1024)        DEFAULT NULL COMMENT '实际使用的推广链接',
+  MODIFY COLUMN `status` varchar(16)  NOT NULL DEFAULT 'PROCESSING' COMMENT '投放结果: PROCESSING 占位中 ACCEPTED 渠道已受理 PREVIEW 已生成文案预览 SUCCESS 成功 FAILED 失败 SKIPPED 跳过',
+  MODIFY COLUMN `error_msg` varchar(500)         DEFAULT NULL COMMENT '失败或跳过原因',
+  MODIFY COLUMN `sent_at` datetime    NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '投放时间',
+  MODIFY COLUMN `creator` varchar(64)           DEFAULT '' COMMENT '创建者',
+  MODIFY COLUMN `create_time` datetime    NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  MODIFY COLUMN `updater` varchar(64)           DEFAULT '' COMMENT '更新者',
+  MODIFY COLUMN `update_time` datetime    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  MODIFY COLUMN `deleted` bit(1)       NOT NULL DEFAULT b'0' COMMENT '是否删除',
+  COMMENT = 'CPS投放记录表';
+UPDATE `system_menu` SET `name` = '投放任务', `update_time` = `update_time` WHERE `id` = 6310 AND `permission` = 'cps:publish-task:query' AND `component` = 'cps/publish/task/index';
+UPDATE `system_menu` SET `name` = '投放任务查询', `update_time` = `update_time` WHERE `id` = 6311 AND `permission` = 'cps:publish-task:query' AND `parent_id` = 6310;
+UPDATE `system_menu` SET `name` = '投放任务创建', `update_time` = `update_time` WHERE `id` = 6312 AND `permission` = 'cps:publish-task:create' AND `parent_id` = 6310;
+UPDATE `system_menu` SET `name` = '投放任务更新', `update_time` = `update_time` WHERE `id` = 6313 AND `permission` = 'cps:publish-task:update' AND `parent_id` = 6310;
+UPDATE `system_menu` SET `name` = '投放任务删除', `update_time` = `update_time` WHERE `id` = 6314 AND `permission` = 'cps:publish-task:delete' AND `parent_id` = 6310;
+UPDATE `system_menu` SET `name` = '投放任务上线', `update_time` = `update_time` WHERE `id` = 6315 AND `permission` = 'cps:publish-task:publish' AND `parent_id` = 6310;
+UPDATE `system_menu` SET `name` = '投放任务下线', `update_time` = `update_time` WHERE `id` = 6316 AND `permission` = 'cps:publish-task:offline' AND `parent_id` = 6310;
+UPDATE `system_menu` SET `name` = '投放任务立即执行', `update_time` = `update_time` WHERE `id` = 6317 AND `permission` = 'cps:publish-task:dispatch' AND `parent_id` = 6310;
+UPDATE `infra_job` SET `name` = 'CPS投放任务调度', `update_time` = `update_time` WHERE `handler_name` = 'cpsPublishDispatchJob';
+UPDATE `system_schema_version` SET `description` = '新增CPS投放任务模块(cps_publish_task/cps_publish_log)、投放调度定时任务与后台菜单权限' WHERE `module` = 'cps' AND `version` = 'v2.1.7' AND `schema_update_time` = '2026-11-04 00:50:00';
+
+-- 记录数据库结构版本
+INSERT INTO `system_schema_version` (`module`, `version`, `schema_update_time`, `script_source`, `description`, `status`, `tenant_id`, `deleted`, `creator`, `updater`)
+SELECT 'cps', 'v2.1.8', '2026-11-25 02:09:54', 'cps-update.sql', '修复投放任务菜单、调度名称和数据库注释的中文乱码', 'SUCCESS', 0, b'0', 'system', 'system'
+WHERE NOT EXISTS (
+  SELECT 1 FROM `system_schema_version` WHERE `module` = 'cps' AND `version` = 'v2.1.8'
+);
