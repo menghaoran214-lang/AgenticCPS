@@ -10,3 +10,6 @@ auto-*.d.ts
 playwright-report/
 test-results/
 midscene_run/
+
+# 本地环境覆盖，不应提交到仓库（会影响所有构建产物的生产开关）
+.env.local
