@@ -1,0 +1,39 @@
+name: AgenticCPS Frontend Dev Env Contract
+
+on:
+  push:
+    branches: [develop]
+    paths:
+      - 'frontend/admin-vue3/**'
+      - 'script/test/test_admin_local_dev_env_contract.py'
+      - '.github/workflows/frontend-dev-env-contract.yml'
+  pull_request:
+    branches: [master, develop]
+    paths:
+      - 'frontend/admin-vue3/**'
+      - 'script/test/test_admin_local_dev_env_contract.py'
+      - '.github/workflows/frontend-dev-env-contract.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frontend-dev-env-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contract:
+    name: Frontend local development environment contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install test runner
+        run: python -m pip install pytest
+      - name: Verify frontend local development environment contract
+        run: python -m pytest script/test/test_admin_local_dev_env_contract.py -v
