@@ -33,7 +33,7 @@
 
 - 管理后台：`frontend/admin-vue3`
   - 入口/构建：Vite + Vue3，`package.json` 脚本包括 `dev`、`ts:check`、`build:prod`、`e2e`。
-  - 本地 API：`.env.local` / `.env.dev` 中 `VITE_API_URL=/admin-api`。
+  - 本地 API：`.env.localdev` / `.env.dev` 中 `VITE_API_URL=/admin-api`（`pnpm dev` 与 `pnpm dev:e2e` 使用 `--mode localdev`）。
 - 移动管理端：`frontend/admin-uniapp`
   - UniApp / unibest，Node `>=20`，pnpm `>=9`。
   - `package.json` 脚本包括 `dev`、`dev:h5`、`build`、`build:prod`、`type-check`、`lint`。

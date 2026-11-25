@@ -8,3 +8,7 @@ releases/*
 
 # Disposable station test credentials and fixtures
 /.station-ci/
+
+# Python caches
+__pycache__/
+*.pyc
